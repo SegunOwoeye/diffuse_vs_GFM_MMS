@@ -1,0 +1,18 @@
+# [build]
+gfm_main
+gfm_main_2d
+gfm_main_3d
+build/
+
+# [python]
+__pycache__/
+*.pyc
+.venv/
+
+# [data + outputs]
+data/
+*.png
+*.csv
+
+# [misc]
+*.log

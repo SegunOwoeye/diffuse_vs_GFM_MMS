@@ -1,0 +1,55 @@
+# ========================
+# Problem
+# ========================
+dimension = 2
+
+# ========================
+# Domain
+# ========================
+domain_min = [0.0, 0.0]
+domain_max = [2.0, 2.0]
+
+#N = [50,50]
+N = [100,100]
+N = [200,200]
+N = [400,400]
+
+# ========================
+# Time
+# ========================
+tfinal = 0.25
+cfl = 0.9
+
+# ========================
+# Materials
+# ========================
+material = 0, ideal_gas, gamma=1.4
+
+# ========================
+# Initial Condition
+# ========================
+initial_condition = explosion
+
+explosion_center = [1.0, 1.0]
+explosion_radius = 0.4
+
+rho_in = 1.0
+vel_in = [0.0, 0.0]
+p_in = 1.0
+material_in = 0
+
+rho_out = 0.125
+vel_out = [0.0, 0.0]
+p_out = 0.1
+material_out = 0
+
+# ========================
+# Exact
+# ========================
+exact_riemann = false
+
+# ========================
+# Output
+# ========================
+output_prefix = explosion1
+output_dir = data/csv/toro
