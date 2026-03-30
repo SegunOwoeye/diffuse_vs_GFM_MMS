@@ -137,7 +137,7 @@ for t in "${tests[@]}"; do
     esac
 
     python src/graphing/plot_multid.py toro/$out || { echo "Plot failed"; continue; }
-    #python src/graphing/compute_l1.py toro/$out || { echo "L1 failed"; continue; }
+    python src/graphing/compute_l1.py toro/$out || { echo "L1 failed"; continue; }
 
     echo "Completed Toro $t Postprocessing in 3D"
     echo "-------------------------"

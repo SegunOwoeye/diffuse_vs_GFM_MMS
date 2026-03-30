@@ -17,9 +17,9 @@ def load_csv(path):
     coords = [df[f"x{d}"].to_numpy() for d in range(dim)]
 
     rho = df["rho"].to_numpy()
-    u   = df["u0"].to_numpy()
-    p   = df["p"].to_numpy()
-    e   = df["e"].to_numpy()
+    u = df["u0"].to_numpy()
+    p = df["p"].to_numpy()
+    e = df["e"].to_numpy()
 
     return dim, coords, rho, u, p, e
 
@@ -29,18 +29,22 @@ def compute_l1(num, exact):
     return np.mean(np.abs(num - exact))
 
 
-# [3] Extract resolution
+# [3] Extract resolution (robust for multi-dim)
 def extract_N(filename):
-
     name = Path(filename).name.lower()
-
     parts = [p for p in name.replace(".csv", "").split("_") if p.startswith("n")]
 
     if not parts:
         return None
 
-    nums = parts[0][1:].split("x")
-    return int(nums[0])
+    # take ALL n-values, not just first
+    nums = [int(p[1:]) for p in parts]
+
+    # assume cubic grid -> all equal -> take first
+    if not all(n == nums[0] for n in nums):
+        raise RuntimeError(f"Inconsistent grid sizes in filename: {filename}")
+
+    return nums[0]
 
 
 # [4] 1D L1 (exact required)
@@ -73,14 +77,14 @@ def compute_l1_1d(files):
         x = coords[0]
 
         rhoE_i = np.interp(x, xE, rhoE)
-        uE_i   = np.interp(x, xE, uE)
-        pE_i   = np.interp(x, xE, pE)
-        eE_i   = np.interp(x, xE, eE)
+        uE_i = np.interp(x, xE, uE)
+        pE_i = np.interp(x, xE, pE)
+        eE_i = np.interp(x, xE, eE)
 
         err_rho = compute_l1(rho, rhoE_i)
-        err_u   = compute_l1(u, uE_i)
-        err_p   = compute_l1(p, pE_i)
-        err_e   = compute_l1(e, eE_i)
+        err_u = compute_l1(u, uE_i)
+        err_p = compute_l1(p, pE_i)
+        err_e = compute_l1(e, eE_i)
 
         results.append((N, err_rho, err_u, err_p, err_e))
 
@@ -91,9 +95,17 @@ def compute_l1_1d(files):
 
 # [5] Multidimensional L1 (reference solution)
 def compute_l1_multid(files):
+    valid_files = []
+    for f in files:
+        N = extract_N(f.name)
+        if N is not None:
+            valid_files.append((f, N))
 
-    files = sorted(files, key=lambda f: extract_N(f.name))
+    # sort by N
+    valid_files.sort(key=lambda x: x[1])
 
+    # unpack
+    files = [f for f, _ in valid_files]
     ref_file = files[-1]
 
     dim_ref, coords_ref, rho_ref, u_ref, p_ref, e_ref = load_csv(ref_file)
@@ -102,9 +114,9 @@ def compute_l1_multid(files):
     shape_ref = tuple([N_ref] * dim_ref)
 
     rho_ref = rho_ref.reshape(shape_ref)
-    u_ref   = u_ref.reshape(shape_ref)
-    p_ref   = p_ref.reshape(shape_ref)
-    e_ref   = e_ref.reshape(shape_ref)
+    u_ref = u_ref.reshape(shape_ref)
+    p_ref = p_ref.reshape(shape_ref)
+    e_ref = e_ref.reshape(shape_ref)
 
     results = []
 
@@ -149,7 +161,6 @@ def compute_l1_multid(files):
 
 # [6] Dispatcher
 def compute_l1_errors(folder):
-
     folder = Path("data/csv") / folder
     files = sorted(folder.glob("*.csv"))
 
@@ -169,15 +180,14 @@ def compute_l1_errors(folder):
 
 # [7] Plot convergence
 def plot_l1(results, folder):
-
     folder_path = Path("data/csv") / folder
 
     N = np.array([r[0] for r in results])
 
     rho_err = np.array([r[1] for r in results])
-    u_err   = np.array([r[2] for r in results])
-    p_err   = np.array([r[3] for r in results])
-    e_err   = np.array([r[4] for r in results])
+    u_err = np.array([r[2] for r in results])
+    p_err = np.array([r[3] for r in results])
+    e_err = np.array([r[4] for r in results])
 
     plt.figure(figsize=(8, 6))
 
