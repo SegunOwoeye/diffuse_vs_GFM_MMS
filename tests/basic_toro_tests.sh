@@ -3,7 +3,7 @@
 # -------------------------
 # [1.1] Compile in 1D
 # -------------------------
-g++ -std=c++17 -O2 -I. -DAPP_DIM=1 src/app/gfm_main.cpp -o gfm_main_1d || exit 1
+g++ -std=c++17 -O2 -I. -DAPP_DIM=1 src/app/sm_main.cpp -o sm_main_1d || exit 1
 
 # [1.2] Tests
 tests=("test1" "test2" "test3" "test4" "test5")
@@ -12,7 +12,7 @@ tests=("test1" "test2" "test3" "test4" "test5")
 for t in "${tests[@]}"; do
     echo "Running Toro $t 1D solver"
 
-    ./gfm_main_1d configs/toro/$t.txt || { echo "Solver failed"; continue; }
+    ./sm_main_1d configs/toro/$t.txt || { echo "Solver failed"; continue; }
     
 
     echo "Completed Toro $t 1D solver"
@@ -55,7 +55,7 @@ echo "All 1D post-processing for Toro tests are complete."
 # -------------------------
 # [2.1] Compile in 2D
 # -------------------------
-g++ -std=c++17 -O2 -I. -DAPP_DIM=2 src/app/gfm_main.cpp -o gfm_main_2d || exit 1
+g++ -std=c++17 -O2 -I. -DAPP_DIM=2 src/app/sm_main.cpp -o sm_main_2d || exit 1
 
 # [2.2] Tests
 tests=("explosion1")
@@ -64,7 +64,7 @@ tests=("explosion1")
 for t in "${tests[@]}"; do
     echo "Running $t 2D solver"
 
-    ./gfm_main_2d configs/toro/$t.txt || { echo "Solver failed"; continue; }
+    ./sm_main_2d configs/toro/$t.txt || { echo "Solver failed"; continue; }
     
 
     echo "Completed Toro $t 2D solver"
@@ -103,7 +103,7 @@ echo "All 2D post-processing for Toro tests are complete."
 # -------------------------
 # [3.1] Compile in 3D
 # -------------------------
-g++ -std=c++17 -O2 -I. -DAPP_DIM=3 src/app/gfm_main.cpp -o gfm_main_3D || exit 1
+g++ -std=c++17 -O2 -I. -DAPP_DIM=3 src/app/sm_main.cpp -o sm_main_3d || exit 1
 
 # [3.2] Tests
 tests=("explosion2")
@@ -112,7 +112,7 @@ tests=("explosion2")
 for t in "${tests[@]}"; do
     echo "Running $t 3D solver"
 
-    ./gfm_main_3D configs/toro/$t.txt || { echo "Solver failed"; continue; }
+    ./sm_main_3d configs/toro/$t.txt || { echo "Solver failed"; continue; }
     
 
     echo "Completed Toro $t 3D solver"
