@@ -1,5 +1,5 @@
 # [build]
-gfm_main
+gfm_main_1d
 gfm_main_2d
 gfm_main_3d
 build/
@@ -16,4 +16,5 @@ data/
 
 # [misc]
 *.log
+*.exe
 gfm_main_3D
