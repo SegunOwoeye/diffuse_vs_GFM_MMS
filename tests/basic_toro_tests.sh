@@ -20,7 +20,7 @@ for t in "${tests[@]}"; do
 done
 
 # [1.4] Results Post Processing
-# [1.4.1]  Activate Virtual Environment
+# [1.4.1] Activate Virtual Environment
 if [ ! -d ".venv" ]; then
     echo "[ERROR] .venv not found. Create the virtual environment first."
     exit 1
