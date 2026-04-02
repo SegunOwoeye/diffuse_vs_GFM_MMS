@@ -21,12 +21,19 @@ tfinal = 0.25
 cfl = 0.9
 
 # ========================
-# Materials
+# Interface method
+# ========================
+interface_method = SM
+use_level_set = false
+reinit_interval = 0
+
+# ========================
+# Materials (different EOS)
 # ========================
 material = 0, ideal_gas, gamma=1.4
 
 # ========================
-# Initial Condition
+# Initial condition (interface at x=0.5)
 # ========================
 initial_condition = explosion
 

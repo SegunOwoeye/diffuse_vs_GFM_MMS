@@ -11,7 +11,21 @@
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
 
-// [0] Check if point is inside rectangular region
+
+// [0] Material lookup 
+inline const MaterialConfig& get_material_by_id(
+    const std::vector<MaterialConfig>& materials,
+    int id
+)
+{
+    for (const auto& m : materials) {
+        if (m.id == id) return m;
+    }
+    throw std::runtime_error("Material id not found: " + std::to_string(id));
+}
+
+
+// [1] Check if point is inside rectangular region
 template<int DIM>
 inline bool point_in_region(
     const std::array<double, DIM>& x,
@@ -26,7 +40,8 @@ inline bool point_in_region(
     return true;
 }
 
-// [1] Compute cell centre coordinate
+
+// [2] Compute cell centre
 template<int DIM>
 inline std::array<double, DIM> compute_cell_center(
     const std::array<int, DIM>& idx,
@@ -35,42 +50,37 @@ inline std::array<double, DIM> compute_cell_center(
 )
 {
     std::array<double, DIM> x{};
-
     for (int d = 0; d < DIM; ++d) {
         x[d] = domain_min[d] + (idx[d] + 0.5) * dx[d];
     }
-
     return x;
 }
 
-// [2] Build EOS params from material config
+
+// [3] EOS builder 
 inline EOSParams build_eos_params_from_material(
     const std::vector<MaterialConfig>& materials,
     int mat_id
 )
 {
-    if (mat_id < 0 || mat_id >= static_cast<int>(materials.size())) {
-        throw std::runtime_error("Invalid material id");
-    }
-
-    const auto& mat = materials[mat_id];
+    const auto& mat = get_material_by_id(materials, mat_id);
 
     EOSParams params{};
 
     if (mat.type == "ideal_gas") {
         if (mat.params.count("gamma") == 0) {
-            throw std::runtime_error("Missing gamma in material");
+            throw std::runtime_error("Missing gamma in material id=" + std::to_string(mat_id));
         }
         params.gamma = mat.params.at("gamma");
     }
     else {
-        throw std::runtime_error("Unsupported EOS type in material");
+        throw std::runtime_error("Unsupported EOS type: " + mat.type);
     }
 
     return params;
 }
 
-// [3] Check if point is inside explosion circle / sphere
+// [4] Explosion region
 template<int DIM>
 inline bool point_in_explosion_region(
     const std::array<double, DIM>& x,
@@ -79,16 +89,15 @@ inline bool point_in_explosion_region(
 )
 {
     double r2 = 0.0;
-
     for (int d = 0; d < DIM; ++d) {
         const double diff = x[d] - center[d];
         r2 += diff * diff;
     }
-
     return (r2 < radius * radius);
 }
 
-// [4] Initialise data from config
+
+// [5] Initialise
 template<int DIM, typename EOS>
 inline void initialise_from_config(
     std::vector<Conserved<DIM>>& U,
@@ -97,7 +106,7 @@ inline void initialise_from_config(
     const std::array<int, DIM>& N
 )
 {
-    // total number of cells
+    // total cells
     int total_cells = 1;
     for (int d = 0; d < DIM; ++d) {
         if (N[d] <= 0) {
@@ -109,20 +118,21 @@ inline void initialise_from_config(
     U.resize(total_cells);
     material_id.resize(total_cells);
 
-    // compute dx
+    // dx
     std::array<double, DIM> dx{};
     for (int d = 0; d < DIM; ++d) {
         dx[d] = (cfg.domain_max[d] - cfg.domain_min[d]) / N[d];
     }
 
-    // [4.1] Rectangular region-based initialisation
+    std::array<int, DIM> idx{};
+
+    
+    // [5.1] Region Initialisation    
     if (cfg.initial_condition == "regions") {
 
         if (cfg.regions.empty()) {
-            throw std::runtime_error("No regions defined in config");
+            throw std::runtime_error("No regions defined");
         }
-
-        std::array<int, DIM> idx{};
 
         for (int linear = 0; linear < total_cells; ++linear) {
 
@@ -137,6 +147,11 @@ inline void initialise_from_config(
             bool found = false;
 
             for (const auto& region : cfg.regions) {
+
+                if (region.material_id < 0) {
+                    throw std::runtime_error("Region has invalid material_id");
+                }
+
                 if (point_in_region<DIM>(x, region)) {
 
                     Primitive<DIM> P{};
@@ -145,6 +160,7 @@ inline void initialise_from_config(
                     P.vel = region.vel;
 
                     const int mat_id = region.material_id;
+
                     const EOSParams params =
                         build_eos_params_from_material(cfg.materials, mat_id);
 
@@ -164,14 +180,13 @@ inline void initialise_from_config(
         return;
     }
 
-    // [4.2] Circular / spherical explosion initialisation
+    
+    // [5.2] Explosion Initialisation
     if (cfg.initial_condition == "explosion") {
 
         if (cfg.explosion_radius <= 0.0) {
             throw std::runtime_error("Explosion radius must be positive");
         }
-
-        std::array<int, DIM> idx{};
 
         for (int linear = 0; linear < total_cells; ++linear) {
 
@@ -190,7 +205,7 @@ inline void initialise_from_config(
             );
 
             Primitive<DIM> P{};
-            int mat_id = 0;
+            int mat_id = -1;
 
             if (inside) {
                 P.rho = cfg.rho_in;
@@ -205,7 +220,12 @@ inline void initialise_from_config(
                 mat_id = cfg.material_out;
             }
 
-            const EOSParams params = build_eos_params_from_material(cfg.materials, mat_id);
+            if (mat_id < 0) {
+                throw std::runtime_error("Invalid material id in explosion IC");
+            }
+
+            const EOSParams params =
+                build_eos_params_from_material(cfg.materials, mat_id);
 
             U[linear] = prim_to_cons<DIM, EOS>(P, params);
             material_id[linear] = mat_id;
@@ -214,7 +234,8 @@ inline void initialise_from_config(
         return;
     }
 
-    throw std::runtime_error("Unsupported initial_condition type: " + cfg.initial_condition);
+    
+    // Failure
+    
+    throw std::runtime_error("Unsupported initial_condition: " + cfg.initial_condition);
 }
-
-

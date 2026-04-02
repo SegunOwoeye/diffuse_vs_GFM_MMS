@@ -20,12 +20,19 @@ tfinal = 0.012
 cfl = 0.3
 
 # ========================
-# Materials
+# Interface method
+# ========================
+interface_method = SM
+use_level_set = false
+reinit_interval = 0
+
+# ========================
+# Materials (different EOS)
 # ========================
 material = 0, ideal_gas, gamma=1.4
 
 # ========================
-# Initial Condition
+# Initial condition (interface at x=0.5)
 # ========================
 region = [0.0], [0.5], rho=1.0, vel=[0.0], p=1000.0, material=0
 region = [0.5], [1.0], rho=1.0, vel=[0.0],  p=0.01, material=0
