@@ -31,3 +31,4 @@ inline Conserved<DIM> prim_to_cons(
 
     return U;
 }
+
