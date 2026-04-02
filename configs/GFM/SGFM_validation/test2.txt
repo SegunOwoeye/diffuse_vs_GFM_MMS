@@ -16,7 +16,7 @@ N = [400]
 # ========================
 # Time
 # ========================
-tfinal = 0.25
+tfinal = 0.15
 cfl = 0.3
 
 # ========================
@@ -35,11 +35,13 @@ material = 1, ideal_gas, gamma=1.4
 # ========================
 # Initial condition (interface at x=0.5)
 # ========================
-region = [0.0], [0.5], rho=1.0, vel=[0.0], p=1.0, material=0
-region = [0.5], [1.0], rho=0.125, vel=[0.0], p=0.1, material=1
+
+region = [0.0], [0.5], rho=1.0, vel=[-2.0], p=0.4, material=0
+region = [0.5], [1.0], rho=1.0, vel=[2.0],  p=0.4, material=1
+
 
 # ========================
 # Output
 # ========================
-output_prefix = gfm_1d_test
-output_dir = data/csv/gfm
+output_prefix = gfm_toro2
+output_dir = data/csv/gfm/toro
