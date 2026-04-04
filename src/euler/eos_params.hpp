@@ -10,3 +10,4 @@ struct EOSParams {
     double p_inf = 0.0;
 
 };
+
