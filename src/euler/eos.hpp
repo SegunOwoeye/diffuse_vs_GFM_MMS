@@ -58,7 +58,7 @@ struct IdealGasEOS {
         (preserves thermodynamic branch instead of fixing density)
     */
 
-    // Entropy-like invariant (p / rho^gamma)
+    // Entropy invariant (p / rho^gamma)
     static double entropy_invariant(
         double rho,
         double p,
@@ -142,7 +142,7 @@ struct StiffenedGasEOS {
         (preserves thermodynamic branch instead of fixing density)
     */
 
-    // Entropy-like invariant ((p + p_inf) / rho^gamma)
+    // Entropy invariant ((p + p_inf) / rho^gamma)
     static double entropy_invariant(
         double rho,
         double p,
