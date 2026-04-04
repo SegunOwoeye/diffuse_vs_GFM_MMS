@@ -30,7 +30,7 @@ inline Conserved<DIM> hllc_flux_normal(
     const ThermoState<DIM> TL = compute_thermo<DIM, EOS>(UL, paramsL);
     const ThermoState<DIM> TR = compute_thermo<DIM, EOS>(UR, paramsR);
 
-    // [0.2]
+    // [0.2] Normal magnitude and projected normal velocities
     const double mag = norm<DIM>(normal);
     const double inv_mag = (mag < tol) ? 1.0 : 1.0 / mag;
 
