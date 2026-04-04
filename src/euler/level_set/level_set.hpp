@@ -152,15 +152,16 @@ inline std::vector<double> advect_phi(
     return phi_new;
 }
 
+/*
+    [7] Advect Level Set with normal speed
 
-// [7] Advect Level Set with normal speed
-//
-// Solves:
-//     phi_t + V_n |grad(phi)| = 0
-//
-// using Godunov selection of one-sided derivatives. This is the form you
-// actually want for sharp-interface transport once V_n is supplied from the
-// interface physics layer.
+    Solves:
+        phi_t + V_n |grad(phi)| = 0
+
+        using Godunov selection of one-sided derivatives. This is the form you
+        actually want for sharp-interface transport once V_n is supplied from the
+        interface physics layer.
+*/
 template<int DIM>
 inline std::vector<double> advect_phi_normal_speed(
     const std::vector<double>& phi,
