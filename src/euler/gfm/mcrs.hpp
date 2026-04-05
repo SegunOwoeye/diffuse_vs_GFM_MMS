@@ -8,8 +8,6 @@
 #include "src/euler/eos_params.hpp"
 #include "src/math/numerical_safety.hpp"
 
-// Completetly add in numerical saftey
-
 // [0] Mixed Riemann Solver Result
 struct MCRSResult1D {
     double p_star;
@@ -76,12 +74,12 @@ public:
 
         for (int n = 0; n < max_iterations_S; ++n) {
 
-            const double FL  = fL(p_star);
-            const double FR  = fR(p_star);
+            const double FL = fL(p_star);
+            const double FR = fR(p_star);
             const double dFL = dfL(p_star);
             const double dFR = dfR(p_star);
 
-            const double F  = FL + FR + (uR_S - uL_S);
+            const double F = FL + FR + (uR_S - uL_S);
             const double dF = dFL + dFR;
 
             if (std::abs(F) < tol_S) {
@@ -94,7 +92,7 @@ public:
 
             const double p_safe = clamp_min(p_new, p_floor);
 
-            const double rel = std::abs(p_safe - p_star) / std::max(1.0, std::abs(p_star));
+            const double rel = safe_div(std::abs(p_safe - p_star), std::max(1.0, std::abs(p_star)), tol_S);
 
             p_star = p_safe;
 
@@ -153,8 +151,8 @@ private:
     inline void check_vacuum() const
     {
         const double crit =
-            (2.0 * cL_S / (paramsL_S.gamma - 1.0))
-          + (2.0 * cR_S / (paramsR_S.gamma - 1.0));
+            (2.0 * safe_div(cL_S, (paramsL_S.gamma - 1.0)), tol_S)
+          + (2.0 * safe_div(cR_S, (paramsR_S.gamma - 1.0)), tol_S);
 
         if ((uR_S - uL_S) >= crit) {
             throw std::runtime_error("MCRS: vacuum state detected");
@@ -169,8 +167,8 @@ private:
         const double g = paramsL_S.gamma;
 
         if (p > pL_S) {
-            const double A = 2.0 / ((g + 1.0) * rhoL_S);
-            const double B = ((g - 1.0) / (g + 1.0)) * pL_S;
+            const double A = safe_div(2.0, ((g + 1.0) * rhoL_S), tol_S);
+            const double B = safe_div(((g - 1.0), (g + 1.0)) * pL_S, tol_S);
 
             const double denom = clamp_min(p + B, tol_S);
             return (p - pL_S) * std::sqrt(safe_div(A, denom, tol_S));
@@ -178,8 +176,8 @@ private:
 
         const double ratio = safe_div(p, pL_S, tol_S);
 
-        return (2.0 * cL_S) / (g - 1.0)
-            * (std::pow(ratio, (g - 1.0) / (2.0 * g)) - 1.0);
+        return safe_div((2.0 * cL_S), (g - 1.0), tol_S)
+            * (std::pow(ratio, safe_div((g - 1.0), (2.0 * g), tol_S)) - 1.0);
     }
 
 
@@ -189,8 +187,8 @@ private:
         const double g = paramsR_S.gamma;
 
         if (p > pR_S) {
-            const double A = 2.0 / ((g + 1.0) * rhoR_S);
-            const double B = ((g - 1.0) / (g + 1.0)) * pR_S;
+            const double A = safe_div(2.0, ((g + 1.0) * rhoR_S), tol_S);
+            const double B = (g - 1.0)/ (g + 1.0) * pR_S;
 
             const double denom = clamp_min(p + B, tol_S);
             return (p - pR_S) * std::sqrt(safe_div(A, denom, tol_S));
@@ -198,8 +196,8 @@ private:
 
         const double ratio = safe_div(p, pR_S, tol_S);
 
-        return (2.0 * cR_S) / (g - 1.0)
-            * (std::pow(ratio, (g - 1.0) / (2.0 * g)) - 1.0);
+        return safe_div((2.0 * cR_S), (g - 1.0), tol_S)
+            * (std::pow(ratio, safe_div((g - 1.0), (2.0 * g), tol_S)) - 1.0);
     }
 
 
@@ -210,8 +208,8 @@ private:
         const double g = paramsL_S.gamma;
 
         if (p > pL_S) {
-            const double A = 2.0 / ((g + 1.0) * rhoL_S);
-            const double B = ((g - 1.0) / (g + 1.0)) * pL_S;
+            const double A = safe_div(2.0, ((g + 1.0) * rhoL_S), tol_S);
+            const double B = (g - 1.0)/ (g + 1.0) * pL_S;
 
             const double denom = clamp_min(p + B, tol_S);
             const double sqrt_term = std::sqrt(safe_div(A, denom, tol_S));
@@ -222,7 +220,7 @@ private:
         const double ratio = safe_div(p, pL_S, tol_S);
 
         return safe_div(1.0, rhoL_S * cL_S, tol_S)
-            * std::pow(ratio, -(g + 1.0) / (2.0 * g));
+            * std::pow(ratio, -safe_div((g + 1.0), (2.0 * g), tol_S));
     }
 
 
@@ -232,8 +230,8 @@ private:
         const double g = paramsR_S.gamma;
 
         if (p > pR_S) {
-            const double A = 2.0 / ((g + 1.0) * rhoR_S);
-            const double B = ((g - 1.0) / (g + 1.0)) * pR_S;
+            const double A = safe_div(2.0, ((g + 1.0) * rhoR_S), tol_S);
+            const double B = (g - 1.0)/(g + 1.0) * pR_S;
 
             const double denom = clamp_min(p + B, tol_S);
             const double sqrt_term = std::sqrt(safe_div(A, denom, tol_S));
@@ -244,7 +242,7 @@ private:
         const double ratio = safe_div(p, pR_S, tol_S);
 
         return safe_div(1.0, rhoR_S * cR_S, tol_S)
-            * std::pow(ratio, -(g + 1.0) / (2.0 * g));
+            * std::pow(ratio, -safe_div((g + 1.0), (2.0 * g), tol_S));
     }
 
 
@@ -257,8 +255,8 @@ private:
         if (p > pL_S) {
             const double r = safe_div(p, pL_S, tol_S);
 
-            const double num = r + (g - 1.0) / (g + 1.0);
-            const double den = ((g - 1.0) / (g + 1.0)) * r + 1.0;
+            const double num = r + (g - 1.0) /(g + 1.0);
+            const double den = (g - 1.0) / (g + 1.0) * r + 1.0;
 
             return rhoL_S * safe_div(num, den, tol_S);
         }
