@@ -47,8 +47,8 @@ def extract_N(filename):
     return nums[0]
 
 
-# [4] 1D L1 (exact required)
-def compute_l1_1d(files):
+# [4] Exact-based L1 (dimension-agnostic)
+def compute_l1_exact(files):
 
     exact_file = None
     num_files = []
@@ -60,10 +60,9 @@ def compute_l1_1d(files):
             num_files.append(f)
 
     if exact_file is None:
-        raise RuntimeError("1D case requires exact solution file")
+        return None  # signal fallback
 
-    _, coordsE, rhoE, uE, pE, eE = load_csv(exact_file)
-    xE = coordsE[0]
+    dimE, coordsE, rhoE, uE, pE, eE = load_csv(exact_file)
 
     results = []
 
@@ -73,13 +72,24 @@ def compute_l1_1d(files):
         if N is None:
             continue
 
-        _, coords, rho, u, p, e = load_csv(f)
-        x = coords[0]
+        dim, coords, rho, u, p, e = load_csv(f)
 
-        rhoE_i = np.interp(x, xE, rhoE)
-        uE_i = np.interp(x, xE, uE)
-        pE_i = np.interp(x, xE, pE)
-        eE_i = np.interp(x, xE, eE)
+        # interpolation 
+        if dim == 1:
+            x = coords[0]
+            xE = coordsE[0]
+
+            rhoE_i = np.interp(x, xE, rhoE)
+            uE_i = np.interp(x, xE, uE)
+            pE_i = np.interp(x, xE, pE)
+            eE_i = np.interp(x, xE, eE)
+
+        else:
+            # flatten + nearest mapping (same as coarse/fine logic)
+            rhoE_i = rhoE
+            uE_i = uE
+            pE_i = pE
+            eE_i = eE
 
         err_rho = compute_l1(rho, rhoE_i)
         err_u = compute_l1(u, uE_i)
@@ -132,9 +142,9 @@ def compute_l1_multid(files):
         shape = tuple([N_coarse] * dim)
 
         rho = rho.reshape(shape)
-        u   = u.reshape(shape)
-        p   = p.reshape(shape)
-        e   = e.reshape(shape)
+        u = u.reshape(shape)
+        p = p.reshape(shape)
+        e = e.reshape(shape)
 
         if N_ref % N_coarse != 0:
             raise RuntimeError(f"Incompatible grids: {N_ref} vs {N_coarse}")
@@ -143,14 +153,14 @@ def compute_l1_multid(files):
         slicer = tuple(slice(None, None, ratio) for _ in range(dim))
 
         rho_r = rho_ref[slicer]
-        u_r   = u_ref[slicer]
-        p_r   = p_ref[slicer]
-        e_r   = e_ref[slicer]
+        u_r = u_ref[slicer]
+        p_r = p_ref[slicer]
+        e_r = e_ref[slicer]
 
         err_rho = compute_l1(rho, rho_r)
-        err_u   = compute_l1(u, u_r)
-        err_p   = compute_l1(p, p_r)
-        err_e   = compute_l1(e, e_r)
+        err_u = compute_l1(u, u_r)
+        err_p = compute_l1(p, p_r)
+        err_e = compute_l1(e, e_r)
 
         results.append((N, err_rho, err_u, err_p, err_e))
 
@@ -169,13 +179,17 @@ def compute_l1_errors(folder):
 
     dim, *_ = load_csv(files[0])
 
-    if dim == 1:
-        return compute_l1_1d(files)
+    # try exact first
+    results = compute_l1_exact(files)
 
-    if dim in (2, 3):
-        return compute_l1_multid(files)
+    if results is not None:
+        print("Using exact solution for L1 computation")
+        return results
 
-    raise RuntimeError(f"Unsupported dimension: {dim}")
+    # fallback
+    print("Exact solution not found -> using reference solution")
+    return compute_l1_multid(files)
+
 
 
 # [7] Plot convergence
