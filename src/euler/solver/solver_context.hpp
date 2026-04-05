@@ -5,29 +5,76 @@
 #include <vector>
 
 #include "src/euler/eos_params.hpp"
+#include "src/euler/level_set/level_set_core.hpp"
 
 
-// [0] Solver Context
-// Holds all configuration and grid/material data required by the solver
+// [0] Boundary Condition Type
+enum class BoundaryConditionType {
+    transmissive,
+    reflective
+};
+
+
+// [1] Solver Context
 template<int DIM>
 struct SolverContext {
 
-    // [0.1] Grid
-    std::array<int, DIM> N;
-    std::array<double, DIM> dx;
+    // [1.1] Grid
+    std::array<int, DIM> N{};
+    std::array<double, DIM> dx{};
 
-    // [0.2] Time stepping
+    // [1.2] Time stepping
     double cfl = 0.5;
     double dt_max = 1e-3;
 
-    // [0.3] Level set
+    // [1.3] Level set / GFM
+    LevelSetGrid<DIM> level_set_grid{};
+    std::vector<std::vector<double>> phi_list;
+    std::vector<int> phi_material_ids;
+    int background_material_id = 0;
+
+    bool reinit_enabled = false;
+    int reinit_frequency = 5;
     int reinit_iterations = 10;
 
-    // [0.4] Materials
+    // [1.4] Interface-control flags
+    bool advect_level_set = true;
+    bool reassign_material_from_phi = true;
+    bool use_axis_normals_in_1d = true;
+
+    // [1.5] Physical boundary conditions
+    std::array<BoundaryConditionType, DIM> bc_lo{};
+    std::array<BoundaryConditionType, DIM> bc_hi{};
+
+    // [1.6] Materials
     std::vector<int> material_id;
     std::vector<EOSParams> material_params;
 
-    // [0.5] Basic validation
+    // [1.7] Build level set grid from solver grid
+    inline void initialise_level_set_grid()
+    {
+        level_set_grid = make_level_set_grid<DIM>(N, dx);
+    }
+
+    // [1.8] Set default boundary conditions
+    inline void initialise_boundary_conditions(
+        BoundaryConditionType default_lo = BoundaryConditionType::transmissive,
+        BoundaryConditionType default_hi = BoundaryConditionType::transmissive
+    )
+    {
+        for (int d = 0; d < DIM; ++d) {
+            bc_lo[d] = default_lo;
+            bc_hi[d] = default_hi;
+        }
+    }
+
+    // [1.9] Number of tracked interfaces
+    inline int n_interfaces() const
+    {
+        return static_cast<int>(phi_list.size());
+    }
+
+    // [1.10] Validation
     inline void validate(int total_cells) const
     {
         if (total_cells <= 0) {
@@ -50,6 +97,22 @@ struct SolverContext {
             if (dx[d] <= 0.0) {
                 throw std::runtime_error("SolverContext: grid spacing must be positive");
             }
+
+            if (level_set_grid.N[d] != N[d]) {
+                throw std::runtime_error("SolverContext: level_set_grid size mismatch");
+            }
+
+            if (level_set_grid.dx[d] != dx[d]) {
+                throw std::runtime_error("SolverContext: level_set_grid spacing mismatch");
+            }
+        }
+
+        if (reinit_frequency <= 0) {
+            throw std::runtime_error("SolverContext: reinit_frequency must be positive");
+        }
+
+        if (reinit_iterations < 0) {
+            throw std::runtime_error("SolverContext: reinit_iterations must be non-negative");
         }
 
         if (!material_id.empty() && static_cast<int>(material_id.size()) != total_cells) {
@@ -59,9 +122,35 @@ struct SolverContext {
         if (!material_id.empty() && material_params.empty()) {
             throw std::runtime_error("SolverContext: material_params required");
         }
+
+        if (material_params.empty()) {
+            throw std::runtime_error("SolverContext: material_params cannot be empty");
+        }
+
+        if (background_material_id < 0 ||
+            background_material_id >= static_cast<int>(material_params.size())) {
+            throw std::runtime_error("SolverContext: invalid background_material_id");
+        }
+
+        if (static_cast<int>(phi_material_ids.size()) != static_cast<int>(phi_list.size())) {
+            throw std::runtime_error("SolverContext: phi_material_ids size mismatch");
+        }
+
+        for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
+            if (static_cast<int>(phi_list[k].size()) != total_cells) {
+                throw std::runtime_error("SolverContext: phi_list entry size mismatch");
+            }
+
+            if (phi_material_ids[k] < 0 ||
+                phi_material_ids[k] >= static_cast<int>(material_params.size())) {
+                throw std::runtime_error("SolverContext: invalid phi material id");
+            }
+
+            if (phi_material_ids[k] == background_material_id) {
+                throw std::runtime_error("SolverContext: phi interface cannot target background material");
+            }
+        }
     }
 };
-
-
 
 
