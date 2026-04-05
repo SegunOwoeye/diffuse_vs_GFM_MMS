@@ -214,13 +214,14 @@ inline std::vector<double> advect_phi_normal_speed(
     return phi_new;
 }
 
+/*
+ [8] Reinitialisation (Godunov / Sussman)
 
-// [8] Reinitialisation (Godunov / Sussman)
-//
-// Solves:
-//     phi_tau + s(phi0) ( |grad(phi)| - 1 ) = 0
-//
-// using Godunov selection of WENO-backed one-sided derivatives.
+    Solves:
+        phi_tau + s(phi0) ( |grad(phi)| - 1 ) = 0
+
+    using Godunov selection of WENO-backed one-sided derivatives.
+*/
 template<int DIM>
 inline std::vector<double> reinitialise_phi(
     const std::vector<double>& phi0,
@@ -268,21 +269,18 @@ inline std::vector<double> reinitialise_phi(
                 double term = 0.0;
 
                 if (s >= 0.0) {
-                    term =
-                        std::max(dm, 0.0) * std::max(dm, 0.0) +
+                    term = std::max(dm, 0.0) * std::max(dm, 0.0) +
                         std::min(dp, 0.0) * std::min(dp, 0.0);
                 }
                 else {
-                    term =
-                        std::min(dm, 0.0) * std::min(dm, 0.0) +
+                    term = std::min(dm, 0.0) * std::min(dm, 0.0) +
                         std::max(dp, 0.0) * std::max(dp, 0.0);
                 }
 
                 grad_sq += term;
             }
 
-            phi_new[id] =
-                phi[id] - dtau * s * (std::sqrt(grad_sq) - 1.0);
+            phi_new[id] = phi[id] - dtau * s * (std::sqrt(grad_sq) - 1.0);
         }
 
         apply_neumann_bc<DIM>(phi_new, grid);
