@@ -8,8 +8,6 @@
 #include "src/euler/level_set/level_set_core.hpp"
 #include "src/math/numerical_safety.hpp"
 
-// COME BACK AN APPLY NUMERICAL SAFTEY to WENO
-
 
 namespace level_set_detail {
 
