@@ -92,6 +92,7 @@ inline void apply_neumann_bc(
 
     const int Ntot = static_cast<int>(total_cells(grid));
 
+    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
 
@@ -127,6 +128,7 @@ inline std::vector<double> advect_phi(
     const int Ntot = static_cast<int>(total_cells(grid));
     std::vector<double> phi_new = phi;
 
+    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
 
@@ -176,6 +178,7 @@ inline std::vector<double> advect_phi_normal_speed(
     const int Ntot = static_cast<int>(total_cells(grid));
     std::vector<double> phi_new = phi;
 
+    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
 
@@ -249,6 +252,7 @@ inline std::vector<double> reinitialise_phi(
 
     for (int it = 0; it < iterations; ++it) {
 
+        #pragma omp parallel for
         for (int id = 0; id < Ntot; ++id) {
 
             const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
@@ -309,6 +313,7 @@ inline std::vector<std::array<double, DIM>> compute_normals(
     std::vector<bool> computed(Ntot, false);
 
     // [9.1] Interior cells
+    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
 
@@ -341,6 +346,7 @@ inline std::vector<std::array<double, DIM>> compute_normals(
     }
 
     // [9.2] Boundary cells
+    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         if (computed[id]) {
             continue;
