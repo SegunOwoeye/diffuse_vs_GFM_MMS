@@ -53,6 +53,29 @@ struct IdealGasEOS {
         return safe_div(p, ((params.gamma - 1.0) * rho));
     }
 
+    // Combined Pressure and sound speed calculation
+    template<int DIM>
+    static inline void compute_p_c(
+        const Conserved<DIM>& U,
+        const EOSParams& params,
+        double& p,
+        double& c
+    )
+    {
+        const double rho = clamp_min(U.rho);
+
+        double mom2 = 0.0;
+        for (int d = 0; d < DIM; ++d)
+            mom2 += U.mom[d] * U.mom[d];
+
+        const double kineticE = 0.5 * safe_div(mom2, rho);
+
+        const double p_raw = (params.gamma - 1.0) * (U.E - kineticE);
+        p = clamp_min(p_raw);
+
+        c = std::sqrt(params.gamma * safe_div(p, rho));
+    }
+
     /* 
         Recover ghost density from p* using EOS-consistent closure
         (preserves thermodynamic branch instead of fixing density)
@@ -134,6 +157,31 @@ struct StiffenedGasEOS {
     {
         return safe_div((p + params.gamma * params.p_inf),
             ((params.gamma - 1.0) * rho));
+    }
+
+    // Combined Pressure and sound speed calculation
+    template<int DIM>
+    static inline void compute_p_c(
+        const Conserved<DIM>& U,
+        const EOSParams& params,
+        double& p,
+        double& c
+    )
+    {
+        const double rho = clamp_min(U.rho);
+
+        double mom2 = 0.0;
+        for (int d = 0; d < DIM; ++d)
+            mom2 += U.mom[d] * U.mom[d];
+
+        const double kineticE = 0.5 * safe_div(mom2, rho);
+
+        const double p_raw = (params.gamma - 1.0) * (U.E - kineticE)
+            - params.gamma * params.p_inf;
+
+        p = clamp_min(p_raw);
+
+        c = std::sqrt(params.gamma * safe_div((p + params.p_inf), rho));
     }
 
 
