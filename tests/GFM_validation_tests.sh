@@ -1,16 +1,18 @@
 #!/bin/bash
 
+cores=6
+
 # -------------------------
 # [1.1] Compile in 1D - Fedwik 1999 Tests A-D
 # -------------------------
-g++ -std=c++17 -O2 -I. -DAPP_DIM=1 src/app/multimaterial_main.cpp -o mm_main_1d || exit 1
+g++ -std=c++17 -O2 -fopenmp -I. -DAPP_DIM=1 src/app/multimaterial_main.cpp -o mm_main_1d || exit 1
 # [1.2] Tests
 tests=("test1" "test2" "test3" "test4" "test5")
 
 # [1.3] Run CPP Solver
 for t in "${tests[@]}"; do
     echo "Running Fedwik $t 1D solver"
-    ./mm_main_1d configs/GFM/MM_1D_validation/$t.txt || { echo "Solver failed"; continue; }
+    OMP_NUM_THREADS=$cores OMP_SCHEDULE=dynamic ./mm_main_1d configs/GFM/MM_1D_validation/$t.txt || { echo "Solver failed"; continue; }
     
 
     echo "Completed Fedwik $t 1D solver"
