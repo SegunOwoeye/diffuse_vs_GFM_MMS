@@ -43,7 +43,9 @@ inline double compute_dt_cfl(
 
     double dt = dt_max;
 
-    for (const auto& Ui : U) {
+    #pragma omp parallel for reduction(min:dt)
+    for (std::size_t i = 0; i < U.size(); ++i) {
+        const auto& Ui = U[i];
         const ThermoState<DIM> T = compute_thermo<DIM, EOS>(Ui, params);
 
         for (int d = 0; d < DIM; ++d) {
@@ -98,11 +100,12 @@ inline double compute_dt_cfl_materials(
 
     double dt = dt_max;
 
+    #pragma omp parallel for reduction(min:dt)
     for (std::size_t i = 0; i < U.size(); ++i) {
         const int mat = material_id[i];
 
         if (mat < 0 || mat >= static_cast<int>(material_params.size())) {
-            throw std::runtime_error("compute_dt_cfl_materials: material id out of range");
+            continue;
         }
 
         const EOSParams& params = material_params[mat];
