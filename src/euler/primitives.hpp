@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include "src/euler/eos_params.hpp"
+#include "src/euler/state.hpp"
 
 template<int DIM, typename EOS>
 inline Conserved<DIM> prim_to_cons(

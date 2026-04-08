@@ -10,6 +10,7 @@
 #include "src/euler/primitives.hpp"
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
+//#include "scr/euler/conservative.hpp"
 
 
 // [0] Compute cell centre 

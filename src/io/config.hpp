@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "src/euler/primitives.hpp"
+
 // [1] Material
 struct MaterialConfig {
     int id = -1;
