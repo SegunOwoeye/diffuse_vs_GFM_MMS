@@ -6,12 +6,106 @@
 #include <stdexcept>
 #include <vector>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include "src/euler/level_set/level_set_core.hpp"
 #include "src/euler/level_set/level_set_derivatives.hpp"
 #include "src/euler/grid/grid_utils.hpp"
 
 
-// [0] Sign Function
+namespace level_set_detail {
+
+// [0] Decode flat id to coordinates
+template<int DIM>
+inline void decode_index(
+    int id,
+    const LevelSetGrid<DIM>& grid,
+    std::array<int, DIM>& idx
+)
+{
+    int tmp = id;
+
+    for (int d = DIM - 1; d >= 0; --d) {
+        idx[d] = tmp / grid.stride[d];
+        tmp %= grid.stride[d];
+    }
+}
+
+
+// [1] Boundary check from coordinates
+template<int DIM>
+inline bool is_boundary_from_coords(
+    const std::array<int, DIM>& idx,
+    const LevelSetGrid<DIM>& grid
+)
+{
+    for (int d = 0; d < DIM; ++d) {
+        if (idx[d] == 0 || idx[d] == grid.N[d] - 1) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
+// [2] Interior check from coordinates
+template<int DIM>
+inline bool is_interior_from_coords(
+    const std::array<int, DIM>& idx,
+    const LevelSetGrid<DIM>& grid
+)
+{
+    for (int d = 0; d < DIM; ++d) {
+        if (idx[d] <= 0 || idx[d] >= grid.N[d] - 1) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
+// [3] Clamp coordinates to interior
+template<int DIM>
+inline void clamp_coords_to_interior(
+    std::array<int, DIM>& idx,
+    const LevelSetGrid<DIM>& grid
+)
+{
+    for (int d = 0; d < DIM; ++d) {
+        if (idx[d] == 0) {
+            idx[d] = 1;
+        }
+        else if (idx[d] == grid.N[d] - 1) {
+            idx[d] = grid.N[d] - 2;
+        }
+    }
+}
+
+
+// [4] Flatten coordinates without validation
+template<int DIM>
+inline int flatten_coords_unchecked(
+    const std::array<int, DIM>& idx,
+    const LevelSetGrid<DIM>& grid
+)
+{
+    int id = 0;
+
+    for (int d = 0; d < DIM; ++d) {
+        id += idx[d] * grid.stride[d];
+    }
+
+    return id;
+}
+
+} // namespace level_set_detail
+
+
+// [5] Sign Function
 inline double sign_function(
     double x,
     double zero_tol = 1e-10
@@ -23,7 +117,7 @@ inline double sign_function(
 }
 
 
-// [1] Smoothed Sign Function (Sussman)
+// [6] Smoothed Sign Function (Sussman)
 inline double sussman_sign(
     double phi0,
     double h
@@ -33,7 +127,7 @@ inline double sussman_sign(
 }
 
 
-// [2] Validate scalar field size
+// [7] Validate scalar field size
 template<int DIM>
 inline void validate_level_set_field_size(
     const std::vector<double>& phi,
@@ -49,7 +143,7 @@ inline void validate_level_set_field_size(
 }
 
 
-// [3] Validate vector field size
+// [8] Validate vector field size
 template<int DIM>
 inline void validate_level_set_velocity_size(
     const std::vector<std::array<double, DIM>>& vel,
@@ -65,7 +159,7 @@ inline void validate_level_set_velocity_size(
 }
 
 
-// [4] Validate scalar speed field size
+// [9] Validate scalar speed field size
 template<int DIM>
 inline void validate_level_set_speed_size(
     const std::vector<double>& speed,
@@ -81,7 +175,7 @@ inline void validate_level_set_speed_size(
 }
 
 
-// [5] Apply Neumann Boundary
+// [10] Apply Neumann Boundary
 template<int DIM>
 inline void apply_neumann_bc(
     std::vector<double>& phi,
@@ -94,21 +188,23 @@ inline void apply_neumann_bc(
 
     #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
-        const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
+        std::array<int, DIM> idx{};
+        level_set_detail::decode_index<DIM>(id, grid, idx);
 
-        if (!is_boundary_cell<DIM>(idx, grid)) {
+        if (!level_set_detail::is_boundary_from_coords<DIM>(idx, grid)) {
             continue;
         }
 
-        const std::array<int, DIM> nb = clamp_to_interior<DIM>(idx, grid);
-        const int nb_id = flatten_index<DIM>(nb, grid);
+        level_set_detail::clamp_coords_to_interior<DIM>(idx, grid);
+        const int nb_id = level_set_detail::flatten_coords_unchecked<DIM>(idx, grid);
 
         phi[id] = phi[nb_id];
     }
 }
 
+
 /*
-    [6] Advect Level Set with vector velocity
+    [11] Advect Level Set with vector velocity
 
     Solves:
         phi_t + u · grad(phi) = 0
@@ -130,9 +226,10 @@ inline std::vector<double> advect_phi(
 
     #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
-        const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
+        std::array<int, DIM> idx{};
+        level_set_detail::decode_index<DIM>(id, grid, idx);
 
-        if (!is_interior_cell<DIM>(idx, grid)) {
+        if (!level_set_detail::is_interior_from_coords<DIM>(idx, grid)) {
             continue;
         }
 
@@ -140,8 +237,8 @@ inline std::vector<double> advect_phi(
 
         for (int d = 0; d < DIM; ++d) {
             const double grad = (vel[id][d] >= 0.0)
-                ? dminus<DIM>(phi, grid, idx, d)
-                : dplus<DIM>(phi, grid, idx, d);
+                ? level_set_detail::dminus_flat<DIM>(phi, grid, id, idx[d], d)
+                : level_set_detail::dplus_flat<DIM>(phi, grid, id, idx[d], d);
 
             adv_term += vel[id][d] * grad;
         }
@@ -154,8 +251,9 @@ inline std::vector<double> advect_phi(
     return phi_new;
 }
 
+
 /*
-    [7] Advect Level Set with normal speed
+    [12] Advect Level Set with normal speed
 
     Solves:
         phi_t + V_n |grad(phi)| = 0
@@ -180,9 +278,10 @@ inline std::vector<double> advect_phi_normal_speed(
 
     #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
-        const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
+        std::array<int, DIM> idx{};
+        level_set_detail::decode_index<DIM>(id, grid, idx);
 
-        if (!is_interior_cell<DIM>(idx, grid)) {
+        if (!level_set_detail::is_interior_from_coords<DIM>(idx, grid)) {
             continue;
         }
 
@@ -190,8 +289,8 @@ inline std::vector<double> advect_phi_normal_speed(
         double grad_sq = 0.0;
 
         for (int d = 0; d < DIM; ++d) {
-            const double dm = dminus<DIM>(phi, grid, idx, d);
-            const double dp = dplus<DIM>(phi, grid, idx, d);
+            const double dm = level_set_detail::dminus_flat<DIM>(phi, grid, id, idx[d], d);
+            const double dp = level_set_detail::dplus_flat<DIM>(phi, grid, id, idx[d], d);
 
             double term = 0.0;
 
@@ -217,8 +316,9 @@ inline std::vector<double> advect_phi_normal_speed(
     return phi_new;
 }
 
+
 /*
- [8] Reinitialisation (Godunov / Sussman)
+ [13] Reinitialisation (Godunov / Sussman)
 
     Solves:
         phi_tau + s(phi0) ( |grad(phi)| - 1 ) = 0
@@ -254,30 +354,30 @@ inline std::vector<double> reinitialise_phi(
 
         #pragma omp parallel for
         for (int id = 0; id < Ntot; ++id) {
+            std::array<int, DIM> idx{};
+            level_set_detail::decode_index<DIM>(id, grid, idx);
 
-            const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
-
-            if (!is_interior_cell<DIM>(idx, grid)) {
+            if (!level_set_detail::is_interior_from_coords<DIM>(idx, grid)) {
                 continue;
             }
 
             const double s = sussman_sign(phi0[id], h);
-
             double grad_sq = 0.0;
 
             for (int d = 0; d < DIM; ++d) {
-
-                const double dm = dminus<DIM>(phi, grid, idx, d);
-                const double dp = dplus<DIM>(phi, grid, idx, d);
+                const double dm = level_set_detail::dminus_flat<DIM>(phi, grid, id, idx[d], d);
+                const double dp = level_set_detail::dplus_flat<DIM>(phi, grid, id, idx[d], d);
 
                 double term = 0.0;
 
                 if (s >= 0.0) {
-                    term = std::max(dm, 0.0) * std::max(dm, 0.0) +
+                    term =
+                        std::max(dm, 0.0) * std::max(dm, 0.0) +
                         std::min(dp, 0.0) * std::min(dp, 0.0);
                 }
                 else {
-                    term = std::min(dm, 0.0) * std::min(dm, 0.0) +
+                    term =
+                        std::min(dm, 0.0) * std::min(dm, 0.0) +
                         std::max(dp, 0.0) * std::max(dp, 0.0);
                 }
 
@@ -295,7 +395,7 @@ inline std::vector<double> reinitialise_phi(
 }
 
 
-/*  [9] Compute Normals
+/*  [14] Compute Normals
     Uses central differences for geometry diagnostics and interface-normal
     construction. Boundary values are copied from the nearest clamped interior cell.
 */
@@ -312,19 +412,20 @@ inline std::vector<std::array<double, DIM>> compute_normals(
     std::vector<std::array<double, DIM>> normals(Ntot);
     std::vector<bool> computed(Ntot, false);
 
-    // [9.1] Interior cells
+    // [14.1] Interior cells
     #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
-        const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
+        std::array<int, DIM> idx{};
+        level_set_detail::decode_index<DIM>(id, grid, idx);
 
-        if (!is_interior_cell<DIM>(idx, grid)) {
+        if (!level_set_detail::is_interior_from_coords<DIM>(idx, grid)) {
             continue;
         }
 
         double mag = 0.0;
 
         for (int d = 0; d < DIM; ++d) {
-            const double g = dcenter<DIM>(phi, grid, idx, d);
+            const double g = level_set_detail::dcenter_flat<DIM>(phi, grid, id, d);
             normals[id][d] = g;
             mag += g * g;
         }
@@ -345,16 +446,18 @@ inline std::vector<std::array<double, DIM>> compute_normals(
         computed[id] = true;
     }
 
-    // [9.2] Boundary cells
+    // [14.2] Boundary cells
     #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         if (computed[id]) {
             continue;
         }
 
-        const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
-        const std::array<int, DIM> nb = clamp_to_interior<DIM>(idx, grid);
-        const int nb_id = flatten_index<DIM>(nb, grid);
+        std::array<int, DIM> idx{};
+        level_set_detail::decode_index<DIM>(id, grid, idx);
+        level_set_detail::clamp_coords_to_interior<DIM>(idx, grid);
+
+        const int nb_id = level_set_detail::flatten_coords_unchecked<DIM>(idx, grid);
 
         if (computed[nb_id]) {
             normals[id] = normals[nb_id];
@@ -368,6 +471,10 @@ inline std::vector<std::array<double, DIM>> compute_normals(
 
     return normals;
 }
+
+
+
+
 
 
 

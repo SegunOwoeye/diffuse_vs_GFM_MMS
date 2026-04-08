@@ -14,7 +14,6 @@
 #include "src/euler/reconstruction/limiter.hpp"
 
 
-// USE NUMERICAL SAFTEY
 
 // [0] Primitive slope container
 template<int DIM>
