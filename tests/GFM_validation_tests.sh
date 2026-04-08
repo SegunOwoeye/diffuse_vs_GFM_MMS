@@ -52,6 +52,13 @@ deactivate
 echo "All 1D post-processing for Fedwik tests are complete."
 
 
+# 2D
+
+
+# SCALING STUDY
+
+
+
 
 
 

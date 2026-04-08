@@ -17,7 +17,7 @@
 
 #include "src/app/levelset/initial_levelset.hpp"
 #include "src/app/solver/solver_builder.hpp"
-#include "src/app/io/output_utils.hpp"
+#include "src/app/io/euler_output_utils.hpp"
 
 
 // [0] Run SM or GFM sharp-interface case

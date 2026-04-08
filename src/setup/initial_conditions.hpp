@@ -161,8 +161,7 @@ inline void initialise_from_config(
 
                     const int mat_id = region.material_id;
 
-                    const EOSParams params =
-                        build_eos_params_from_material(cfg.materials, mat_id);
+                    const EOSParams params = build_eos_params_from_material(cfg.materials, mat_id);
 
                     U[linear] = prim_to_cons<DIM, EOS>(P, params);
                     material_id[linear] = mat_id;
@@ -224,8 +223,7 @@ inline void initialise_from_config(
                 throw std::runtime_error("Invalid material id in explosion IC");
             }
 
-            const EOSParams params =
-                build_eos_params_from_material(cfg.materials, mat_id);
+            const EOSParams params = build_eos_params_from_material(cfg.materials, mat_id);
 
             U[linear] = prim_to_cons<DIM, EOS>(P, params);
             material_id[linear] = mat_id;
