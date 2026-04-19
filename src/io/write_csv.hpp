@@ -88,8 +88,7 @@ inline void write_csv(
         const int mat = material_id.empty() ? 0 : material_id[linear];
         const EOSParams& params = material_params[mat];
 
-        const Primitive<DIM> P =
-            cons_to_prim<DIM, EOS>(U[linear], params);
+        const Primitive<DIM> P = cons_to_prim<DIM, EOS>(U[linear], params);
 
 
         // write row
@@ -103,12 +102,11 @@ inline void write_csv(
             file << P.vel[d] << ",";
         }
 
-        double kinetic = 0.0;
-        for (int d = 0; d < DIM; ++d) {
-            kinetic += 0.5 * P.vel[d] * P.vel[d];
-        }
-
-        double e = (U[linear].E / P.rho) - kinetic;
+        double e = EOS::internal_energy(
+            P.rho,
+            P.p,
+            params
+        );
 
         file << P.p << ",";
         file << e << ",";
