@@ -140,11 +140,11 @@ inline std::pair<Conserved<DIM>, Conserved<DIM>> ghost_states_normal(
     const double rhoR_star = EOSR::density_from_p_invariant(p_star, KR, paramsR);
 
     // [0.8.3] Fill ghost states
-    ghost_for_left.rho = PL.rho;
+    ghost_for_left.rho = rhoL_star;
     ghost_for_left.vel = add<DIM>(uL_t, u_star_n);
     ghost_for_left.p = p_star;
 
-    ghost_for_right.rho = PR.rho;
+    ghost_for_right.rho = rhoR_star;
     ghost_for_right.vel = add<DIM>(uR_t, u_star_n);
     ghost_for_right.p = p_star;
 
@@ -183,5 +183,6 @@ inline std::pair<Conserved<DIM>, Conserved<DIM>> ghost_states_pair(
         max_iter
     );
 }
+
 
 
