@@ -110,14 +110,13 @@ namespace dim {
     )
     {
         const auto stride = compute_strides<DIM>(N);
-        std::array<int, DIM> idx{};
-
-        std::vector<State<DIM>> line_in;
-        std::vector<State<DIM>> line_out;
-
         const int total_lines = static_cast<int>(U_in.size()) / N[dir];
 
+        #pragma omp parallel for
         for (int linear = 0; linear < total_lines; ++linear) {
+            std::array<int, DIM> idx{};
+            std::vector<State<DIM>> line_in;
+            std::vector<State<DIM>> line_out;
             int tmp = linear;
 
             for (int d = DIM - 1; d >= 0; --d) {
@@ -136,4 +135,3 @@ namespace dim {
     }
 
 } 
-

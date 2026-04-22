@@ -93,6 +93,7 @@ inline void run_sharp_interface_case(
             step > 0 &&
             step % ctx.reinit_frequency == 0) {
 
+            #pragma omp parallel for
             for (int k = 0; k < ctx.n_interfaces(); ++k) {
                 ctx.phi_list[k] = reinitialise_phi<DIM>(
                     ctx.phi_list[k],

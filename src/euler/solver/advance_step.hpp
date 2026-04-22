@@ -181,6 +181,7 @@ inline StepResult<DIM> advance_one_step(
     if (ctx.reinit_enabled &&
         (step_counter % ctx.reinit_frequency == 0))
     {
+        #pragma omp parallel for
         for (int k = 0; k < static_cast<int>(phi_list_work.size()); ++k) {
 
             phi_list_work[k] =
@@ -212,6 +213,7 @@ inline StepResult<DIM> advance_one_step(
         phi_list_work.size()
     );
 
+    #pragma omp parallel for
     for (int k = 0; k < static_cast<int>(phi_list_work.size()); ++k) {
 
         if constexpr (DIM == 1) {
