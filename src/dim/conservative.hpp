@@ -1,84 +1,144 @@
 #pragma once
 
-#include <algorithm>
-#include <cmath>
+#include <stdexcept>
 
 #include "src/dim/state.hpp"
-#include "src/dim/eos.hpp"
-#include "src/dim/eos_params.hpp"
-#include "src/math/numerical_safety.hpp"
 
+namespace dim {
 
-// [0] Conserved -> Primitive (Diffuse Interface)
-template<int DIM, int NMAT, typename EOS>
-inline Primitive<DIM, NMAT> cons_to_prim(
-    const Conserved<DIM, NMAT>& U,
-    const EOSParams<NMAT>& params,
-    double rho_floor = 1e-10,
-    double p_floor = 1e-10,
-    double alpha_floor = 1e-12
-)
-{
-    Primitive<DIM, NMAT> P{};
+    // [1] Vector Addition
+    template<int DIM>
+    inline Flux<DIM> operator+(
+        const Flux<DIM>& A,
+        const Flux<DIM>& B
+    )
+    {
+        if (A.partial_mass.size() != B.partial_mass.size()) {
+            throw std::runtime_error("dim::Flux operator+: partial_mass size mismatch");
+        }
 
-    // [0.1] Alpha (clamp + renormalise)
-    double alpha_sum = 0.0;
+        Flux<DIM> C = make_flux<DIM>(static_cast<int>(A.partial_mass.size()));
 
-    for (int k = 0; k < NMAT; ++k) {
-        P.alpha[k] = std::max(U.alpha[k], alpha_floor);
-        alpha_sum += P.alpha[k];
+        for (int k = 0; k < static_cast<int>(A.partial_mass.size()); ++k) {
+            C.partial_mass[k] = A.partial_mass[k] + B.partial_mass[k];
+        }
+
+        for (int d = 0; d < DIM; ++d) {
+            C.mom[d] = A.mom[d] + B.mom[d];
+        }
+
+        C.E = A.E + B.E;
+        return C;
     }
 
-    if (alpha_sum <= 0.0) {
-        P.alpha.fill(0.0);
-        P.alpha[0] = 1.0;
-        alpha_sum = 1.0;
+    // [2] Vector Subtraction
+    template<int DIM>
+    inline Flux<DIM> operator-(
+        const Flux<DIM>& A,
+        const Flux<DIM>& B
+    )
+    {
+        if (A.partial_mass.size() != B.partial_mass.size()) {
+            throw std::runtime_error("dim::Flux operator-: partial_mass size mismatch");
+        }
+
+        Flux<DIM> C = make_flux<DIM>(static_cast<int>(A.partial_mass.size()));
+
+        for (int k = 0; k < static_cast<int>(A.partial_mass.size()); ++k) {
+            C.partial_mass[k] = A.partial_mass[k] - B.partial_mass[k];
+        }
+
+        for (int d = 0; d < DIM; ++d) {
+            C.mom[d] = A.mom[d] - B.mom[d];
+        }
+
+        C.E = A.E - B.E;
+        return C;
     }
 
-    for (int k = 0; k < NMAT; ++k) {
-        P.alpha[k] /= alpha_sum;
+    // [3] Scalar-vector multiplication
+    template<int DIM>
+    inline Flux<DIM> operator*(
+        double a,
+        const Flux<DIM>& F
+    )
+    {
+        Flux<DIM> result = make_flux<DIM>(static_cast<int>(F.partial_mass.size()));
+
+        for (int k = 0; k < static_cast<int>(F.partial_mass.size()); ++k) {
+            result.partial_mass[k] = a * F.partial_mass[k];
+        }
+
+        for (int d = 0; d < DIM; ++d) {
+            result.mom[d] = a * F.mom[d];
+        }
+
+        result.E = a * F.E;
+        return result;
     }
 
-    // [0.2] Total density
-    double rho = 0.0;
-
-    for (int k = 0; k < NMAT; ++k) {
-        rho += U.arho[k];
+    // [4] Scalar-vector division
+    template<int DIM>
+    inline Flux<DIM> operator/(
+        const Flux<DIM>& F,
+        double s
+    )
+    {
+        return (1.0 / s) * F;
     }
 
-    rho = std::max(rho, rho_floor);
+    // [5] For Riemann-solver algebra, HLLC jump terms.
+    template<int DIM>
+    inline Flux<DIM> state_difference(
+        const State<DIM>& A,
+        const State<DIM>& B
+    )
+    {
+        if (A.partial_mass.size() != B.partial_mass.size()) {
+            throw std::runtime_error("dim::state_difference: partial_mass size mismatch");
+        }
 
-    // [0.3] Velocity
-    double v2 = 0.0;
+        Flux<DIM> delta = make_flux<DIM>(static_cast<int>(A.partial_mass.size()));
 
-    for (int d = 0; d < DIM; ++d) {
-        const double u = safe_div(U.mom[d], rho);
-        P.vel[d] = u;
-        v2 += u * u;
+        for (int k = 0; k < static_cast<int>(A.partial_mass.size()); ++k) {
+            delta.partial_mass[k] = A.partial_mass[k] - B.partial_mass[k];
+        }
+
+        for (int d = 0; d < DIM; ++d) {
+            delta.mom[d] = A.mom[d] - B.mom[d];
+        }
+
+        delta.E = A.E - B.E;
+        return delta;
     }
 
-    // [0.4] Material densities
-    for (int k = 0; k < NMAT; ++k) {
-        P.rho[k] = safe_div(
-            U.arho[k],
-            std::max(P.alpha[k], alpha_floor)
-        );
+    // [6] Cell update step that applies the net face fluxes to the conserved variables
+    template<int DIM>
+    inline State<DIM> conservative_update(
+        const State<DIM>& U,
+        const Flux<DIM>& flux_left,
+        const Flux<DIM>& flux_right,
+        double lambda
+    )
+    {
+        if (flux_left.partial_mass.size() != flux_right.partial_mass.size() ||
+            flux_left.partial_mass.size() != U.partial_mass.size()) {
+            throw std::runtime_error("dim::conservative_update: partial_mass size mismatch");
+        }
+
+        State<DIM> result = U;
+
+        for (int k = 0; k < static_cast<int>(U.partial_mass.size()); ++k) {
+            result.partial_mass[k] -= lambda * (flux_right.partial_mass[k] - flux_left.partial_mass[k]);
+        }
+
+        for (int d = 0; d < DIM; ++d) {
+            result.mom[d] -= lambda * (flux_right.mom[d] - flux_left.mom[d]);
+        }
+
+        result.E -= lambda * (flux_right.E - flux_left.E);
+        return result;
     }
 
-    // [0.5] Internal energy
-    const double kinetic = 0.5 * rho * v2;
-    const double e = std::max(safe_div(U.E - kinetic, rho), 0.0);
 
-    // [0.6] Pressure (mixture closure via EOS)
-    const double p = EOS::template mixture_pressure<NMAT>(
-        rho,
-        e,
-        P.alpha,
-        params
-    );
-
-    P.p = std::max(p, p_floor);
-
-    return P;
-}
-
+} 
