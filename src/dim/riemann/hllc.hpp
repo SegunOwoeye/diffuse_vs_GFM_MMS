@@ -53,7 +53,7 @@ namespace dim {
     )
     {
         const Flux<DIM> delta = state_difference(UR, UL);
-        return safe_div((sR * FL - sL * FR + (sL * sR) * delta), (sR - sL));
+        return (sR * FL - sL * FR + (sL * sR) * delta) / (sR - sL);
     }
 
     // [4] HLLC Riemann Solver

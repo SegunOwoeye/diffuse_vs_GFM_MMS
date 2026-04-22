@@ -41,7 +41,7 @@ namespace dim {
             file << "u" << d << ",";
         }
 
-        file << "p,E";
+        file << "p,e";
 
         for (int k = 0; k < params.nmat(); ++k) {
             file << ",alpha" << k;
