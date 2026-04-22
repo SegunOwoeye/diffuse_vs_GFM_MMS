@@ -13,8 +13,6 @@
 #include "src/euler/flux.hpp"
 #include "src/euler/reconstruction/limiter.hpp"
 
-
-
 // [0] Primitive slope container
 template<int DIM>
 struct PrimitiveSlope {
@@ -22,7 +20,6 @@ struct PrimitiveSlope {
     std::array<double, DIM> vel{};
     double p = 0.0;
 };
-
 
 // [1] Apply positivity floor to a primitive state
 template<int DIM>
@@ -35,7 +32,6 @@ inline void enforce_positive_primitive(
     P.rho = std::max(P.rho, rho_floor);
     P.p = std::max(P.p, p_floor);
 }
-
 
 // [2] Apply positivity floor to a conservative state via primitive projection
 template<int DIM, typename EOS>
@@ -50,7 +46,6 @@ inline void enforce_positive_conserved(
     enforce_positive_primitive(P, rho_floor, p_floor);
     U = prim_to_cons<DIM, EOS>(P, params);
 }
-
 
 // [3] Compute TVD limited primitive slope from left, centre, right states
 template<int DIM>
@@ -74,7 +69,6 @@ inline PrimitiveSlope<DIM> compute_limited_slope(
 
     return slope;
 }
-
 
 // [4] Reconstruct left and right primitive states inside one cell
 template<int DIM>
@@ -104,7 +98,6 @@ inline void reconstruct_cell_faces(
     enforce_positive_primitive(P_left_face, rho_floor, p_floor);
     enforce_positive_primitive(P_right_face, rho_floor, p_floor);
 }
-
 
 // [5] MUSCL-Hancock half-step predictor for one sweep direction
 template<int DIM, int DIR, typename EOS>
@@ -137,14 +130,13 @@ inline Conserved<DIM> hancock_predict(
     return U_centre - factor * (F_right - F_left);
 }
 
-
 /*
 [6] Reconstruct interface states for a 1D line in direction DIR
     U_line has N cell-centred conservative states.
     cell_params has N EOS parameter objects, one per cell.
     UL_face and UR_face are returned with size N-1, one state per interface.
 
-    This is a pure MUSCL-Hancock reconstruction. 
+    This is a pure MUSCL-Hancock reconstruction.
 */
 template<int DIM, int DIR, typename EOS>
 inline void reconstruct_line_interfaces(
@@ -171,15 +163,12 @@ inline void reconstruct_line_interfaces(
     UL_face.assign(N - 1, Conserved<DIM>{});
     UR_face.assign(N - 1, Conserved<DIM>{});
 
-    // [6.1] Convert full line to primitive variables
     std::vector<Primitive<DIM>> P_line(N);
-
     for (int i = 0; i < N; ++i) {
         P_line[i] = cons_to_prim<DIM, EOS>(U_line[i], cell_params[i]);
         enforce_positive_primitive(P_line[i], rho_floor, p_floor);
     }
 
-    // [6.2] Reconstruct piecewise linear states at time level n
     std::vector<Conserved<DIM>> U_left_n(N);
     std::vector<Conserved<DIM>> U_right_n(N);
 
@@ -205,22 +194,10 @@ inline void reconstruct_line_interfaces(
         U_left_n[i] = prim_to_cons<DIM, EOS>(P_left_face, cell_params[i]);
         U_right_n[i] = prim_to_cons<DIM, EOS>(P_right_face, cell_params[i]);
 
-        enforce_positive_conserved<DIM, EOS>(
-            U_left_n[i],
-            cell_params[i],
-            rho_floor,
-            p_floor
-        );
-
-        enforce_positive_conserved<DIM, EOS>(
-            U_right_n[i],
-            cell_params[i],
-            rho_floor,
-            p_floor
-        );
+        enforce_positive_conserved<DIM, EOS>(U_left_n[i], cell_params[i], rho_floor, p_floor);
+        enforce_positive_conserved<DIM, EOS>(U_right_n[i], cell_params[i], rho_floor, p_floor);
     }
 
-    // [6.3] Hancock half-step predictor at cell centres
     std::vector<Conserved<DIM>> U_half(N);
 
     U_half[0] = U_line[0];
@@ -236,23 +213,15 @@ inline void reconstruct_line_interfaces(
             cell_params[i]
         );
 
-        enforce_positive_conserved<DIM, EOS>(
-            U_half[i],
-            cell_params[i],
-            rho_floor,
-            p_floor
-        );
+        enforce_positive_conserved<DIM, EOS>(U_half[i], cell_params[i], rho_floor, p_floor);
     }
 
-    // [6.4] Convert predicted cell-centred states to primitives
     std::vector<Primitive<DIM>> P_half(N);
-
     for (int i = 0; i < N; ++i) {
         P_half[i] = cons_to_prim<DIM, EOS>(U_half[i], cell_params[i]);
         enforce_positive_primitive(P_half[i], rho_floor, p_floor);
     }
 
-    // [6.5] Reconstruct piecewise linear states from predicted values
     std::vector<Conserved<DIM>> U_left_half(N);
     std::vector<Conserved<DIM>> U_right_half(N);
 
@@ -278,22 +247,10 @@ inline void reconstruct_line_interfaces(
         U_left_half[i] = prim_to_cons<DIM, EOS>(P_left_face, cell_params[i]);
         U_right_half[i] = prim_to_cons<DIM, EOS>(P_right_face, cell_params[i]);
 
-        enforce_positive_conserved<DIM, EOS>(
-            U_left_half[i],
-            cell_params[i],
-            rho_floor,
-            p_floor
-        );
-
-        enforce_positive_conserved<DIM, EOS>(
-            U_right_half[i],
-            cell_params[i],
-            rho_floor,
-            p_floor
-        );
+        enforce_positive_conserved<DIM, EOS>(U_left_half[i], cell_params[i], rho_floor, p_floor);
+        enforce_positive_conserved<DIM, EOS>(U_right_half[i], cell_params[i], rho_floor, p_floor);
     }
 
-    // [6.6] Assemble face states
     for (int i = 0; i < N - 1; ++i) {
         UL_face[i] = U_right_half[i];
         UR_face[i] = U_left_half[i + 1];
