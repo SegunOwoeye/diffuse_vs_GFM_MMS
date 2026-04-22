@@ -1,15 +1,27 @@
 #pragma once
 
 #include <array>
+#include <stdexcept>
+#include <vector>
 
+namespace dim {
 
-// [0] Per-material EOS parameters
-template<int NMAT>
 struct EOSParams {
+    std::vector<double> gamma{};
 
-    std::array<double, NMAT> gamma{};
+    int nmat() const
+    {
+        return static_cast<int>(gamma.size());
+    }
 
-    // stiffened gas support 
-    std::array<double, NMAT> p_inf{};
+    void validate() const
+    {
+        if (gamma.empty()) {
+            throw std::runtime_error("dim::EOSParams: no materials configured");
+        }
 
+        
+    }
 };
+
+} // namespace dim
