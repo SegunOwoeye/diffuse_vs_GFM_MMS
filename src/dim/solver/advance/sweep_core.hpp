@@ -1,116 +1,139 @@
 #pragma once
 
-#include <vector>
 #include <array>
+#include <vector>
 
-#include "src/dim/state.hpp"
-#include "src/dim/eos.hpp"
-#include "src/dim/eos_params.hpp"
+#include "src/dim/primitives.hpp"
 #include "src/dim/riemann/hllc.hpp"
+#include "src/dim/solver/advance/geometry.hpp"
+#include "src/dim/solver/advance/line_ops.hpp"
 
+namespace dim {
+    // DIM sweep a split five-equation update
+    template<int DIM>
+    inline void solve_line(
+        const std::vector<State<DIM>>& U_in,
+        std::vector<State<DIM>>& U_out,
+        double dx,
+        double dt,
+        const EOSParams& params,
+        int dir
+    )
+    {
+        const int n = static_cast<int>(U_in.size());
+        const int nmat = params.nmat();
 
-// [0] Solve 1D line update
-template<int DIM, int NMAT, typename EOS>
-inline void solve_line(
-    const std::vector<Conserved<DIM, NMAT>>& U_in,
-    std::vector<Conserved<DIM, NMAT>>& U_out,
-    double dx,
-    double dt,
-    const EOSParams<NMAT>& params,
-    int dir
-)
-{
-    const int n = static_cast<int>(U_in.size());
-
-    std::vector<Conserved<DIM, NMAT>> F(n + 1);
-
-    std::array<double, DIM> normal{};
-    normal[dir] = 1.0;
-
-    // [0.1] Fluxes
-    for (int i = 0; i < n - 1; ++i) {
-        F[i + 1] = hllc_flux_normal<DIM, NMAT, EOS>(
-            U_in[i],
-            U_in[i + 1],
-            normal,
-            params
-        );
-    }
-
-    // [0.2] Boundary (zero-gradient)
-    F[0] = F[1];
-    F[n] = F[n - 1];
-
-    // [0.3] Update
-    for (int i = 0; i < n; ++i) {
-        U_out[i] = U_in[i] - (dt / dx) * (F[i + 1] - F[i]);
-    }
-}
-
-// [1] Sweep direction over full grid
-template<int DIM, int NMAT, typename EOS>
-inline void sweep_direction_dispatch(
-    int dir,
-    const std::vector<Conserved<DIM, NMAT>>& U_in,
-    const std::array<int, DIM>& N,
-    const std::array<double, DIM>& dx,
-    const EOSParams<NMAT>& params,
-    double dt,
-    std::vector<Conserved<DIM, NMAT>>& U_out
-)
-{
-    const auto stride = compute_strides<DIM>(N);
-
-    std::array<int, DIM> idx{};
-
-    std::vector<Conserved<DIM, NMAT>> line_in;
-    std::vector<Conserved<DIM, NMAT>> line_out;
-
-    // loop over all transverse indices
-    const int total_lines = U_in.size() / N[dir];
-
-    for (int linear = 0; linear < total_lines; ++linear) {
-
-        // reconstruct base index (excluding dir)
-        int tmp = linear;
-
-        for (int d = DIM - 1; d >= 0; --d) {
-            if (d == dir) continue;
-
-            idx[d] = tmp % N[d];
-            tmp /= N[d];
+        if (n == 0) {
+            throw std::runtime_error("dim::solve_line: empty line");
         }
 
-        // extract
-        extract_line<DIM, NMAT>(
-            U_in,
-            N,
-            stride,
-            dir,
-            idx,
-            line_in
-        );
+        if (n == 1) {
+            U_out = U_in;
+            return;
+        }
 
-        line_out.resize(line_in.size());
+        const double lambda = dt / dx;
 
-        // solve
-        solve_line<DIM, NMAT, EOS>(
-            line_in,
-            line_out,
-            dx[dir],
-            dt,
-            params,
-            dir
-        );
+        std::vector<Flux<DIM>> F(n + 1, make_flux<DIM>(nmat));
+        std::vector<double> face_velocity(n + 1, 0.0);
+        std::vector<Primitive<DIM>> primitive(n);
+        std::vector<std::vector<double>> alpha_full(n);
 
-        // write back
-        write_line<DIM, NMAT>(
-            U_out,
-            N,
-            stride,
-            dir,
-            idx,
-            line_out
-        );
+        std::array<double, DIM> normal{};
+        normal[dir] = 1.0;
+
+        for (int i = 0; i < n; ++i) {
+            primitive[i] = cons_to_prim<DIM>(U_in[i], params);
+            alpha_full[i] = primitive[i].alpha;
+        }
+
+        // HLLC interface
+        for (int i = 0; i < n - 1; ++i) {
+            const RiemannResult<DIM> result = hllc_flux_normal<DIM>(U_in[i], U_in[i + 1], params, normal);
+            F[i + 1] = result.flux;
+            face_velocity[i + 1] = result.face_velocity;
+        }
+
+        F[0] = F[1];
+        F[n] = F[n - 1];
+        face_velocity[0] = face_velocity[1];
+        face_velocity[n] = face_velocity[n - 1];
+
+        U_out = U_in;
+        for (int i = 0; i < n; ++i) {
+            U_out[i] = conservative_update<DIM>(U_in[i], F[i], F[i + 1], lambda);
+            repair_state<DIM>(U_out[i], params);
+        }
+
+        // Non-conservative alpha update
+        std::vector<std::vector<double>> alpha_flux(n + 1, std::vector<double>(nmat, 0.0));
+
+        for (int k = 0; k < nmat; ++k) {
+            alpha_flux[0][k] = alpha_full[0][k] * face_velocity[0];
+            alpha_flux[n][k] = alpha_full[n - 1][k] * face_velocity[n];
+        }
+
+        for (int face = 1; face < n; ++face) {
+            const std::vector<double>& alpha_upwind =
+                (face_velocity[face] >= 0.0) ? alpha_full[face - 1] : alpha_full[face];
+
+            for (int k = 0; k < nmat; ++k) {
+                alpha_flux[face][k] = alpha_upwind[k] * face_velocity[face];
+            }
+        }
+
+        for (int i = 0; i < n; ++i) {
+            std::vector<double> alpha_new = alpha_full[i];
+            const std::vector<double> rhs = alpha_rhs_coefficients<DIM>(primitive[i], params);
+            const double div_u = (face_velocity[i + 1] - face_velocity[i]) / dx;
+
+            for (int k = 0; k < nmat; ++k) {
+                alpha_new[k] -= lambda * (alpha_flux[i + 1][k] - alpha_flux[i][k]);
+                alpha_new[k] += dt * rhs[k] * div_u;
+            }
+
+            sanitise_alpha(alpha_new, 0.0);
+            U_out[i].alpha = independent_alpha(alpha_new);
+            repair_state<DIM>(U_out[i], params);
+        }
     }
-}
+
+    template<int DIM>
+    inline void sweep_direction_dispatch(
+        int dir,
+        const std::vector<State<DIM>>& U_in,
+        const std::array<int, DIM>& N,
+        const std::array<double, DIM>& dx,
+        const EOSParams& params,
+        double dt,
+        std::vector<State<DIM>>& U_out
+    )
+    {
+        const auto stride = compute_strides<DIM>(N);
+        std::array<int, DIM> idx{};
+
+        std::vector<State<DIM>> line_in;
+        std::vector<State<DIM>> line_out;
+
+        const int total_lines = static_cast<int>(U_in.size()) / N[dir];
+
+        for (int linear = 0; linear < total_lines; ++linear) {
+            int tmp = linear;
+
+            for (int d = DIM - 1; d >= 0; --d) {
+                if (d == dir) {
+                    continue;
+                }
+
+                idx[d] = tmp % N[d];
+                tmp /= N[d];
+            }
+
+            extract_line<DIM>(U_in, N, stride, dir, idx, line_in);
+            solve_line<DIM>(line_in, line_out, dx[dir], dt, params, dir);
+            write_line<DIM>(U_out, N, stride, dir, idx, line_out);
+        }
+    }
+
+} 
+
