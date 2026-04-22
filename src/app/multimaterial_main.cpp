@@ -3,18 +3,16 @@
 #include <string>
 
 #include "src/app/dimension.hpp"
+#include "src/app/material/material_builder.hpp"
+#include "src/app/solver/run_dim.hpp"
+#include "src/app/solver/run_sharp.hpp"
+#include "src/euler/eos.hpp"
 #include "src/io/config.hpp"
 #include "src/io/config_loader.hpp"
-#include "src/euler/eos.hpp"
 
-#include "src/app/material/material_builder.hpp"
-#include "src/app/solver/run_sharp.hpp"
-#include "src/app/solver/run_dim.hpp"
-
-// Multimaterial / Multidimensional Compressible Euler Flow Solver
-
+// Declaring EOS used for Multimateials
+// - Need to figure out how to adapt for different EOS
 using EOS = IdealGasEOS;
-
 
 // [0] Main
 int main(int argc, char** argv)
@@ -30,8 +28,6 @@ int main(int argc, char** argv)
         std::cout << "Regions parsed: " << cfg.regions.size() << "\n";
         std::cout << "Interface method: " << cfg.interface_method << "\n";
 
-        const auto material_params = build_material_params(cfg.materials);
-
         for (const auto& N : cfg.N_list) {
             std::cout << "Running N = ";
             for (int d = 0; d < DIM_; ++d) {
@@ -40,10 +36,12 @@ int main(int argc, char** argv)
             std::cout << "\n";
 
             if (cfg.interface_method == "GFM" || cfg.interface_method == "SM") {
+                const auto material_params = build_material_params(cfg.materials);
                 run_sharp_interface_case<DIM_, EOS>(cfg, N, material_params);
             }
             else if (cfg.interface_method == "DIM") {
-                run_dim_case<DIM_, EOS>(cfg, N, material_params);
+                const auto material_params = build_dim_material_params(cfg.materials);
+                run_dim_case<DIM_>(cfg, N, material_params);
             }
             else {
                 throw std::runtime_error("Unknown interface_method: " + cfg.interface_method);
