@@ -11,7 +11,6 @@
 struct IdealGasEOS {
 
     // [0.1] Pressure from rho and e
-    static double pressure(
         double rho,
         double e,
         double gamma
