@@ -12,6 +12,7 @@
 #include "src/euler/solver/advance/geometry.hpp"
 #include "src/euler/solver/advance/interface_speed.hpp"
 
+#include "src/euler/gfm/tracked_interface.hpp"
 #include "src/euler/riemann/hllc.hpp"
 #include "src/euler/gfm/ghost.hpp"
 #include "src/euler/eos.hpp"
@@ -26,7 +27,7 @@ inline void advance_line(
     const std::vector<int>& mat_line,
     const std::vector<int>& id_line,
     const std::vector<std::vector<double>>& phi_list,
-    const std::vector<int>& phi_material_ids,
+    const std::vector<TrackedInterface>& tracked_interfaces,
     const std::vector<std::vector<std::array<double, DIM>>>& normals_list,
     const SolverContext<DIM>& ctx,
     double dt,
@@ -34,6 +35,7 @@ inline void advance_line(
 )
 {
     const int L = static_cast<int>(U_line.size());
+    const double phi_tol = 1e-3 * ctx.dx[dir];
 
     if (L < 2) {
         return;
@@ -116,36 +118,32 @@ inline void advance_line(
                 matL,
                 matR,
                 phi_list,
-                phi_material_ids
+                tracked_interfaces,
+                phi_tol
             );
 
             if (k < 0) {
-                throw std::runtime_error("advance_line: failed to identify active interface");
-            }
+                std::string msg =
+                    "advance_line: failed to identify active interface"
+                    " face_ids=(" + std::to_string(idL) + "," + std::to_string(idR) + ")"
+                    " mats=(" + std::to_string(matL) + "," + std::to_string(matR) + ")";
 
-            const double phiL = phi_list[k][idL];
-            const double phiR = phi_list[k][idR];
+                if (!phi_list.empty()) {
+                    msg += " phi_samples=";
 
-            // Interface position
-            const double denom = phiL - phiR;
-            double alpha = 0.5;
-
-            if (std::abs(denom) > 1e-14) {
-                alpha = std::clamp(phiL / denom, 0.0, 1.0);
-            }
-
-            // Interface normal
-            std::array<double, DIM> n_face{};
-
-            if constexpr (DIM == 1) {
-                if (ctx.use_axis_normals_in_1d) {
-                    n_face = axis_normal<DIM>(dir);
-                } else {
-                    n_face = build_face_normal<DIM>(normals_list[k], idL, idR, dir);
+                    for (int kk = 0; kk < static_cast<int>(phi_list.size()); ++kk) {
+                        msg +=
+                            "[" + std::to_string(kk) +
+                            ":neg=" + std::to_string(tracked_interfaces[kk].negative_material_id) +
+                            ",phiL=" + std::to_string(phi_list[kk][idL]) +
+                            ",phiR=" + std::to_string(phi_list[kk][idR]) + "]";
+                    }
                 }
-            } else {
-                n_face = build_face_normal<DIM>(normals_list[k], idL, idR, dir);
+
+                throw std::runtime_error(msg);
             }
+
+            const std::array<double, DIM> n_face = axis_normal<DIM>(dir);
 
             // Use cell centrered states
             const auto ghosts = ghost_states_normal<DIM, EOS, EOS>(
@@ -220,7 +218,7 @@ inline void sweep_lines_flat(
     const std::vector<Conserved<DIM>>& U_in,
     const std::vector<int>& material_id,
     const std::vector<std::vector<double>>& phi_list,
-    const std::vector<int>& phi_material_ids,
+    const std::vector<TrackedInterface>& tracked_interfaces,
     const std::vector<std::vector<std::array<double, DIM>>>& normals_list,
     const SolverContext<DIM>& ctx,
     double dt,
@@ -256,7 +254,7 @@ inline void sweep_lines_flat(
             mat_line,
             id_line,
             phi_list,
-            phi_material_ids,
+            tracked_interfaces,
             normals_list,
             ctx,
             dt,
@@ -273,7 +271,7 @@ inline void sweep_direction_dispatch(
     const std::vector<Conserved<DIM>>& U_in,
     const std::vector<int>& material_id,
     const std::vector<std::vector<double>>& phi_list,
-    const std::vector<int>& phi_material_ids,
+    const std::vector<TrackedInterface>& tracked_interfaces,
     const std::vector<std::vector<std::array<double, DIM>>>& normals_list,
     const SolverContext<DIM>& ctx,
     double dt,
@@ -285,7 +283,7 @@ inline void sweep_direction_dispatch(
         U_in,
         material_id,
         phi_list,
-        phi_material_ids,
+        tracked_interfaces,
         normals_list,
         ctx,
         dt,

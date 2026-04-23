@@ -41,7 +41,7 @@ inline void run_sharp_interface_case(
     InitialLevelSetData<DIM> ls_data{};
 
     if (cfg.interface_method == "GFM") {
-        ls_data = initialise_phi_data_from_regions<DIM>(cfg, N);
+        ls_data = initialise_phi_data_from_regions<DIM>(cfg, N, material_id);
     }
 
     SolverContext<DIM> ctx = build_solver_context<DIM>(
@@ -56,7 +56,7 @@ inline void run_sharp_interface_case(
     if (ctx.reassign_material_from_phi && !ctx.phi_list.empty()) {
         assign_material_ids_from_phi<DIM>(
             ctx.phi_list,
-            ctx.phi_material_ids,
+            ctx.tracked_interfaces,
             ctx.background_material_id,
             ctx.material_id,
             ctx.level_set_grid
@@ -81,30 +81,7 @@ inline void run_sharp_interface_case(
         if (ctx.reassign_material_from_phi && !ctx.phi_list.empty()) {
             assign_material_ids_from_phi<DIM>(
                 ctx.phi_list,
-                ctx.phi_material_ids,
-                ctx.background_material_id,
-                ctx.material_id,
-                ctx.level_set_grid
-            );
-        }
-
-        if (ctx.reinit_enabled &&
-            !ctx.phi_list.empty() &&
-            step > 0 &&
-            step % ctx.reinit_frequency == 0) {
-
-            #pragma omp parallel for
-            for (int k = 0; k < ctx.n_interfaces(); ++k) {
-                ctx.phi_list[k] = reinitialise_phi<DIM>(
-                    ctx.phi_list[k],
-                    ctx.level_set_grid,
-                    ctx.reinit_iterations
-                );
-            }
-
-            assign_material_ids_from_phi<DIM>(
-                ctx.phi_list,
-                ctx.phi_material_ids,
+                ctx.tracked_interfaces,
                 ctx.background_material_id,
                 ctx.material_id,
                 ctx.level_set_grid

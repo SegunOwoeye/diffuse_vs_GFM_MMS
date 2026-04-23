@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "src/euler/eos_params.hpp"
+#include "src/euler/gfm/tracked_interface.hpp"
 #include "src/euler/level_set/level_set_core.hpp"
 
 
@@ -30,12 +31,13 @@ struct SolverContext {
     // [1.3] Level set / GFM
     LevelSetGrid<DIM> level_set_grid{};
     std::vector<std::vector<double>> phi_list;
-    std::vector<int> phi_material_ids;
+    std::vector<TrackedInterface> tracked_interfaces;
     int background_material_id = 0;
 
     bool reinit_enabled = false;
     int reinit_frequency = 5;
     int reinit_iterations = 10;
+    int completed_steps = 0;
 
     // [1.4] Interface-control flags
     bool advect_level_set = true;
@@ -107,7 +109,7 @@ struct SolverContext {
             }
         }
 
-        if (reinit_frequency <= 0) {
+        if (reinit_enabled && reinit_frequency <= 0) {
             throw std::runtime_error("SolverContext: reinit_frequency must be positive");
         }
 
@@ -132,8 +134,12 @@ struct SolverContext {
             throw std::runtime_error("SolverContext: invalid background_material_id");
         }
 
-        if (static_cast<int>(phi_material_ids.size()) != static_cast<int>(phi_list.size())) {
-            throw std::runtime_error("SolverContext: phi_material_ids size mismatch");
+        if (completed_steps < 0) {
+            throw std::runtime_error("SolverContext: completed_steps must be non-negative");
+        }
+
+        if (static_cast<int>(tracked_interfaces.size()) != static_cast<int>(phi_list.size())) {
+            throw std::runtime_error("SolverContext: tracked_interfaces size mismatch");
         }
 
         for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
@@ -141,13 +147,17 @@ struct SolverContext {
                 throw std::runtime_error("SolverContext: phi_list entry size mismatch");
             }
 
-            if (phi_material_ids[k] < 0 ||
-                phi_material_ids[k] >= static_cast<int>(material_params.size())) {
-                throw std::runtime_error("SolverContext: invalid phi material id");
+            if (tracked_interfaces[k].negative_material_id < 0 ||
+                tracked_interfaces[k].negative_material_id >= static_cast<int>(material_params.size())) {
+                throw std::runtime_error("SolverContext: invalid tracked negative material id");
             }
 
-            if (phi_material_ids[k] == background_material_id) {
-                throw std::runtime_error("SolverContext: phi interface cannot target background material");
+            if (tracked_interfaces[k].negative_material_id == background_material_id) {
+                throw std::runtime_error("SolverContext: tracked interface cannot target background material");
+            }
+
+            if (tracked_interfaces[k].component_id < 0) {
+                throw std::runtime_error("SolverContext: invalid tracked component id");
             }
         }
     }

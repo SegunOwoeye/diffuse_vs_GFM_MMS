@@ -12,6 +12,7 @@
 #include "src/euler/solver/advance/line_ops.hpp"
 #include "src/euler/solver/advance/geometry.hpp"
 
+#include "src/euler/gfm/tracked_interface.hpp"
 #include "src/euler/solver/solver_context.hpp"
 #include "src/euler/gfm/interface_utils.hpp"
 #include "src/euler/gfm/ghost.hpp"
@@ -50,7 +51,8 @@ inline int select_face_interface(
     int matL,
     int matR,
     const std::vector<std::vector<double>>& phi_list,
-    const std::vector<int>& phi_material_ids
+    const std::vector<TrackedInterface>& tracked_interfaces,
+    double phi_tol
 )
 {
     if (matL == matR) {
@@ -61,38 +63,23 @@ inline int select_face_interface(
     double best_score = std::numeric_limits<double>::max();
 
     for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
-        const int tagged_mat = phi_material_ids[k];
-
-        if (tagged_mat != matL && tagged_mat != matR) {
-            continue;
-        }
-
         const double phiL = phi_list[k][idL];
         const double phiR = phi_list[k][idR];
 
-        if (is_interface_face(phiL, phiR)) {
-            const double score = std::abs(phiL) + std::abs(phiR);
+        const int neg_mat = tracked_interfaces[k].negative_material_id;
+        const bool left_matches =
+            (neg_mat == matL) &&
+            (phiL <= phi_tol) &&
+            (phiR >= -phi_tol);
+        const bool right_matches =
+            (neg_mat == matR) &&
+            (phiR <= phi_tol) &&
+            (phiL >= -phi_tol);
 
-            if (score < best_score) {
-                best_score = score;
-                best_k = k;
-            }
-        }
-    }
-
-    if (best_k >= 0) {
-        return best_k;
-    }
-
-    for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
-        const int tagged_mat = phi_material_ids[k];
-
-        if (tagged_mat != matL && tagged_mat != matR) {
+        if (!left_matches && !right_matches) {
             continue;
         }
 
-        const double phiL = phi_list[k][idL];
-        const double phiR = phi_list[k][idR];
         const double score = std::abs(phiL) + std::abs(phiR);
 
         if (score < best_score) {
@@ -113,7 +100,7 @@ inline void accumulate_interface_normal_speed_line(
     const std::vector<int>& mat_line,
     const std::vector<int>& id_line,
     const std::vector<std::vector<double>>& phi_list,
-    const std::vector<int>& phi_material_ids,
+    const std::vector<TrackedInterface>& tracked_interfaces,
     const std::vector<std::vector<std::array<double, DIM>>>& normals_list,
     const SolverContext<DIM>& ctx,
     double dt,
@@ -122,6 +109,7 @@ inline void accumulate_interface_normal_speed_line(
 )
 {
     const int L = static_cast<int>(U_line.size());
+    const double phi_tol = 1e-3 * ctx.dx[dir];
 
     if (L < 2) {
         return;
@@ -162,40 +150,34 @@ inline void accumulate_interface_normal_speed_line(
             matL,
             matR,
             phi_list,
-            phi_material_ids
+            tracked_interfaces,
+            phi_tol
         );
 
         if (k < 0) {
-            continue;
+            throw std::runtime_error(
+                "accumulate_interface_normal_speed_line: failed to identify tracked interface for mixed-material face"
+            );
         }
 
         const EOSParams& paramsL = ctx.material_params[matL];
         const EOSParams& paramsR = ctx.material_params[matR];
 
-        std::array<double, DIM> n_face{};
-
-        if constexpr (DIM == 1) {
-            if (ctx.use_axis_normals_in_1d) {
-                n_face = axis_normal<DIM>(dir);
-            }
-            else {
-                n_face = build_face_normal<DIM>(normals_list[k], idL, idR, dir);
-            }
-        }
-        else {
-            n_face = build_face_normal<DIM>(normals_list[k], idL, idR, dir);
-        }
+        const std::array<double, DIM> n_flux = axis_normal<DIM>(dir);
+        const std::array<double, DIM> n_transport =
+            build_face_normal<DIM>(normals_list[k], idL, idR, dir);
 
         enforce_positive_conserved<DIM, EOS>(UL_face[i], paramsL);
         enforce_positive_conserved<DIM, EOS>(UR_face[i], paramsR);
 
-        const double Vn_face = interface_normal_speed_mcrs<DIM, EOS, EOS>(
+        const double Vn_flux = interface_normal_speed_mcrs<DIM, EOS, EOS>(
             UL_face[i],
             UR_face[i],
-            n_face,
+            n_flux,
             paramsL,
             paramsR
         );
+        const double Vn_face = Vn_flux * dot<DIM>(n_transport, n_flux);
 
         Vn_sum[k][idL] += Vn_face;
         Vn_sum[k][idR] += Vn_face;
@@ -213,7 +195,7 @@ inline void accumulate_interface_normal_speed_recursive(
     const std::vector<Conserved<DIM>>& U,
     const std::vector<int>& material_id,
     const std::vector<std::vector<double>>& phi_list,
-    const std::vector<int>& phi_material_ids,
+    const std::vector<TrackedInterface>& tracked_interfaces,
     const std::vector<std::vector<std::array<double, DIM>>>& normals_list,
     const SolverContext<DIM>& ctx,
     double dt,
@@ -242,7 +224,7 @@ inline void accumulate_interface_normal_speed_recursive(
             mat_line,
             id_line,
             phi_list,
-            phi_material_ids,
+            tracked_interfaces,
             normals_list,
             ctx,
             dt,
@@ -262,7 +244,7 @@ inline void accumulate_interface_normal_speed_recursive(
             U,
             material_id,
             phi_list,
-            phi_material_ids,
+            tracked_interfaces,
             normals_list,
             ctx,
             dt,
@@ -282,7 +264,7 @@ inline void accumulate_interface_normal_speed_recursive(
             U,
             material_id,
             phi_list,
-            phi_material_ids,
+            tracked_interfaces,
             normals_list,
             ctx,
             dt,
@@ -304,7 +286,7 @@ inline std::vector<std::vector<double>> build_interface_normal_speed_fields(
     const std::vector<int>& material_id,
     const std::vector<std::array<double, DIM>>& vel,
     const std::vector<std::vector<double>>& phi_list,
-    const std::vector<int>& phi_material_ids,
+    const std::vector<TrackedInterface>& tracked_interfaces,
     const std::vector<std::vector<std::array<double, DIM>>>& normals_list,
     const SolverContext<DIM>& ctx,
     double dt
@@ -333,7 +315,7 @@ inline std::vector<std::vector<double>> build_interface_normal_speed_fields(
             U,
             material_id,
             phi_list,
-            phi_material_ids,
+            tracked_interfaces,
             normals_list,
             ctx,
             dt,
@@ -350,7 +332,7 @@ inline std::vector<std::vector<double>> build_interface_normal_speed_fields(
             U,
             material_id,
             phi_list,
-            phi_material_ids,
+            tracked_interfaces,
             normals_list,
             ctx,
             dt,
@@ -367,7 +349,7 @@ inline std::vector<std::vector<double>> build_interface_normal_speed_fields(
             U,
             material_id,
             phi_list,
-            phi_material_ids,
+            tracked_interfaces,
             normals_list,
             ctx,
             dt,

@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "src/euler/gfm/tracked_interface.hpp"
 #include "src/euler/level_set/level_set_core.hpp"
 
 // [1] Flatten index from raw N array (solver-side helper)
@@ -45,7 +46,7 @@ inline int flatten_index(
 template<int DIM>
 inline void assign_material_ids_from_phi(
     const std::vector<std::vector<double>>& phi_list,
-    const std::vector<int>& phi_material_ids,
+    const std::vector<TrackedInterface>& tracked_interfaces,
     int background_material_id,
     std::vector<int>& material_id,
     const LevelSetGrid<DIM>& grid
@@ -58,8 +59,8 @@ inline void assign_material_ids_from_phi(
         return;
     }
 
-    if (static_cast<int>(phi_material_ids.size()) != static_cast<int>(phi_list.size())) {
-        throw std::runtime_error("assign_material_ids_from_phi: phi_material_ids mismatch");
+    if (static_cast<int>(tracked_interfaces.size()) != static_cast<int>(phi_list.size())) {
+        throw std::runtime_error("assign_material_ids_from_phi: tracked_interfaces mismatch");
     }
 
     for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
@@ -68,26 +69,48 @@ inline void assign_material_ids_from_phi(
         }
     }
 
-    material_id.assign(Ntot, background_material_id);
+    if (static_cast<int>(material_id.size()) != Ntot) {
+        material_id.assign(Ntot, background_material_id);
+    }
+
+    double min_dx = grid.dx[0];
+    for (int d = 1; d < DIM; ++d) {
+        min_dx = std::min(min_dx, grid.dx[d]);
+    }
+
+    const double phi_tol = 1e-3 * min_dx;
 
     for (int id = 0; id < Ntot; ++id) {
         bool found = false;
+        bool near_interface = false;
         double best_phi = 0.0;
         int best_mat = background_material_id;
 
         for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
             const double phi = phi_list[k][id];
 
-            if (phi < 0.0) {
+            if (phi < -phi_tol) {
                 if (!found || phi < best_phi) {
                     found = true;
                     best_phi = phi;
-                    best_mat = phi_material_ids[k];
+                    best_mat = tracked_interfaces[k].negative_material_id;
                 }
+            }
+            else if (std::abs(phi) <= phi_tol) {
+                near_interface = true;
             }
         }
 
-        material_id[id] = found ? best_mat : background_material_id;
+        if (found) {
+            material_id[id] = best_mat;
+            continue;
+        }
+
+        if (near_interface) {
+            continue;
+        }
+
+        material_id[id] = background_material_id;
     }
 }
 
