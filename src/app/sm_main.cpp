@@ -117,11 +117,15 @@ int main(int argc, char** argv)
 
             ctx.material_id = material_id;
             ctx.material_params = material_params;
+            ctx.background_material_id = material_id.empty() ? 0 : material_id[0];
 
+            ctx.initialise_level_set_grid();
+            ctx.initialise_boundary_conditions();
+
+            ctx.advect_level_set = false;
+            ctx.reassign_material_from_phi = false;
+            ctx.reinit_enabled = false;
             ctx.reinit_iterations = 5;
-
-            // dummy phi (Sod)
-            std::vector<double> phi(U.size(), 1.0);
 
             
             // [3.3] Time loop
@@ -134,12 +138,10 @@ int main(int argc, char** argv)
 
                 auto result = advance_one_step<DIM_, EOS>(
                     U,
-                    phi,
                     ctx
                 );
 
                 U = result.U_new;
-                phi = result.phi_new;
 
                 time += result.dt;
                 step++;
@@ -177,7 +179,7 @@ int main(int argc, char** argv)
             write_csv<DIM_, EOS>(
                 filename,
                 U,
-                material_id,
+                ctx.material_id,
                 N,
                 cfg.domain_min,
                 cfg.domain_max,
