@@ -51,7 +51,27 @@ done
 deactivate
 echo "All 1D post-processing for Fedwik tests are complete."
 
+# [2] 1D GFM Vs DIM validation
+# [2.1] Activate Virtual Environment
+if [ ! -d ".venv" ]; then
+    echo "[ERROR] .venv not found. Create the virtual environment first."
+    exit 1
+fi
+source .venv/bin/activate
 
+# [2.2] Run
+echo "Running 1D Validation and Comparison tests for GFM and DIM"
+
+python src/graphing/plot_gfm_dim_1d.py --convergence-test test2 --overlay-n 200 --include-convergence-overlay --output-dir data/plots/1d_GFM_DIM_validation || { echo "Plot failed"; continue; }
+
+echo "Completed 1D Validation and Comparison Tests for GFM and DIM"
+echo "-------------------------"
+
+# [2.3] Deactivate Environment
+deactivate
+echo "All 1D Validation and Comparison tests are complete."
+
+#############################################################################
 # 2D
 
 
