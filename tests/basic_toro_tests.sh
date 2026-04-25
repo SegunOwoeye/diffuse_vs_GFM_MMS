@@ -84,7 +84,7 @@ for t in "${tests[@]}"; do
     echo "Running Toro $t Postprocessing in 2D"
 
     case $t in
-        test1) out="explosion1" ;;
+        explosion1) out="explosion1" ;;
         *) echo "Unknown test: $t"; continue ;;
     esac
 
@@ -132,7 +132,7 @@ for t in "${tests[@]}"; do
     echo "Running Toro $t Postprocessing in 3D"
 
     case $t in
-        test1) out="explosion2" ;;
+        explosion2) out="explosion2" ;;
         *) echo "Unknown test: $t"; continue ;;
     esac
 
@@ -156,4 +156,3 @@ echo "All 3D post-processing for Toro tests are complete."
 # chmod +x tests/basic_toro_tests.sh
 # source .venv/bin/activate
 # ./tests/basic_toro_tests.sh
-
