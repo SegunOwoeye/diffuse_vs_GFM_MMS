@@ -22,6 +22,7 @@
 #include "src/euler/solver/advance/interface_speed.hpp"
 #include "src/euler/solver/advance/sweep_core.hpp"
 #include "src/euler/solver/advance/boundary.hpp"
+#include "src/euler/solver/advance/material_transfer.hpp"
 
 
 
@@ -316,6 +317,14 @@ inline StepResult<DIM> advance_one_step(
         );
     }
 
+    std::vector<Conserved<DIM>> U_work =
+        transfer_reassigned_material_states<DIM, EOS>(
+            U,
+            material_id_current,
+            material_id_work,
+            ctx
+        );
+
     
     // [2.8] Normals 
     std::vector<std::vector<std::array<double, DIM>>> normals_list(
@@ -333,7 +342,7 @@ inline StepResult<DIM> advance_one_step(
 
     
     // [2.9] Directional splitting
-    std::vector<Conserved<DIM>> U_stage = U;
+    std::vector<Conserved<DIM>> U_stage = U_work;
 
     for (int dir = 0; dir < DIM; ++dir) {
 

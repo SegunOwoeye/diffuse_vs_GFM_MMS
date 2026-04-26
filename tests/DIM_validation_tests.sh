@@ -73,6 +73,52 @@ echo "All 1D Validation and Comparison tests are complete."
 
 #############################################################################
 # 2D
+#############################################################################
+g++ -std=c++17 -O2 -fopenmp -I. -DAPP_DIM=2 src/app/multimaterial_main.cpp -o mm_main_2d || exit 1
+# [1.2] Tests
+tests=("test1" "test2" "test3" "test4" "test5")
+
+# [1.3] Run CPP Solver
+for t in "${tests[@]}"; do
+    echo "Running Fedwik $t 2D solver"
+    OMP_NUM_THREADS=$cores OMP_SCHEDULE=dynamic ./mm_main_2d configs/DIM/MM_2D_validation/$t.txt || { echo "Solver failed"; continue; }
+    
+
+    echo "Completed Fedwik $t 2D solver"
+    echo "-------------------------"
+done
+
+# [1.4] Results Post Processing
+# [1.4.1] Activate Virtual Environment
+if [ ! -d ".venv" ]; then
+    echo "[ERROR] .venv not found. Create the virtual environment first."
+    exit 1
+fi
+source .venv/bin/activate
+
+# [1.4.2] Run For loop
+for t in "${tests[@]}"; do
+    echo "Running Fedwik $t Postprocessing in 2D"
+
+    case $t in
+        test1) out="dim_FedkiwA" ;;
+        test2) out="dim_FedkiwB" ;;
+        test3) out="dim_FedkiwC" ;;
+        test4) out="dim_FedkiwD1" ;;
+        test5) out="dim_FedkiwD2" ;;
+        *) echo "Unknown test: $t"; continue ;;
+    esac
+    
+    python src/graphing/plot_multid.py dim/MM_2D_validation/$out || { echo "Plot failed"; continue; }
+    python src/graphing/compute_l1.py dim/MM_2D_validation/$out || { echo "L1 failed"; continue; }
+
+    echo "Completed Fedwik $t Postprocessing in 2D"
+    echo "-------------------------"
+done
+
+# [1.4.3] Deactivate Environment
+deactivate
+echo "All 2D post-processing for Fedwik tests are complete."
 
 
 # SCALING STUDY

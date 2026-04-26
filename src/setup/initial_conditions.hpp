@@ -56,6 +56,23 @@ inline std::array<double, DIM> compute_cell_center(
     return x;
 }
 
+template<int DIM>
+inline std::array<int, DIM> unflatten_raw_index(
+    int linear,
+    const std::array<int, DIM>& N
+)
+{
+    std::array<int, DIM> idx{};
+    int stride = 1;
+
+    for (int d = 0; d < DIM; ++d) {
+        idx[d] = (linear / stride) % N[d];
+        stride *= N[d];
+    }
+
+    return idx;
+}
+
 
 // [3] EOS builder 
 inline EOSParams build_eos_params_from_material(
@@ -136,11 +153,7 @@ inline void initialise_from_config(
 
         for (int linear = 0; linear < total_cells; ++linear) {
 
-            int tmp = linear;
-            for (int d = DIM - 1; d >= 0; --d) {
-                idx[d] = tmp % N[d];
-                tmp /= N[d];
-            }
+            idx = unflatten_raw_index<DIM>(linear, N);
 
             const auto x = compute_cell_center<DIM>(idx, cfg.domain_min, dx);
 
@@ -189,11 +202,7 @@ inline void initialise_from_config(
 
         for (int linear = 0; linear < total_cells; ++linear) {
 
-            int tmp = linear;
-            for (int d = DIM - 1; d >= 0; --d) {
-                idx[d] = tmp % N[d];
-                tmp /= N[d];
-            }
+            idx = unflatten_raw_index<DIM>(linear, N);
 
             const auto x = compute_cell_center<DIM>(idx, cfg.domain_min, dx);
 

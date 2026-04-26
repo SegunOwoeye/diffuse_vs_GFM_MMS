@@ -172,7 +172,7 @@ def compute_l1_multid(files):
 # [6] Dispatcher
 def compute_l1_errors(folder):
     folder = Path("data/csv") / folder
-    files = sorted(folder.glob("*.csv"))
+    files = sorted(f for f in folder.glob("*.csv") if "_N" in f.name)
 
     if not files:
         raise RuntimeError("No CSV files found")

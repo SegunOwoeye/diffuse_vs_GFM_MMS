@@ -7,6 +7,7 @@ chmod +x tests/basic_toro_tests.sh
 chmod +x tests/GFM_validation_tests.sh
 chmod +x tests/DIM_validation_tests.sh
 
+
 # [2] Clear CSV Output
 CSV_DIR="data/csv"
 
@@ -18,6 +19,6 @@ fi
 
 # [3] Run Files
 
-./tests/basic_toro_tests.sh
-./tests/GFM_validation_tests.sh
-./tests/DIM_validation_tests.sh
+bash ./tests/basic_toro_tests.sh
+bash ./tests/GFM_validation_tests.sh
+bash ./tests/DIM_validation_tests.sh

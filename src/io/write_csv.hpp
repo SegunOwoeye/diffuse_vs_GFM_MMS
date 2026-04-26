@@ -30,6 +30,23 @@ inline std::array<double, DIM> compute_cell_center_csv(
     return x;
 }
 
+template<int DIM>
+inline std::array<int, DIM> unflatten_raw_index_csv(
+    int linear,
+    const std::array<int, DIM>& N
+)
+{
+    std::array<int, DIM> idx{};
+    int stride = 1;
+
+    for (int d = 0; d < DIM; ++d) {
+        idx[d] = (linear / stride) % N[d];
+        stride *= N[d];
+    }
+
+    return idx;
+}
+
 
 // [1] Write CSV
 template<int DIM, typename EOS>
@@ -74,12 +91,7 @@ inline void write_csv(
 
     for (int linear = 0; linear < total_cells; ++linear) {
 
-        // unflatten
-        int tmp = linear;
-        for (int d = DIM - 1; d >= 0; --d) {
-            idx[d] = tmp % N[d];
-            tmp /= N[d];
-        }
+        idx = unflatten_raw_index_csv<DIM>(linear, N);
 
         // detail position
         const auto x = compute_cell_center_csv<DIM>(idx, domain_min, dx);

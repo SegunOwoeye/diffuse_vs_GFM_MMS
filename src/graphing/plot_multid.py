@@ -158,6 +158,87 @@ def plot_wireframe_surfaces(X, Y, rho_grid, p_grid, save_path=None):
 
 
 # [8] Plot 2D diagnostics
+def extract_axis_slice_2d(x, y, field, axis):
+    if axis == "x":
+        slice_value = np.sort(np.unique(y))[0]
+        mask = np.isclose(y, slice_value)
+        order = np.argsort(x[mask])
+        return x[mask][order], field[mask][order], slice_value
+
+    if axis == "y":
+        slice_value = np.sort(np.unique(x))[0]
+        mask = np.isclose(x, slice_value)
+        order = np.argsort(y[mask])
+        return y[mask][order], field[mask][order], slice_value
+
+    raise ValueError("axis must be 'x' or 'y'")
+
+
+def zero_roundoff_line(values, atol=1.0e-10):
+    values = np.asarray(values).copy()
+
+    if values.size == 0:
+        return values
+
+    if np.nanmax(np.abs(values)) <= atol:
+        values[:] = 0.0
+
+    return values
+
+
+def plot_2d_axis_slices(xs, fields_list, velocities_list, labels, save_path=None):
+    fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex="row")
+
+    for coords, fields, velocity, label in zip(xs, fields_list, velocities_list, labels):
+        x, y = coords
+        rho, p = fields
+        u0, u1 = velocity
+
+        x_line, rho_x, y_value = extract_axis_slice_2d(x, y, rho, "x")
+        _, p_x, _ = extract_axis_slice_2d(x, y, p, "x")
+        _, u0_x, _ = extract_axis_slice_2d(x, y, u0, "x")
+
+        y_line, rho_y, x_value = extract_axis_slice_2d(x, y, rho, "y")
+        _, p_y, _ = extract_axis_slice_2d(x, y, p, "y")
+        _, u1_y, _ = extract_axis_slice_2d(x, y, u1, "y")
+        u1_y = zero_roundoff_line(u1_y)
+
+        axes[0, 0].plot(x_line, rho_x, label=label)
+        axes[0, 1].plot(x_line, p_x, label=label)
+        axes[0, 2].plot(x_line, u0_x, label=label)
+
+        axes[1, 0].plot(y_line, rho_y, label=label)
+        axes[1, 1].plot(y_line, p_y, label=label)
+        axes[1, 2].plot(y_line, u1_y, label=label)
+
+    axes[0, 0].set_title(f"Density x-slice at y={y_value:.6g}")
+    axes[0, 1].set_title(f"Pressure x-slice at y={y_value:.6g}")
+    axes[0, 2].set_title(f"u0 x-slice at y={y_value:.6g}")
+
+    axes[1, 0].set_title(f"Density y-slice at x={x_value:.6g}")
+    axes[1, 1].set_title(f"Pressure y-slice at x={x_value:.6g}")
+    axes[1, 2].set_title(f"u1 y-slice at x={x_value:.6g}")
+
+    for ax in axes[0, :]:
+        ax.set_xlabel("x")
+
+    for ax in axes[1, :]:
+        ax.set_xlabel("y")
+
+    for ax in axes.ravel():
+        ax.grid(True)
+        ax.legend()
+
+    plt.tight_layout()
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300)
+        print(f"Saved slice figure to {save_path}")
+        plt.close()
+    else:
+        plt.show()
+
+
 def plot_2d_diagnostics(xs, fields_list, labels, title="", save_path=None):
     x, y = xs[-1]
     rho, p = fields_list[-1]
@@ -313,6 +394,7 @@ def plot_3d_diagnostics(xs, fields_list, labels, title="", save_path=None):
 def plot_multiple_cpp_solutions(filenames, title="Multidimensional Euler Solution", save_path=None):
     coords_list = []
     fields_list = []
+    velocities_list = []
     labels = []
     dims = []
 
@@ -322,6 +404,7 @@ def plot_multiple_cpp_solutions(filenames, title="Multidimensional Euler Solutio
         dims.append(dim)
         coords_list.append(coords)
         fields_list.append((rho, p))
+        velocities_list.append(velocity)
         labels.append(build_label_from_filename(fname))
 
     if len(set(dims)) != 1:
@@ -332,6 +415,8 @@ def plot_multiple_cpp_solutions(filenames, title="Multidimensional Euler Solutio
     if dim == 2:
         xs = [(coords[0], coords[1]) for coords in coords_list]
         plot_2d_diagnostics(xs, fields_list, labels, title=title, save_path=save_path)
+        slice_path = (save_path.parent / f"{save_path.stem}_slices.png") if save_path else None
+        plot_2d_axis_slices(xs, fields_list, velocities_list, labels, save_path=slice_path)
         return
 
     if dim == 3:
@@ -360,7 +445,7 @@ if __name__ == "__main__":
         path_arg = data_root / args[0]
 
         if path_arg.is_dir():
-            csv_files = sorted([f.name for f in path_arg.glob("*.csv")])
+            csv_files = sorted([f.name for f in path_arg.glob("*.csv") if "_N" in f.name])
 
             if not csv_files:
                 raise FileNotFoundError(f"No CSV files found in {path_arg}")
