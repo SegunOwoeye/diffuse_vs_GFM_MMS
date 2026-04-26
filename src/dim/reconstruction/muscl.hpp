@@ -203,11 +203,11 @@ namespace dim {
             throw std::runtime_error("dim::reconstruct_line_interfaces: need at least two cells");
         }
 
-        UL_face.assign(n - 1, make_state<DIM>(nmat));
-        UR_face.assign(n - 1, make_state<DIM>(nmat));
+        UL_face.assign(n-1, make_state<DIM>(nmat));
+        UR_face.assign(n-1, make_state<DIM>(nmat));
 
         if (n < 3) {
-            for (int face = 0; face < n - 1; ++face) {
+            for (int face = 0; face < n-1; ++face) {
                 UL_face[face] = U_line[face];
                 UR_face[face] = U_line[face + 1];
             }
@@ -230,16 +230,16 @@ namespace dim {
         U_left[0] = U_line[0];
         U_right[0] = U_line[0];
 
-        P_left[n - 1] = P_line[n - 1];
-        P_right[n - 1] = P_line[n - 1];
-        U_left[n - 1] = U_line[n - 1];
-        U_right[n - 1] = U_line[n - 1];
+        P_left[n-1] = P_line[n-1];
+        P_right[n-1] = P_line[n-1];
+        U_left[n-1] = U_line[n-1];
+        U_right[n-1] = U_line[n-1];
 
-        for (int i = 1; i < n - 1; ++i) {
+        for (int i = 1; i < n-1; ++i) {
             reconstruct_cell_faces<DIM>(
-                P_line[i - 1],
+                P_line[i-1],
                 P_line[i],
-                P_line[i + 1],
+                P_line[i+1],
                 P_left[i],
                 P_right[i]
             );
@@ -252,9 +252,9 @@ namespace dim {
 
         std::vector<State<DIM>> U_half(n);
         U_half[0] = U_line[0];
-        U_half[n - 1] = U_line[n - 1];
+        U_half[n-1] = U_line[n-1];
 
-        for (int i = 1; i < n - 1; ++i) {
+        for (int i = 1; i < n-1; ++i) {
             U_half[i] = hancock_predict<DIM>(
                 U_line[i],
                 P_line[i],
@@ -279,17 +279,17 @@ namespace dim {
         std::vector<State<DIM>> U_right_half(n);
         U_left_half[0] = U_half[0];
         U_right_half[0] = U_half[0];
-        U_left_half[n - 1] = U_half[n - 1];
-        U_right_half[n - 1] = U_half[n - 1];
+        U_left_half[n-1] = U_half[n-1];
+        U_right_half[n-1] = U_half[n-1];
 
-        for (int i = 1; i < n - 1; ++i) {
+        for (int i = 1; i < n-1; ++i) {
             Primitive<DIM> P_left_half{};
             Primitive<DIM> P_right_half{};
 
             reconstruct_cell_faces<DIM>(
-                P_half[i - 1],
+                P_half[i-1],
                 P_half[i],
-                P_half[i + 1],
+                P_half[i+1],
                 P_left_half,
                 P_right_half
             );
@@ -300,7 +300,7 @@ namespace dim {
             repair_state<DIM>(U_right_half[i], params);
         }
 
-        for (int face = 0; face < n - 1; ++face) {
+        for (int face = 0; face < n-1; ++face) {
             UL_face[face] = U_right_half[face];
             UR_face[face] = U_left_half[face + 1];
         }
