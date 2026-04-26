@@ -61,10 +61,11 @@ inline std::array<int, DIM> unflatten_index(
 )
 {
     std::array<int, DIM> idx{};
+    int stride = 1;
 
-    for (int d = DIM - 1; d >= 0; --d) {
-        idx[d] = linear % N[d];
-        linear /= N[d];
+    for (int d = 0; d < DIM; ++d) {
+        idx[d] = (linear / stride) % N[d];
+        stride *= N[d];
     }
 
     return idx;

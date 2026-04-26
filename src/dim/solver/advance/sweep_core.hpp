@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "src/dim/primitives.hpp"
+#include "src/dim/reconstruction/muscl.hpp"
 #include "src/dim/riemann/hllc.hpp"
 #include "src/dim/solver/advance/geometry.hpp"
 #include "src/dim/solver/advance/line_ops.hpp"
@@ -38,6 +39,10 @@ namespace dim {
         std::vector<double> face_velocity(n + 1, 0.0);
         std::vector<Primitive<DIM>> primitive(n);
         std::vector<std::vector<double>> alpha_full(n);
+        std::vector<State<DIM>> UL_face;
+        std::vector<State<DIM>> UR_face;
+        std::vector<Primitive<DIM>> PL_face;
+        std::vector<Primitive<DIM>> PR_face;
 
         std::array<double, DIM> normal{};
         normal[dir] = 1.0;
@@ -47,9 +52,26 @@ namespace dim {
             alpha_full[i] = primitive[i].alpha;
         }
 
-        // HLLC interface
+        reconstruct_line_interfaces<DIM>(
+            U_in,
+            params,
+            dir,
+            dt,
+            dx,
+            UL_face,
+            UR_face
+        );
+
+        PL_face.resize(n - 1);
+        PR_face.resize(n - 1);
+        for (int face = 0; face < n - 1; ++face) {
+            PL_face[face] = cons_to_prim<DIM>(UL_face[face], params);
+            PR_face[face] = cons_to_prim<DIM>(UR_face[face], params);
+        }
+
+        // MUSCL-Hancock predicted HLLC interface fluxes
         for (int i = 0; i < n - 1; ++i) {
-            const RiemannResult<DIM> result = hllc_flux_normal<DIM>(U_in[i], U_in[i + 1], params, normal);
+            const RiemannResult<DIM> result = hllc_flux_normal<DIM>(UL_face[i], UR_face[i], params, normal);
             F[i + 1] = result.flux;
             face_velocity[i + 1] = result.face_velocity;
         }
@@ -74,8 +96,9 @@ namespace dim {
         }
 
         for (int face = 1; face < n; ++face) {
+            const int iface = face - 1;
             const std::vector<double>& alpha_upwind =
-                (face_velocity[face] >= 0.0) ? alpha_full[face - 1] : alpha_full[face];
+                (face_velocity[face] >= 0.0) ? PL_face[iface].alpha : PR_face[iface].alpha;
 
             for (int k = 0; k < nmat; ++k) {
                 alpha_flux[face][k] = alpha_upwind[k] * face_velocity[face];
