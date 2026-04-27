@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -31,14 +32,30 @@ namespace dim {
     template<int DIM>
     inline double signed_distance_to_box(
         const std::array<double, DIM>& x,
-        const Region<DIM>& region
+        const Region<DIM>& region,
+        const std::array<double, DIM>& domain_min,
+        const std::array<double, DIM>& domain_max
     )
     {
         double outside_sq = 0.0;
         double inside_dist = std::numeric_limits<double>::max();
         bool inside = true;
+        bool has_interface_axis = false;
 
         for (int d = 0; d < DIM; ++d) {
+            const bool lower_is_domain_boundary =
+                std::abs(region.lower[d] - domain_min[d]) <= 1e-14;
+            const bool upper_is_domain_boundary =
+                std::abs(region.upper[d] - domain_max[d]) <= 1e-14;
+            const bool spans_domain =
+                lower_is_domain_boundary && upper_is_domain_boundary;
+
+            if (spans_domain) {
+                continue;
+            }
+
+            has_interface_axis = true;
+
             if (x[d] < region.lower[d]) {
                 const double dist = region.lower[d] - x[d];
                 outside_sq += dist * dist;
@@ -54,6 +71,10 @@ namespace dim {
                 const double dist_to_upper = region.upper[d] - x[d];
                 inside_dist = std::min(inside_dist, std::min(dist_to_lower, dist_to_upper));
             }
+        }
+
+        if (!has_interface_axis) {
+            return -std::numeric_limits<double>::max();
         }
 
         return inside ? -inside_dist : std::sqrt(outside_sq);
@@ -141,7 +162,12 @@ namespace dim {
         std::array<double, DIM> vel_sum{};
 
         for (const auto& region : cfg.regions) {
-            const double signed_distance = ::dim::signed_distance_to_box<DIM>(x, region);
+            const double signed_distance = ::dim::signed_distance_to_box<DIM>(
+                x,
+                region,
+                cfg.domain_min,
+                cfg.domain_max
+            );
             const double score = smooth_indicator(signed_distance, cfg.interface_thickness);
 
             if (score <= 1e-14) {
@@ -238,7 +264,5 @@ namespace dim {
     }
 
 } 
-
-
 
 

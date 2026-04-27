@@ -2,6 +2,9 @@
 
 #include <vector>
 #include <array>
+#include <algorithm>
+#include <cmath>
+#include <limits>
 #include <stdexcept>
 
 #ifdef _OPENMP
@@ -183,6 +186,111 @@ inline void rebuild_tracked_level_sets_from_material_map_1d(
 }
 
 
+// [1.3] Detect and preserve exactly planar level sets in multidimensional
+// validation runs. A phi field that only varies along one coordinate should not
+// acquire row-to-row interface jitter from transverse boundary stencils.
+template<int DIM>
+inline int detect_planar_level_set_axis(
+    const std::vector<double>& phi,
+    const SolverContext<DIM>& ctx
+)
+{
+    if constexpr (DIM == 1) {
+        return 0;
+    }
+    else {
+        const int Ntot = static_cast<int>(phi.size());
+
+        if (Ntot == 0) {
+            return -1;
+        }
+
+        double min_dx = ctx.dx[0];
+        double scale = 0.0;
+
+        for (int d = 1; d < DIM; ++d) {
+            min_dx = std::min(min_dx, ctx.dx[d]);
+        }
+
+        for (const double value : phi) {
+            scale = std::max(scale, std::abs(value));
+        }
+
+        const double tol = 1.0e-10 * std::max(scale, min_dx);
+
+        for (int axis = 0; axis < DIM; ++axis) {
+            std::vector<double> min_by_axis(
+                ctx.N[axis],
+                std::numeric_limits<double>::max()
+            );
+            std::vector<double> max_by_axis(
+                ctx.N[axis],
+                -std::numeric_limits<double>::max()
+            );
+
+            for (int id = 0; id < Ntot; ++id) {
+                const auto idx = unflatten_index<DIM>(id, ctx.level_set_grid);
+                const int a = idx[axis];
+
+                min_by_axis[a] = std::min(min_by_axis[a], phi[id]);
+                max_by_axis[a] = std::max(max_by_axis[a], phi[id]);
+            }
+
+            double max_transverse_range = 0.0;
+
+            for (int a = 0; a < ctx.N[axis]; ++a) {
+                max_transverse_range = std::max(
+                    max_transverse_range,
+                    max_by_axis[a] - min_by_axis[a]
+                );
+            }
+
+            if (max_transverse_range <= tol) {
+                return axis;
+            }
+        }
+
+        return -1;
+    }
+}
+
+
+template<int DIM>
+inline void project_planar_level_set(
+    std::vector<double>& phi,
+    const SolverContext<DIM>& ctx,
+    int axis
+)
+{
+    if (axis < 0 || axis >= DIM) {
+        return;
+    }
+
+    const int Ntot = static_cast<int>(phi.size());
+    std::vector<double> sum(ctx.N[axis], 0.0);
+    std::vector<int> count(ctx.N[axis], 0);
+
+    for (int id = 0; id < Ntot; ++id) {
+        const auto idx = unflatten_index<DIM>(id, ctx.level_set_grid);
+        const int a = idx[axis];
+
+        sum[a] += phi[id];
+        count[a] += 1;
+    }
+
+    for (int a = 0; a < ctx.N[axis]; ++a) {
+        if (count[a] > 0) {
+            sum[a] /= static_cast<double>(count[a]);
+        }
+    }
+
+    for (int id = 0; id < Ntot; ++id) {
+        const auto idx = unflatten_index<DIM>(id, ctx.level_set_grid);
+        phi[id] = sum[idx[axis]];
+    }
+}
+
+
 
 // [2] Advance One Step
 template<int DIM, typename EOS>
@@ -227,6 +335,12 @@ inline StepResult<DIM> advance_one_step(
     
     // [2.3] Working level sets
     std::vector<std::vector<double>> phi_list_work = ctx.phi_list;
+    std::vector<int> planar_phi_axis(phi_list_work.size(), -1);
+
+    for (int k = 0; k < static_cast<int>(phi_list_work.size()); ++k) {
+        planar_phi_axis[k] =
+            detect_planar_level_set_axis<DIM>(phi_list_work[k], ctx);
+    }
 
     
     // [2.4] Normals 
@@ -277,6 +391,12 @@ inline StepResult<DIM> advance_one_step(
                     ctx.level_set_grid,
                     dt
                 );
+
+            project_planar_level_set<DIM>(
+                phi_list_work[k],
+                ctx,
+                planar_phi_axis[k]
+            );
         }
     }
 
@@ -294,6 +414,12 @@ inline StepResult<DIM> advance_one_step(
                     ctx.level_set_grid,
                     ctx.reinit_iterations
                 );
+
+            project_planar_level_set<DIM>(
+                phi_list_work[k],
+                ctx,
+                planar_phi_axis[k]
+            );
         }
     }
 
@@ -310,11 +436,6 @@ inline StepResult<DIM> advance_one_step(
             ctx.level_set_grid
         );
 
-        rebuild_tracked_level_sets_from_material_map_1d<DIM>(
-            phi_list_work,
-            material_id_work,
-            ctx
-        );
     }
 
     std::vector<Conserved<DIM>> U_work =

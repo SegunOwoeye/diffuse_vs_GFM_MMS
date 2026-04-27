@@ -22,6 +22,15 @@ def load_solution_csv(filename):
     return x, rho, u, p, e
 
 
+def is_solution_csv(csv_path):
+    with csv_path.open("r", encoding="utf-8") as f:
+        header = f.readline().strip().split(",")
+
+    required = {"x0", "rho", "u0", "p", "e"}
+
+    return required.issubset(set(header))
+
+
 # [2] Plot 1D 
 def plot_1d(xs, fields_list, labels, title="", exact=None, save_path=None):
     fig, axes = plt.subplots(2, 2, figsize=(10, 8))
@@ -115,10 +124,13 @@ if __name__ == "__main__":
         path_arg = data_root / args[0]
 
         if path_arg.is_dir():
-            csv_files = sorted([f.name for f in path_arg.glob("*.csv")])
+            csv_files = sorted([
+                f.name for f in path_arg.glob("*.csv")
+                if is_solution_csv(f)
+            ])
 
             if not csv_files:
-                raise FileNotFoundError(f"No CSV files found in {path_arg}")
+                raise FileNotFoundError(f"No solution CSV files found in {path_arg}")
 
             filenames = [str(Path(args[0]) / f) for f in csv_files]
 

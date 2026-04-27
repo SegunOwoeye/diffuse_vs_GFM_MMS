@@ -69,9 +69,12 @@ inline void assign_material_ids_from_phi(
         }
     }
 
-    if (static_cast<int>(material_id.size()) != Ntot) {
-        material_id.assign(Ntot, background_material_id);
-    }
+    const bool has_previous_material_map =
+        static_cast<int>(material_id.size()) == Ntot;
+
+    const std::vector<int> previous_material_id = has_previous_material_map
+        ? material_id
+        : std::vector<int>{};
 
     double min_dx = grid.dx[0];
     for (int d = 1; d < DIM; ++d) {
@@ -79,6 +82,69 @@ inline void assign_material_ids_from_phi(
     }
 
     const double phi_tol = 1e-3 * min_dx;
+    std::vector<std::vector<char>> accepted(phi_list.size());
+
+    for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
+        const int tracked_mat = tracked_interfaces[k].negative_material_id;
+        std::vector<char> visited(Ntot, 0);
+        accepted[k].assign(Ntot, 0);
+
+        for (int seed_id = 0; seed_id < Ntot; ++seed_id) {
+            if (visited[seed_id] != 0 || phi_list[k][seed_id] >= -phi_tol) {
+                continue;
+            }
+
+            bool overlaps_previous_component = !has_previous_material_map;
+            std::vector<int> queue;
+            std::vector<int> component_cells;
+
+            queue.push_back(seed_id);
+            visited[seed_id] = 1;
+
+            for (int head = 0; head < static_cast<int>(queue.size()); ++head) {
+                const int id = queue[head];
+                component_cells.push_back(id);
+
+                if (has_previous_material_map &&
+                    previous_material_id[id] == tracked_mat) {
+                    overlaps_previous_component = true;
+                }
+
+                const std::array<int, DIM> idx =
+                    unflatten_index<DIM>(id, grid);
+
+                for (int dir = 0; dir < DIM; ++dir) {
+                    for (const int step : {-1, 1}) {
+                        std::array<int, DIM> nb_idx{};
+
+                        if (!try_offset_index<DIM>(idx, dir, step, grid, nb_idx)) {
+                            continue;
+                        }
+
+                        const int nb_id = flatten_index<DIM>(nb_idx, grid);
+
+                        if (visited[nb_id] != 0 ||
+                            phi_list[k][nb_id] >= -phi_tol) {
+                            continue;
+                        }
+
+                        visited[nb_id] = 1;
+                        queue.push_back(nb_id);
+                    }
+                }
+            }
+
+            if (!overlaps_previous_component) {
+                continue;
+            }
+
+            for (const int id : component_cells) {
+                accepted[k][id] = 1;
+            }
+        }
+    }
+
+    material_id.assign(Ntot, background_material_id);
 
     for (int id = 0; id < Ntot; ++id) {
         bool found = false;
@@ -89,7 +155,7 @@ inline void assign_material_ids_from_phi(
         for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
             const double phi = phi_list[k][id];
 
-            if (phi < -phi_tol) {
+            if (accepted[k][id] != 0) {
                 if (!found || phi < best_phi) {
                     found = true;
                     best_phi = phi;
@@ -106,11 +172,9 @@ inline void assign_material_ids_from_phi(
             continue;
         }
 
-        if (near_interface) {
-            continue;
+        if (near_interface && has_previous_material_map) {
+            material_id[id] = previous_material_id[id];
         }
-
-        material_id[id] = background_material_id;
     }
 }
 

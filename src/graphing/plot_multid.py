@@ -158,16 +158,94 @@ def plot_wireframe_surfaces(X, Y, rho_grid, p_grid, save_path=None):
 
 
 # [8] Plot 2D diagnostics
-def extract_axis_slice_2d(x, y, field, axis):
+def choose_common_slice_value_2d(xs, axis):
+    coord_index = 1 if axis == "x" else 0
+    unique_values = [
+        np.sort(np.unique(coords[coord_index]))
+        for coords in xs
+    ]
+
+    reference_values = min(unique_values, key=len)
+
+    return float(reference_values[len(reference_values) // 2])
+
+
+def infer_domain_limits(values):
+    unique_values = np.sort(np.unique(values))
+
+    if len(unique_values) <= 1:
+        return float(unique_values[0]), float(unique_values[0])
+
+    dx_lo = unique_values[1] - unique_values[0]
+    dx_hi = unique_values[-1] - unique_values[-2]
+
+    return (
+        float(unique_values[0] - 0.5 * dx_lo),
+        float(unique_values[-1] + 0.5 * dx_hi),
+    )
+
+
+def sample_axis_slice_2d(x, y, field, axis, slice_value):
+    df = pd.DataFrame({"x": x, "y": y, "f": field})
+    grid = (
+        df.pivot(index="y", columns="x", values="f")
+        .sort_index()
+        .sort_index(axis=1)
+    )
+
+    x_unique = grid.columns.to_numpy(dtype=float)
+    y_unique = grid.index.to_numpy(dtype=float)
+    values = grid.to_numpy(dtype=float)
+
     if axis == "x":
-        slice_value = np.sort(np.unique(y))[0]
+        if slice_value < y_unique[0] or slice_value > y_unique[-1]:
+            raise ValueError("x-slice y value is outside the grid")
+
+        line = np.array([
+            np.interp(slice_value, y_unique, values[:, j])
+            for j in range(len(x_unique))
+        ])
+
+        return x_unique, line, slice_value
+
+    if axis == "y":
+        if slice_value < x_unique[0] or slice_value > x_unique[-1]:
+            raise ValueError("y-slice x value is outside the grid")
+
+        line = np.array([
+            np.interp(slice_value, x_unique, values[i, :])
+            for i in range(len(y_unique))
+        ])
+
+        return y_unique, line, slice_value
+
+    raise ValueError("axis must be 'x' or 'y'")
+
+
+def extract_axis_slice_2d(x, y, field, axis, slice_value=None):
+    if axis == "x":
+        unique_y = np.sort(np.unique(y))
+        if slice_value is None:
+            slice_value = unique_y[len(unique_y) // 2]
+
         mask = np.isclose(y, slice_value)
+
+        if not np.any(mask):
+            return sample_axis_slice_2d(x, y, field, axis, slice_value)
+
         order = np.argsort(x[mask])
         return x[mask][order], field[mask][order], slice_value
 
     if axis == "y":
-        slice_value = np.sort(np.unique(x))[0]
+        unique_x = np.sort(np.unique(x))
+        if slice_value is None:
+            slice_value = unique_x[len(unique_x) // 2]
+
         mask = np.isclose(x, slice_value)
+
+        if not np.any(mask):
+            return sample_axis_slice_2d(x, y, field, axis, slice_value)
+
         order = np.argsort(y[mask])
         return y[mask][order], field[mask][order], slice_value
 
@@ -186,54 +264,250 @@ def zero_roundoff_line(values, atol=1.0e-10):
     return values
 
 
-def plot_2d_axis_slices(xs, fields_list, velocities_list, labels, save_path=None):
-    fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex="row")
+def transverse_range_by_x(x, y, field):
+    df = pd.DataFrame({"x": x, "y": y, "f": field})
+    grid = (
+        df.pivot(index="y", columns="x", values="f")
+        .sort_index()
+        .sort_index(axis=1)
+    )
+
+    x_unique = grid.columns.to_numpy(dtype=float)
+    values = grid.to_numpy()
+    transverse_range = np.nanmax(values, axis=0) - np.nanmin(values, axis=0)
+
+    return x_unique, zero_roundoff_line(transverse_range)
+
+
+def relative_transverse_range_by_x(x, y, field, floor=1.0e-12):
+    x_unique, transverse_range = transverse_range_by_x(x, y, field)
+    scale = max(float(np.nanmax(np.abs(field))), floor)
+    relative_range = transverse_range / scale
+
+    return x_unique, zero_roundoff_line(relative_range, atol=floor)
+
+
+def transverse_absmax_by_x(x, y, field):
+    df = pd.DataFrame({"x": x, "y": y, "f": field})
+    grid = (
+        df.pivot(index="y", columns="x", values="f")
+        .sort_index()
+        .sort_index(axis=1)
+    )
+
+    x_unique = grid.columns.to_numpy(dtype=float)
+    values = grid.to_numpy()
+    absmax = np.nanmax(np.abs(values), axis=0)
+
+    return x_unique, zero_roundoff_line(absmax)
+
+
+def relative_transverse_absmax_by_x(x, y, field, reference, floor=1.0e-12):
+    x_unique, absmax = transverse_absmax_by_x(x, y, field)
+    scale = max(float(np.nanmax(np.abs(reference))), floor)
+    relative_absmax = absmax / scale
+
+    return x_unique, zero_roundoff_line(relative_absmax, atol=floor)
+
+
+def plot_2d_solution_slice(
+    xs,
+    fields_list,
+    velocities_list,
+    labels,
+    axis="x",
+    slice_value=None,
+    save_path=None
+):
+    fig, axes = plt.subplots(2, 3, figsize=(16, 8), sharex=True)
+    axis_label = axis
+
+    if slice_value is None:
+        slice_value = choose_common_slice_value_2d(xs, axis)
+
+    coord_limits = []
 
     for coords, fields, velocity, label in zip(xs, fields_list, velocities_list, labels):
         x, y = coords
-        rho, p = fields
+        rho, p, e = fields
         u0, u1 = velocity
 
-        x_line, rho_x, y_value = extract_axis_slice_2d(x, y, rho, "x")
-        _, p_x, _ = extract_axis_slice_2d(x, y, p, "x")
-        _, u0_x, _ = extract_axis_slice_2d(x, y, u0, "x")
+        line_coord, rho_line, fixed_value = extract_axis_slice_2d(x, y, rho, axis, slice_value)
+        _, u0_line, _ = extract_axis_slice_2d(x, y, u0, axis, slice_value)
+        _, u1_line, _ = extract_axis_slice_2d(x, y, u1, axis, slice_value)
+        _, p_line, _ = extract_axis_slice_2d(x, y, p, axis, slice_value)
+        _, e_line, _ = extract_axis_slice_2d(x, y, e, axis, slice_value)
 
-        y_line, rho_y, x_value = extract_axis_slice_2d(x, y, rho, "y")
-        _, p_y, _ = extract_axis_slice_2d(x, y, p, "y")
-        _, u1_y, _ = extract_axis_slice_2d(x, y, u1, "y")
-        u1_y = zero_roundoff_line(u1_y)
+        u0_line = zero_roundoff_line(u0_line)
+        u1_line = zero_roundoff_line(u1_line)
+        coord_limits.append(infer_domain_limits(line_coord))
 
-        axes[0, 0].plot(x_line, rho_x, label=label)
-        axes[0, 1].plot(x_line, p_x, label=label)
-        axes[0, 2].plot(x_line, u0_x, label=label)
+        axes[0, 0].plot(line_coord, rho_line, label=label)
+        axes[0, 1].plot(line_coord, u0_line, label=label)
+        axes[0, 2].plot(line_coord, u1_line, label=label)
+        axes[1, 0].plot(line_coord, p_line, label=label)
+        axes[1, 1].plot(line_coord, e_line, label=label)
 
-        axes[1, 0].plot(y_line, rho_y, label=label)
-        axes[1, 1].plot(y_line, p_y, label=label)
-        axes[1, 2].plot(y_line, u1_y, label=label)
+    fixed_name = "y" if axis == "x" else "x"
 
-    axes[0, 0].set_title(f"Density x-slice at y={y_value:.6g}")
-    axes[0, 1].set_title(f"Pressure x-slice at y={y_value:.6g}")
-    axes[0, 2].set_title(f"u0 x-slice at y={y_value:.6g}")
-
-    axes[1, 0].set_title(f"Density y-slice at x={x_value:.6g}")
-    axes[1, 1].set_title(f"Pressure y-slice at x={x_value:.6g}")
-    axes[1, 2].set_title(f"u1 y-slice at x={x_value:.6g}")
-
-    for ax in axes[0, :]:
-        ax.set_xlabel("x")
-
-    for ax in axes[1, :]:
-        ax.set_xlabel("y")
+    axes[0, 0].set_title(f"Density {axis}-slice at {fixed_name}={fixed_value:.6g}")
+    axes[0, 1].set_title(f"u0 {axis}-slice at {fixed_name}={fixed_value:.6g}")
+    axes[0, 2].set_title(f"u1 {axis}-slice at {fixed_name}={fixed_value:.6g}")
+    axes[1, 0].set_title(f"Pressure {axis}-slice at {fixed_name}={fixed_value:.6g}")
+    axes[1, 1].set_title(f"Specific internal energy {axis}-slice at {fixed_name}={fixed_value:.6g}")
+    axes[1, 2].axis("off")
 
     for ax in axes.ravel():
-        ax.grid(True)
-        ax.legend()
+        if ax.has_data():
+            ax.set_xlabel(axis_label)
+            ax.grid(True)
+            ax.legend()
+
+            if coord_limits:
+                xmin = min(limit[0] for limit in coord_limits)
+                xmax = max(limit[1] for limit in coord_limits)
+                ax.set_xlim(xmin, xmax)
 
     plt.tight_layout()
 
     if save_path is not None:
         plt.savefig(save_path, dpi=300)
-        print(f"Saved slice figure to {save_path}")
+        print(f"Saved {axis}-slice figure to {save_path}")
+        plt.close()
+    else:
+        plt.show()
+
+
+def relative_deviation_from_mean(values, floor=1.0e-12):
+    values = np.asarray(values)
+    mean_value = float(np.nanmean(values))
+    scale = max(abs(mean_value), floor)
+
+    return zero_roundoff_line((values - mean_value) / scale, atol=floor)
+
+
+def plot_2d_y_deviation_slice(
+    xs,
+    fields_list,
+    velocities_list,
+    labels,
+    slice_value=None,
+    save_path=None
+):
+    fig, axes = plt.subplots(2, 3, figsize=(16, 8), sharex=True)
+
+    if slice_value is None:
+        slice_value = choose_common_slice_value_2d(xs, "y")
+
+    coord_limits = []
+
+    for coords, fields, velocity, label in zip(xs, fields_list, velocities_list, labels):
+        x, y = coords
+        rho, p, e = fields
+        u0, u1 = velocity
+
+        line_coord, rho_line, fixed_value = extract_axis_slice_2d(x, y, rho, "y", slice_value)
+        _, u0_line, _ = extract_axis_slice_2d(x, y, u0, "y", slice_value)
+        _, u1_line, _ = extract_axis_slice_2d(x, y, u1, "y", slice_value)
+        _, p_line, _ = extract_axis_slice_2d(x, y, p, "y", slice_value)
+        _, e_line, _ = extract_axis_slice_2d(x, y, e, "y", slice_value)
+
+        coord_limits.append(infer_domain_limits(line_coord))
+
+        axes[0, 0].plot(line_coord, relative_deviation_from_mean(rho_line), label=label)
+        axes[0, 1].plot(line_coord, relative_deviation_from_mean(u0_line), label=label)
+        axes[0, 2].plot(line_coord, zero_roundoff_line(u1_line), label=label)
+        axes[1, 0].plot(line_coord, relative_deviation_from_mean(p_line), label=label)
+        axes[1, 1].plot(line_coord, relative_deviation_from_mean(e_line), label=label)
+
+    axes[0, 0].set_title(f"Relative density y-deviation at x={fixed_value:.6g}")
+    axes[0, 1].set_title(f"Relative u0 y-deviation at x={fixed_value:.6g}")
+    axes[0, 2].set_title(f"u1 y-slice at x={fixed_value:.6g}")
+    axes[1, 0].set_title(f"Relative pressure y-deviation at x={fixed_value:.6g}")
+    axes[1, 1].set_title(f"Relative internal-energy y-deviation at x={fixed_value:.6g}")
+    axes[1, 2].axis("off")
+
+    for ax in axes.ravel():
+        if ax.has_data():
+            ax.set_xlabel("y")
+            ax.grid(True)
+            ax.legend()
+
+            if coord_limits:
+                ymin = min(limit[0] for limit in coord_limits)
+                ymax = max(limit[1] for limit in coord_limits)
+                ax.set_xlim(ymin, ymax)
+
+    plt.tight_layout()
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300)
+        print(f"Saved y-deviation slice figure to {save_path}")
+        plt.close()
+    else:
+        plt.show()
+
+
+def plot_2d_transverse_diagnostics(xs, fields_list, velocities_list, labels, slice_value=None, save_path=None):
+    fig, axes = plt.subplots(2, 4, figsize=(18, 8), sharex="row")
+
+    if slice_value is None:
+        slice_value = choose_common_slice_value_2d(xs, "x")
+
+    for coords, fields, velocity, label in zip(xs, fields_list, velocities_list, labels):
+        x, y = coords
+        rho, p, e = fields
+        u0, u1 = velocity
+
+        x_line, rho_x, y_value = extract_axis_slice_2d(x, y, rho, "x", slice_value)
+        _, p_x, _ = extract_axis_slice_2d(x, y, p, "x", slice_value)
+        _, e_x, _ = extract_axis_slice_2d(x, y, e, "x", slice_value)
+        _, u0_x, _ = extract_axis_slice_2d(x, y, u0, "x", slice_value)
+
+        x_tr, rho_tr = relative_transverse_range_by_x(x, y, rho)
+        _, p_tr = relative_transverse_range_by_x(x, y, p)
+        _, u0_tr = relative_transverse_range_by_x(x, y, u0)
+        _, u1_abs = relative_transverse_absmax_by_x(x, y, u1, u0)
+
+        axes[0, 0].plot(x_line, rho_x, label=label)
+        axes[0, 1].plot(x_line, u0_x, label=label)
+        axes[0, 2].plot(x_line, p_x, label=label)
+        axes[0, 3].plot(x_line, e_x, label=label)
+
+        axes[1, 0].plot(x_tr, rho_tr, label=label)
+        axes[1, 1].plot(x_tr, u0_tr, label=label)
+        axes[1, 2].plot(x_tr, p_tr, label=label)
+        axes[1, 3].plot(x_tr, u1_abs, label=label)
+
+    axes[0, 0].set_title(f"Density x-slice at y={y_value:.6g}")
+    axes[0, 1].set_title(f"u0 x-slice at y={y_value:.6g}")
+    axes[0, 2].set_title(f"Pressure x-slice at y={y_value:.6g}")
+    axes[0, 3].set_title(f"Specific internal energy x-slice at y={y_value:.6g}")
+
+    axes[1, 0].set_title("Relative density transverse range")
+    axes[1, 1].set_title("Relative u0 transverse range")
+    axes[1, 2].set_title("Relative pressure transverse range")
+    axes[1, 3].set_title("max |u1| / max |u0|")
+
+    for ax in axes[0, :]:
+        ax.set_xlabel("x")
+
+    for ax in axes[1, :]:
+        ax.set_xlabel("x")
+
+    for ax in axes.ravel():
+        ax.grid(True)
+        ax.legend()
+
+    for ax in axes[1, :]:
+        ax.set_yscale("symlog", linthresh=1.0e-12)
+        ax.set_ylabel("relative error")
+
+    plt.tight_layout()
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300)
+        print(f"Saved transverse diagnostic figure to {save_path}")
         plt.close()
     else:
         plt.show()
@@ -241,7 +515,7 @@ def plot_2d_axis_slices(xs, fields_list, velocities_list, labels, save_path=None
 
 def plot_2d_diagnostics(xs, fields_list, labels, title="", save_path=None):
     x, y = xs[-1]
-    rho, p = fields_list[-1]
+    rho, p = fields_list[-1][:2]
 
     X, Y, rho_grid = build_grid(x, y, rho)
     _, _, p_grid = build_grid(x, y, p)
@@ -273,7 +547,7 @@ def plot_2d_diagnostics(xs, fields_list, labels, title="", save_path=None):
 
     for coords, fields, label in zip(xs, fields_list, labels):
         x_i, y_i = coords
-        rho_i, p_i = fields
+        rho_i, p_i = fields[:2]
         r, rho_avg = compute_radial_profile([x_i, y_i], rho_i)
         ax3.plot(r, rho_avg, label=label)
 
@@ -287,7 +561,7 @@ def plot_2d_diagnostics(xs, fields_list, labels, title="", save_path=None):
 
     for coords, fields, label in zip(xs, fields_list, labels):
         x_i, y_i = coords
-        rho_i, p_i = fields
+        rho_i, p_i = fields[:2]
         r, p_avg = compute_radial_profile([x_i, y_i], p_i)
         ax4.plot(r, p_avg, label=label)
 
@@ -317,7 +591,7 @@ def plot_2d_diagnostics(xs, fields_list, labels, title="", save_path=None):
 # [9] Plot 3D diagnostics
 def plot_3d_diagnostics(xs, fields_list, labels, title="", save_path=None):
     x, y, z = xs[0]
-    rho, p = fields_list[0]
+    rho, p = fields_list[0][:2]
 
     rho_slice_coords, rho_slice, slice_value = extract_midplane_slice([x, y, z], rho, axis=2)
     p_slice_coords, p_slice, _ = extract_midplane_slice([x, y, z], p, axis=2)
@@ -354,7 +628,7 @@ def plot_3d_diagnostics(xs, fields_list, labels, title="", save_path=None):
 
     for coords, fields, label in zip(xs, fields_list, labels):
         x_i, y_i, z_i = coords
-        rho_i, p_i = fields
+        rho_i, p_i = fields[:2]
         r, rho_avg = compute_radial_profile([x_i, y_i, z_i], rho_i)
         ax3.plot(r, rho_avg, label=label)
 
@@ -368,7 +642,7 @@ def plot_3d_diagnostics(xs, fields_list, labels, title="", save_path=None):
 
     for coords, fields, label in zip(xs, fields_list, labels):
         x_i, y_i, z_i = coords
-        rho_i, p_i = fields
+        rho_i, p_i = fields[:2]
         r, p_avg = compute_radial_profile([x_i, y_i, z_i], p_i)
         ax4.plot(r, p_avg, label=label)
 
@@ -403,7 +677,7 @@ def plot_multiple_cpp_solutions(filenames, title="Multidimensional Euler Solutio
 
         dims.append(dim)
         coords_list.append(coords)
-        fields_list.append((rho, p))
+        fields_list.append((rho, p, e))
         velocities_list.append(velocity)
         labels.append(build_label_from_filename(fname))
 
@@ -415,8 +689,48 @@ def plot_multiple_cpp_solutions(filenames, title="Multidimensional Euler Solutio
     if dim == 2:
         xs = [(coords[0], coords[1]) for coords in coords_list]
         plot_2d_diagnostics(xs, fields_list, labels, title=title, save_path=save_path)
-        slice_path = (save_path.parent / f"{save_path.stem}_slices.png") if save_path else None
-        plot_2d_axis_slices(xs, fields_list, velocities_list, labels, save_path=slice_path)
+
+        x_slice_path = (save_path.parent / f"{save_path.stem}_x_slices.png") if save_path else None
+        y_slice_path = (save_path.parent / f"{save_path.stem}_y_slices.png") if save_path else None
+        old_y_deviation_path = (save_path.parent / f"{save_path.stem}_y_deviation_slices.png") if save_path else None
+        transverse_path = (save_path.parent / f"{save_path.stem}_transverse.png") if save_path else None
+        legacy_slice_path = (save_path.parent / f"{save_path.stem}_slices.png") if save_path else None
+
+        plot_2d_solution_slice(
+            xs,
+            fields_list,
+            velocities_list,
+            labels,
+            axis="x",
+            save_path=x_slice_path
+        )
+        plot_2d_y_deviation_slice(
+            xs,
+            fields_list,
+            velocities_list,
+            labels,
+            save_path=y_slice_path
+        )
+        if old_y_deviation_path is not None and old_y_deviation_path.exists():
+            old_y_deviation_path.unlink()
+
+        plot_2d_transverse_diagnostics(
+            xs,
+            fields_list,
+            velocities_list,
+            labels,
+            save_path=transverse_path
+        )
+
+        if legacy_slice_path is not None:
+            plot_2d_solution_slice(
+                xs,
+                fields_list,
+                velocities_list,
+                labels,
+                axis="x",
+                save_path=legacy_slice_path
+            )
         return
 
     if dim == 3:
