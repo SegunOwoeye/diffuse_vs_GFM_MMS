@@ -84,6 +84,7 @@ inline std::vector<std::array<double, DIM>> build_level_set_transport_velocity(
 
     std::vector<std::array<double, DIM>> vel_ls(Ntot);
 
+    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         for (int d = 0; d < DIM; ++d) {
             vel_ls[id][d] = normal_speed[id] * normals[id][d];
@@ -169,6 +170,7 @@ inline void rebuild_tracked_level_sets_from_material_map_1d(
                 );
             }
 
+            #pragma omp parallel for
             for (int i = 0; i < Nx; ++i) {
                 const double x = (static_cast<double>(i) + 0.5) * ctx.dx[0];
                 double best_dist = std::abs(x - boundaries[0]);
@@ -284,6 +286,7 @@ inline void project_planar_level_set(
         }
     }
 
+    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         const auto idx = unflatten_index<DIM>(id, ctx.level_set_grid);
         phi[id] = sum[idx[axis]];
@@ -490,7 +493,6 @@ inline StepResult<DIM> advance_one_step(
 
     return {U_stage, phi_list_work, dt};
 }
-
 
 
 
