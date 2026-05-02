@@ -213,8 +213,9 @@ struct StiffenedGasEOS {
         p = clamp_min(p);
         K = clamp_min(K);
 
-        return safe_div(std::pow((p + params.p_inf), K), 
-            safe_div(1.0, params.gamma));
+        return std::pow(safe_div(p + params.p_inf, K),
+            safe_div(1.0, params.gamma)
+        );
     }
 
 
