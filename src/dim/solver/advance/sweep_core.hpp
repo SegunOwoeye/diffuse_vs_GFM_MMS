@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include <array>
 #include <vector>
 
@@ -47,6 +51,7 @@ namespace dim {
         std::array<double, DIM> normal{};
         normal[dir] = 1.0;
 
+        #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int i = 0; i < n; ++i) {
             primitive[i] = cons_to_prim<DIM>(U_in[i], params);
             alpha_full[i] = primitive[i].alpha;
@@ -64,12 +69,14 @@ namespace dim {
 
         PL_face.resize(n - 1);
         PR_face.resize(n - 1);
+        #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int face = 0; face < n - 1; ++face) {
             PL_face[face] = cons_to_prim<DIM>(UL_face[face], params);
             PR_face[face] = cons_to_prim<DIM>(UR_face[face], params);
         }
 
         // MUSCL-Hancock predicted HLLC interface fluxes
+        #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int i = 0; i < n - 1; ++i) {
             const RiemannResult<DIM> result = hllc_flux_normal<DIM>(UL_face[i], UR_face[i], params, normal);
             F[i + 1] = result.flux;
@@ -82,6 +89,7 @@ namespace dim {
         face_velocity[n] = face_velocity[n - 1];
 
         U_out = U_in;
+        #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int i = 0; i < n; ++i) {
             U_out[i] = conservative_update<DIM>(U_in[i], F[i], F[i + 1], lambda);
             repair_state<DIM>(U_out[i], params);
@@ -95,6 +103,7 @@ namespace dim {
             alpha_flux[n][k] = alpha_full[n - 1][k] * face_velocity[n];
         }
 
+        #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int face = 1; face < n; ++face) {
             const int iface = face - 1;
             const std::vector<double>& alpha_upwind =
@@ -105,6 +114,7 @@ namespace dim {
             }
         }
 
+        #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int i = 0; i < n; ++i) {
             std::vector<double> alpha_new = alpha_full[i];
             const std::vector<double> rhs = alpha_rhs_coefficients<DIM>(primitive[i], params);
