@@ -4,7 +4,7 @@
 # -------------------------
 # [1] Defaults
 # -------------------------
-RUN_SIM=false
+RUN_SIM=true
 RUN_PLOT=true
 ARCHIVE=false
 CLEAN=false
