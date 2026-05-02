@@ -15,6 +15,7 @@ inline void apply_boundary_conditions(
     const int Ntot = static_cast<int>(U.size());
     const std::vector<Conserved<DIM>> U_old = U;
 
+    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         const auto idx = unflatten_index<DIM>(id, ctx.level_set_grid);
         std::array<int, DIM> src_idx = idx;
