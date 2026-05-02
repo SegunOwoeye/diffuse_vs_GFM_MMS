@@ -224,6 +224,22 @@ inline void validate_config(const Config<DIM>& cfg)
             throw std::runtime_error("Invalid explosion radius");
         }
     }
+
+    if (cfg.initial_condition == "shock_bubble") {
+        if (cfg.shock_axis < 0 || cfg.shock_axis >= DIM) {
+            throw std::runtime_error("Invalid shock axis");
+        }
+
+        if (cfg.bubble_radius <= 0.0) {
+            throw std::runtime_error("Invalid bubble radius");
+        }
+
+        if (cfg.material_left < 0 ||
+            cfg.material_right < 0 ||
+            cfg.material_bubble < 0) {
+            throw std::runtime_error("Invalid material id in shock_bubble IC");
+        }
+    }
 }
 
 
@@ -289,6 +305,26 @@ inline Config<DIM> load_config(const std::string& filename)
         else if (key == "vel_out") cfg.vel_out = parse_array<DIM>(value);
         else if (key == "p_out") cfg.p_out = std::stod(value);
         else if (key == "material_out") cfg.material_out = std::stoi(value);
+
+        else if (key == "shock_axis") cfg.shock_axis = std::stoi(value);
+        else if (key == "shock_position") cfg.shock_position = std::stod(value);
+
+        else if (key == "rho_left") cfg.rho_left = std::stod(value);
+        else if (key == "vel_left") cfg.vel_left = parse_array<DIM>(value);
+        else if (key == "p_left") cfg.p_left = std::stod(value);
+        else if (key == "material_left") cfg.material_left = std::stoi(value);
+
+        else if (key == "rho_right") cfg.rho_right = std::stod(value);
+        else if (key == "vel_right") cfg.vel_right = parse_array<DIM>(value);
+        else if (key == "p_right") cfg.p_right = std::stod(value);
+        else if (key == "material_right") cfg.material_right = std::stoi(value);
+
+        else if (key == "bubble_center") cfg.bubble_center = parse_array<DIM>(value);
+        else if (key == "bubble_radius") cfg.bubble_radius = std::stod(value);
+        else if (key == "rho_bubble") cfg.rho_bubble = std::stod(value);
+        else if (key == "vel_bubble") cfg.vel_bubble = parse_array<DIM>(value);
+        else if (key == "p_bubble") cfg.p_bubble = std::stod(value);
+        else if (key == "material_bubble") cfg.material_bubble = std::stoi(value);
 
         else if (key == "interface_method") cfg.interface_method = value;
         else if (key == "use_level_set") cfg.use_level_set = parse_bool(value);
