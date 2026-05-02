@@ -348,13 +348,15 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
         throw std::runtime_error("initialise_phi_data_from_regions: GFM requires use_level_set = true");
     }
 
-    if (cfg.initial_condition != "regions") {
+    if (cfg.initial_condition != "regions" &&
+        cfg.initial_condition != "explosion" &&
+        cfg.initial_condition != "shock_bubble") {
         throw std::runtime_error(
-            "initialise_phi_data_from_regions: current multimaterial GFM initialisation only supports region ICs"
+            "initialise_phi_data_from_regions: unsupported initial condition for GFM level sets"
         );
     }
 
-    if (cfg.regions.size() < 2) {
+    if (cfg.initial_condition == "regions" && cfg.regions.size() < 2) {
         throw std::runtime_error(
             "initialise_phi_data_from_regions: GFM requires at least 2 regions/materials"
         );
@@ -373,6 +375,59 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
         material_id,
         static_cast<int>(cfg.materials.size())
     );
+
+    if (cfg.initial_condition == "explosion" ||
+        cfg.initial_condition == "shock_bubble") {
+        const bool is_shock_bubble = (cfg.initial_condition == "shock_bubble");
+        const auto center = is_shock_bubble
+            ? cfg.bubble_center
+            : cfg.explosion_center;
+        const double radius = is_shock_bubble
+            ? cfg.bubble_radius
+            : cfg.explosion_radius;
+        const int inside_material = is_shock_bubble
+            ? cfg.material_bubble
+            : cfg.material_in;
+        const int outside_material = is_shock_bubble
+            ? cfg.material_right
+            : cfg.material_out;
+
+        const bool track_inside = (inside_material != out.background_material_id);
+        const int tracked_material = track_inside ? inside_material : outside_material;
+
+        if (tracked_material == out.background_material_id) {
+            return out;
+        }
+
+        std::vector<double> phi(total_cells, 0.0);
+
+        for (int id = 0; id < total_cells; ++id) {
+            const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
+            const auto x =
+                initial_level_set_detail::cell_center<DIM>(
+                    idx,
+                    cfg.domain_min,
+                    dx
+                );
+
+            double r2 = 0.0;
+
+            for (int d = 0; d < DIM; ++d) {
+                const double delta = x[d] - center[d];
+                r2 += delta * delta;
+            }
+
+            const double signed_distance = std::sqrt(r2) - radius;
+            phi[id] = track_inside ? signed_distance : -signed_distance;
+        }
+
+        out.phi_list.push_back(phi);
+        out.tracked_interfaces.push_back(
+            TrackedInterface{tracked_material, 0}
+        );
+
+        return out;
+    }
 
     // Visit each non-background connected component exactly once
     std::vector<char> visited(total_cells, 0);
@@ -433,8 +488,6 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
 
     return out;
 }
-
-
 
 
 
