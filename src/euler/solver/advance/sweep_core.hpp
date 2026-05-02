@@ -145,7 +145,7 @@ inline void advance_line(
 
             const std::array<double, DIM> n_face = axis_normal<DIM>(dir);
 
-            // Use cell centrered states
+            // Build material-consistent ghost states from the reconstructed face states.
             const auto ghosts = ghost_states_normal<DIM, EOS, EOS>(
                 UL_face[i],
                 UR_face[i],
@@ -172,7 +172,7 @@ inline void advance_line(
             );
 
 
-            // [5] Flux averaging
+            // Keep separate one-sided interface fluxes; do not average materials.
             F_left_interface[i] = FL;
             F_right_interface[i] = FR;
 
