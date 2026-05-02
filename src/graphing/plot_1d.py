@@ -3,6 +3,13 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from plot_style import (
+    configure_profile_axis,
+    plot_profile,
+    save_figure,
+    sort_by_resolution,
+)
+
 
 # [1] Load solution from CSV written by C++
 def load_solution_csv(filename):
@@ -33,42 +40,29 @@ def is_solution_csv(csv_path):
 
 # [2] Plot 1D 
 def plot_1d(xs, fields_list, labels, title="", exact=None, save_path=None):
-    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+    fig, axes = plt.subplots(2, 2, figsize=(7.2, 5.2))
     axes = axes.flatten()
 
-    names = [
-        "Density",
-        "Velocity",
-        "Pressure",
-        "Specific internal energy"
-    ]
+    field_keys = ["rho", "u0", "p", "e"]
 
-    for x, fields, label in zip(xs, fields_list, labels):
+    plotted_items = sort_by_resolution(list(zip(xs, fields_list, labels)))
+
+    for index, (x, fields, label) in enumerate(plotted_items):
         rho, u, p, e = fields
         field_vars = [rho, u, p, e]
 
-        for ax, field, name in zip(axes, field_vars, names):
-            ax.plot(x, field, label=label)
-            ax.set_xlabel("Position x")
-            ax.set_ylabel(name)
-            ax.grid(True)
+        for ax, field in zip(axes, field_vars):
+            plot_profile(ax, x, field, label, index=index)
 
     if exact is not None:
         for ax, key in zip(axes, ["rho", "u", "p", "e"]):
-            ax.plot(exact["x"], exact[key], "k--", linewidth=1.2, label="Exact")
+            plot_profile(ax, exact["x"], exact[key], "Exact")
 
-    for ax in axes:
-        ax.legend()
+    for ax, field_key in zip(axes, field_keys):
+        configure_profile_axis(ax, field_key)
 
-    #fig.suptitle(title)
     plt.tight_layout()
-
-    if save_path is not None:
-        plt.savefig(save_path, dpi=300)
-        print(f"Saved figure to {save_path}")
-        plt.close()
-    else:
-        plt.show()
+    save_figure(fig, save_path)
 
 
 # [2.1] Constructing plot names

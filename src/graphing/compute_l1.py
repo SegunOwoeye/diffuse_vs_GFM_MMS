@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from plot_style import save_figure
+
 
 # [1] Load CSV (dimension-aware)
 def load_csv(path):
@@ -203,28 +205,25 @@ def plot_l1(results, folder):
     p_err = np.array([r[3] for r in results])
     e_err = np.array([r[4] for r in results])
 
-    plt.figure(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(6.5, 4.8))
 
-    plt.loglog(N, rho_err, 'o-', label="rho")
-    plt.loglog(N, u_err, 'o-', label="u")
-    plt.loglog(N, p_err, 'o-', label="p")
-    plt.loglog(N, e_err, 'o-', label="e")
+    ax.loglog(N, rho_err, 'o-', label=r"$\rho$")
+    ax.loglog(N, u_err, 'D-', label=r"$u$")
+    ax.loglog(N, p_err, 's-', label=r"$p$")
+    ax.loglog(N, e_err, '^-', label=r"$e$")
 
     ref = rho_err[0] * (N / N[0])**(-1)
-    plt.loglog(N, ref, '--', label="O(1)")
+    ax.loglog(N, ref, 'k-.', linewidth=1.0, label="O(1)")
 
-    plt.xlabel("N")
-    plt.ylabel("L1 Error")
-    plt.grid(True, which="both")
-    plt.legend()
+    ax.set_xlabel(r"$N$")
+    ax.set_ylabel(r"$L_1$ error")
+    ax.grid(True, which="both", alpha=0.25)
+    ax.legend(frameon=False)
 
     output_name = "_".join(Path(folder).parts[-2:])
     save_path = folder_path / f"{output_name}_L1.png"
 
-    plt.savefig(save_path, dpi=300)
-    print(f"Saved plot to {save_path}")
-
-    plt.close()
+    save_figure(fig, save_path)
 
 
 # [8] Save table

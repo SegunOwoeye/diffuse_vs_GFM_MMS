@@ -6,6 +6,12 @@ import re
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from plot_style import (
+    configure_profile_axis,
+    plot_profile,
+    save_figure,
+)
+
 
 # [1] Test / Folder Settings
 TEST_FOLDERS = {
@@ -147,17 +153,13 @@ def energy_label(energy_column):
 
 
 def make_four_panel_figure(title, energy_column):
-    fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+    fig, axes = plt.subplots(2, 2, figsize=(7.2, 5.2))
     axes = axes.flatten()
     field_names = FIELD_NAMES.copy()
     field_names[-1] = ("e_plot", energy_label(energy_column))
 
-    for ax, (_, field_name) in zip(axes, field_names):
-        ax.set_xlabel("Position x")
-        ax.set_ylabel(field_name)
-        ax.grid(True, alpha=0.35)
-
-    fig.suptitle(title)
+    for ax, (field_key, _) in zip(axes, field_names):
+        configure_profile_axis(ax, field_key, show_legend=False)
 
     return fig, axes
 
@@ -179,19 +181,16 @@ def plot_method_overlay(data_root, output_dir, test_name, requested_resolution, 
                 x,
                 fields[field_key],
                 linestyle=style["linestyle"],
-                linewidth=1.4,
+                linewidth=1.2,
                 label=style["label"],
             )
 
     for ax in axes:
-        ax.legend()
+        ax.legend(frameon=False)
 
     output_path = output_dir / f"{test_name}_gfm_dim_overlay_N{resolution}.png"
     plt.tight_layout()
-    fig.savefig(output_path, dpi=300)
-    plt.close(fig)
-
-    print(f"Saved figure to {output_path}")
+    save_figure(fig, output_path)
 
 
 # [8] Plot Convergence: One Method At A Time
@@ -207,27 +206,19 @@ def plot_method_convergence(data_root, output_dir, method, test_name, energy_col
         energy_column,
     )
 
-    for resolution in resolutions:
+    for index, resolution in enumerate(sorted(resolutions, reverse=True)):
         csv_path = solution_path(data_root, method, test_name, resolution)
         x, fields = load_solution_csv(csv_path, energy_column)
 
         for ax, (field_key, _) in zip(axes, FIELD_NAMES):
-            ax.plot(
-                x,
-                fields[field_key],
-                linewidth=1.3,
-                label=f"N={resolution}",
-            )
+            plot_profile(ax, x, fields[field_key], f"N={resolution}", index=index)
 
     for ax in axes:
-        ax.legend()
+        ax.legend(frameon=False)
 
     output_path = output_dir / f"{test_name}_{method}_convergence.png"
     plt.tight_layout()
-    fig.savefig(output_path, dpi=300)
-    plt.close(fig)
-
-    print(f"Saved figure to {output_path}")
+    save_figure(fig, output_path)
 
 
 # [9] Script Entry

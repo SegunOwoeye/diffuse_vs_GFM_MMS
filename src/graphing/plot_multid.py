@@ -4,6 +4,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from plot_style import (
+    configure_profile_axis,
+    field_title,
+    field_ylabel,
+    plot_profile,
+    sort_by_resolution,
+)
+
 
 # [1] Load solution from CSV written by C++
 def load_solution_csv(filename):
@@ -121,13 +129,29 @@ def build_output_name(folder_path: str):
 
 
 # [7] Plot 3D wireframe surfaces from 2D slice grids
-def plot_wireframe_surfaces(X, Y, rho_grid, p_grid, save_path=None):
-    rstride = 4
-    cstride = 4
-    elev = 30
-    azim = 135
+def remove_if_exists(path):
+    if path is not None and path.exists():
+        path.unlink()
 
-    fig = plt.figure(figsize=(12, 6))
+
+def should_make_schlieren(save_path, force_schlieren=False):
+    if force_schlieren:
+        return True
+
+    if save_path is None:
+        return False
+
+    return "bubble_collapse" in str(save_path).lower()
+
+
+def plot_wireframe_surfaces(X, Y, rho_grid, p_grid, save_path=None):
+    ny, nx = rho_grid.shape
+    rstride = max(1, ny // 45)
+    cstride = max(1, nx // 45)
+    elev = 24
+    azim = -125
+
+    fig = plt.figure(figsize=(14, 5), constrained_layout=True)
 
     ax1 = fig.add_subplot(1, 2, 1, projection="3d")
     ax1.plot_wireframe(X, Y, rho_grid, rstride=rstride, cstride=cstride, linewidth=0.5)
@@ -136,7 +160,8 @@ def plot_wireframe_surfaces(X, Y, rho_grid, p_grid, save_path=None):
     ax1.set_ylabel("y")
     ax1.set_zlabel("rho")
     ax1.view_init(elev=elev, azim=azim)
-    ax1.set_box_aspect([1, 1, 0.5])
+    ax1.set_box_aspect([1.3, 1.0, 0.45])
+    ax1.margins(x=0.0, y=0.0, z=0.02)
 
     ax2 = fig.add_subplot(1, 2, 2, projection="3d")
     ax2.plot_wireframe(X, Y, p_grid, rstride=rstride, cstride=cstride, linewidth=0.5)
@@ -145,9 +170,8 @@ def plot_wireframe_surfaces(X, Y, rho_grid, p_grid, save_path=None):
     ax2.set_ylabel("y")
     ax2.set_zlabel("p")
     ax2.view_init(elev=elev, azim=azim)
-    ax2.set_box_aspect([1, 1, 0.5])
-
-    plt.tight_layout()
+    ax2.set_box_aspect([1.3, 1.0, 0.45])
+    ax2.margins(x=0.0, y=0.0, z=0.02)
 
     if save_path is not None:
         plt.savefig(save_path, dpi=300)
@@ -327,7 +351,9 @@ def plot_2d_solution_slice(
 
     coord_limits = []
 
-    for coords, fields, velocity, label in zip(xs, fields_list, velocities_list, labels):
+    plotted_items = sort_by_resolution(list(zip(xs, fields_list, velocities_list, labels)))
+
+    for index, (coords, fields, velocity, label) in enumerate(plotted_items):
         x, y = coords
         rho, p, e = fields
         u0, u1 = velocity
@@ -342,27 +368,23 @@ def plot_2d_solution_slice(
         u1_line = zero_roundoff_line(u1_line)
         coord_limits.append(infer_domain_limits(line_coord))
 
-        axes[0, 0].plot(line_coord, rho_line, label=label)
-        axes[0, 1].plot(line_coord, u0_line, label=label)
-        axes[0, 2].plot(line_coord, u1_line, label=label)
-        axes[1, 0].plot(line_coord, p_line, label=label)
-        axes[1, 1].plot(line_coord, e_line, label=label)
+        plot_profile(axes[0, 0], line_coord, rho_line, label, index=index)
+        plot_profile(axes[0, 1], line_coord, u0_line, label, index=index)
+        plot_profile(axes[0, 2], line_coord, u1_line, label, index=index)
+        plot_profile(axes[1, 0], line_coord, p_line, label, index=index)
+        plot_profile(axes[1, 1], line_coord, e_line, label, index=index)
 
-    fixed_name = "y" if axis == "x" else "x"
+    field_keys = ["rho", "u0", "u1", "p", "e"]
+    slice_xlabel = r"$x$" if axis == "x" else r"$y$"
+    plot_axes = [axes[0, 0], axes[0, 1], axes[0, 2], axes[1, 0], axes[1, 1]]
 
-    axes[0, 0].set_title(f"Density {axis}-slice at {fixed_name}={fixed_value:.6g}")
-    axes[0, 1].set_title(f"u0 {axis}-slice at {fixed_name}={fixed_value:.6g}")
-    axes[0, 2].set_title(f"u1 {axis}-slice at {fixed_name}={fixed_value:.6g}")
-    axes[1, 0].set_title(f"Pressure {axis}-slice at {fixed_name}={fixed_value:.6g}")
-    axes[1, 1].set_title(f"Specific internal energy {axis}-slice at {fixed_name}={fixed_value:.6g}")
+    for ax, field_key in zip(plot_axes, field_keys):
+        configure_profile_axis(ax, field_key, x_label=slice_xlabel)
+
     axes[1, 2].axis("off")
 
-    for ax in axes.ravel():
+    for ax in plot_axes:
         if ax.has_data():
-            ax.set_xlabel(axis_label)
-            ax.grid(True)
-            ax.legend()
-
             if coord_limits:
                 xmin = min(limit[0] for limit in coord_limits)
                 xmax = max(limit[1] for limit in coord_limits)
@@ -401,7 +423,9 @@ def plot_2d_y_deviation_slice(
 
     coord_limits = []
 
-    for coords, fields, velocity, label in zip(xs, fields_list, velocities_list, labels):
+    plotted_items = sort_by_resolution(list(zip(xs, fields_list, velocities_list, labels)))
+
+    for index, (coords, fields, velocity, label) in enumerate(plotted_items):
         x, y = coords
         rho, p, e = fields
         u0, u1 = velocity
@@ -414,25 +438,37 @@ def plot_2d_y_deviation_slice(
 
         coord_limits.append(infer_domain_limits(line_coord))
 
-        axes[0, 0].plot(line_coord, relative_deviation_from_mean(rho_line), label=label)
-        axes[0, 1].plot(line_coord, relative_deviation_from_mean(u0_line), label=label)
-        axes[0, 2].plot(line_coord, zero_roundoff_line(u1_line), label=label)
-        axes[1, 0].plot(line_coord, relative_deviation_from_mean(p_line), label=label)
-        axes[1, 1].plot(line_coord, relative_deviation_from_mean(e_line), label=label)
+        plot_profile(axes[0, 0], line_coord, relative_deviation_from_mean(rho_line), label, index=index)
+        plot_profile(axes[0, 1], line_coord, relative_deviation_from_mean(u0_line), label, index=index)
+        plot_profile(axes[0, 2], line_coord, zero_roundoff_line(u1_line), label, index=index)
+        plot_profile(axes[1, 0], line_coord, relative_deviation_from_mean(p_line), label, index=index)
+        plot_profile(axes[1, 1], line_coord, relative_deviation_from_mean(e_line), label, index=index)
 
-    axes[0, 0].set_title(f"Relative density y-deviation at x={fixed_value:.6g}")
-    axes[0, 1].set_title(f"Relative u0 y-deviation at x={fixed_value:.6g}")
-    axes[0, 2].set_title(f"u1 y-slice at x={fixed_value:.6g}")
-    axes[1, 0].set_title(f"Relative pressure y-deviation at x={fixed_value:.6g}")
-    axes[1, 1].set_title(f"Relative internal-energy y-deviation at x={fixed_value:.6g}")
+    titles = [
+        "Relative density deviation",
+        "Relative velocity deviation",
+        "Transverse velocity",
+        "Relative pressure deviation",
+        "Relative internal-energy deviation",
+    ]
+    ylabels = [
+        r"Relative density deviation",
+        r"Relative velocity deviation",
+        field_ylabel("u1"),
+        r"Relative pressure deviation",
+        r"Relative internal-energy deviation",
+    ]
+    plot_axes = [axes[0, 0], axes[0, 1], axes[0, 2], axes[1, 0], axes[1, 1]]
+
+    for ax, title_text, ylabel in zip(plot_axes, titles, ylabels):
+        configure_profile_axis(ax, None, x_label=r"$y$")
+        ax.set_title(title_text)
+        ax.set_ylabel(ylabel)
+
     axes[1, 2].axis("off")
 
-    for ax in axes.ravel():
+    for ax in plot_axes:
         if ax.has_data():
-            ax.set_xlabel("y")
-            ax.grid(True)
-            ax.legend()
-
             if coord_limits:
                 ymin = min(limit[0] for limit in coord_limits)
                 ymax = max(limit[1] for limit in coord_limits)
@@ -454,7 +490,9 @@ def plot_2d_transverse_diagnostics(xs, fields_list, velocities_list, labels, sli
     if slice_value is None:
         slice_value = choose_common_slice_value_2d(xs, "x")
 
-    for coords, fields, velocity, label in zip(xs, fields_list, velocities_list, labels):
+    plotted_items = sort_by_resolution(list(zip(xs, fields_list, velocities_list, labels)))
+
+    for index, (coords, fields, velocity, label) in enumerate(plotted_items):
         x, y = coords
         rho, p, e = fields
         u0, u1 = velocity
@@ -469,35 +507,27 @@ def plot_2d_transverse_diagnostics(xs, fields_list, velocities_list, labels, sli
         _, u0_tr = relative_transverse_range_by_x(x, y, u0)
         _, u1_abs = relative_transverse_absmax_by_x(x, y, u1, u0)
 
-        axes[0, 0].plot(x_line, rho_x, label=label)
-        axes[0, 1].plot(x_line, u0_x, label=label)
-        axes[0, 2].plot(x_line, p_x, label=label)
-        axes[0, 3].plot(x_line, e_x, label=label)
+        plot_profile(axes[0, 0], x_line, rho_x, label, index=index)
+        plot_profile(axes[0, 1], x_line, u0_x, label, index=index)
+        plot_profile(axes[0, 2], x_line, p_x, label, index=index)
+        plot_profile(axes[0, 3], x_line, e_x, label, index=index)
 
-        axes[1, 0].plot(x_tr, rho_tr, label=label)
-        axes[1, 1].plot(x_tr, u0_tr, label=label)
-        axes[1, 2].plot(x_tr, p_tr, label=label)
-        axes[1, 3].plot(x_tr, u1_abs, label=label)
+        plot_profile(axes[1, 0], x_tr, rho_tr, label, index=index)
+        plot_profile(axes[1, 1], x_tr, u0_tr, label, index=index)
+        plot_profile(axes[1, 2], x_tr, p_tr, label, index=index)
+        plot_profile(axes[1, 3], x_tr, u1_abs, label, index=index)
 
-    axes[0, 0].set_title(f"Density x-slice at y={y_value:.6g}")
-    axes[0, 1].set_title(f"u0 x-slice at y={y_value:.6g}")
-    axes[0, 2].set_title(f"Pressure x-slice at y={y_value:.6g}")
-    axes[0, 3].set_title(f"Specific internal energy x-slice at y={y_value:.6g}")
+    top_keys = ["rho", "u0", "p", "e"]
+    for ax, field_key in zip(axes[0, :], top_keys):
+        configure_profile_axis(ax, field_key, x_label=r"$x$")
 
     axes[1, 0].set_title("Relative density transverse range")
     axes[1, 1].set_title("Relative u0 transverse range")
     axes[1, 2].set_title("Relative pressure transverse range")
     axes[1, 3].set_title("max |u1| / max |u0|")
 
-    for ax in axes[0, :]:
-        ax.set_xlabel("x")
-
     for ax in axes[1, :]:
-        ax.set_xlabel("x")
-
-    for ax in axes.ravel():
-        ax.grid(True)
-        ax.legend()
+        configure_profile_axis(ax, None, x_label=r"$x$")
 
     for ax in axes[1, :]:
         ax.set_yscale("symlog", linthresh=1.0e-12)
@@ -513,7 +543,7 @@ def plot_2d_transverse_diagnostics(xs, fields_list, velocities_list, labels, sli
         plt.show()
 
 
-def plot_2d_diagnostics(xs, fields_list, labels, title="", save_path=None):
+def plot_2d_diagnostics(xs, fields_list, labels, save_path=None):
     x, y = xs[-1]
     rho, p = fields_list[-1][:2]
 
@@ -571,11 +601,7 @@ def plot_2d_diagnostics(xs, fields_list, labels, title="", save_path=None):
     ax4.grid(True)
     ax4.legend()
 
-    if title:
-        fig.suptitle(title)
-        plt.tight_layout(rect=[0, 0, 1, 0.97])
-    else:
-        plt.tight_layout()
+    plt.tight_layout()
 
     if save_path is not None:
         plt.savefig(save_path, dpi=300)
@@ -588,8 +614,84 @@ def plot_2d_diagnostics(xs, fields_list, labels, title="", save_path=None):
     plot_wireframe_surfaces(X, Y, rho_grid, p_grid, save_path=wireframe_path)
 
 
+def plot_2d_field_maps(xs, fields_list, velocities_list, labels, save_path=None):
+    x, y = xs[-1]
+    rho, p, e = fields_list[-1]
+    u0, u1 = velocities_list[-1]
+    label = labels[-1]
+
+    X, Y, rho_grid = build_grid(x, y, rho)
+    _, _, p_grid = build_grid(x, y, p)
+    _, _, e_grid = build_grid(x, y, e)
+    _, _, u0_grid = build_grid(x, y, u0)
+    _, _, u1_grid = build_grid(x, y, u1)
+
+    maps = [
+        ("rho", rho_grid),
+        ("p", p_grid),
+        ("u0", u0_grid),
+        ("u1", u1_grid),
+        ("e", e_grid),
+    ]
+
+    fig, axes = plt.subplots(2, 3, figsize=(16, 8), constrained_layout=True)
+    axes = axes.ravel()
+
+    for ax, (field_key, values) in zip(axes, maps):
+        im = ax.pcolormesh(X, Y, values, shading="auto")
+        cbar = fig.colorbar(im, ax=ax)
+        cbar.set_label(field_ylabel(field_key))
+        ax.set_title(field_title(field_key))
+        ax.set_xlabel(r"$x$")
+        ax.set_ylabel(r"$y$")
+        ax.set_aspect("equal", adjustable="box")
+
+    for ax in axes[len(maps):]:
+        ax.axis("off")
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300)
+        print(f"Saved field-map figure to {save_path}")
+        plt.close()
+    else:
+        plt.show()
+
+
+def plot_2d_schlieren(xs, fields_list, labels, save_path=None):
+    x, y = xs[-1]
+    rho = fields_list[-1][0]
+    label = labels[-1]
+
+    X, Y, rho_grid = build_grid(x, y, rho)
+    x_unique = X[0, :]
+    y_unique = Y[:, 0]
+
+    dx = float(np.mean(np.diff(x_unique))) if len(x_unique) > 1 else 1.0
+    dy = float(np.mean(np.diff(y_unique))) if len(y_unique) > 1 else 1.0
+
+    grad_y, grad_x = np.gradient(rho_grid, dy, dx)
+    grad_mag = np.sqrt(grad_x * grad_x + grad_y * grad_y)
+    scale = max(float(np.nanmax(grad_mag)), 1.0e-30)
+    schlieren = np.exp(-10.0 * grad_mag / scale)
+
+    fig, ax = plt.subplots(figsize=(10, 5), constrained_layout=True)
+    im = ax.pcolormesh(X, Y, schlieren, shading="auto", cmap="gray", vmin=0.0, vmax=1.0)
+    fig.colorbar(im, ax=ax)
+    ax.set_title(f"Schlieren-style density gradient ({label})")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_aspect("equal", adjustable="box")
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300)
+        print(f"Saved Schlieren figure to {save_path}")
+        plt.close()
+    else:
+        plt.show()
+
+
 # [9] Plot 3D diagnostics
-def plot_3d_diagnostics(xs, fields_list, labels, title="", save_path=None):
+def plot_3d_diagnostics(xs, fields_list, labels, save_path=None):
     x, y, z = xs[0]
     rho, p = fields_list[0][:2]
 
@@ -665,7 +767,12 @@ def plot_3d_diagnostics(xs, fields_list, labels, title="", save_path=None):
 
 
 # [10] Plot multiple multidimensional C++ outputs
-def plot_multiple_cpp_solutions(filenames, title="Multidimensional Euler Solution", save_path=None):
+def plot_multiple_cpp_solutions(
+    filenames,
+    title="Multidimensional Euler Solution",
+    save_path=None,
+    force_schlieren=False
+):
     coords_list = []
     fields_list = []
     velocities_list = []
@@ -688,12 +795,14 @@ def plot_multiple_cpp_solutions(filenames, title="Multidimensional Euler Solutio
 
     if dim == 2:
         xs = [(coords[0], coords[1]) for coords in coords_list]
-        plot_2d_diagnostics(xs, fields_list, labels, title=title, save_path=save_path)
+        plot_2d_diagnostics(xs, fields_list, labels, save_path=save_path)
 
         x_slice_path = (save_path.parent / f"{save_path.stem}_x_slices.png") if save_path else None
         y_slice_path = (save_path.parent / f"{save_path.stem}_y_slices.png") if save_path else None
         old_y_deviation_path = (save_path.parent / f"{save_path.stem}_y_deviation_slices.png") if save_path else None
         transverse_path = (save_path.parent / f"{save_path.stem}_transverse.png") if save_path else None
+        field_map_path = (save_path.parent / f"{save_path.stem}_field_maps.png") if save_path else None
+        schlieren_path = (save_path.parent / f"{save_path.stem}_schlieren.png") if save_path else None
         legacy_slice_path = (save_path.parent / f"{save_path.stem}_slices.png") if save_path else None
 
         plot_2d_solution_slice(
@@ -711,8 +820,8 @@ def plot_multiple_cpp_solutions(filenames, title="Multidimensional Euler Solutio
             labels,
             save_path=y_slice_path
         )
-        if old_y_deviation_path is not None and old_y_deviation_path.exists():
-            old_y_deviation_path.unlink()
+        remove_if_exists(old_y_deviation_path)
+        remove_if_exists(legacy_slice_path)
 
         plot_2d_transverse_diagnostics(
             xs,
@@ -721,21 +830,28 @@ def plot_multiple_cpp_solutions(filenames, title="Multidimensional Euler Solutio
             labels,
             save_path=transverse_path
         )
+        plot_2d_field_maps(
+            xs,
+            fields_list,
+            velocities_list,
+            labels,
+            save_path=field_map_path
+        )
 
-        if legacy_slice_path is not None:
-            plot_2d_solution_slice(
+        if should_make_schlieren(save_path, force_schlieren):
+            plot_2d_schlieren(
                 xs,
                 fields_list,
-                velocities_list,
                 labels,
-                axis="x",
-                save_path=legacy_slice_path
+                save_path=schlieren_path
             )
+        else:
+            remove_if_exists(schlieren_path)
         return
 
     if dim == 3:
         xs = [(coords[0], coords[1], coords[2]) for coords in coords_list]
-        plot_3d_diagnostics(xs, fields_list, labels, title=title, save_path=save_path)
+        plot_3d_diagnostics(xs, fields_list, labels, save_path=save_path)
         return
 
     raise ValueError(f"Unsupported dimension: {dim}")
@@ -747,12 +863,23 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 2:
         print("Usage:")
-        print("python src/graphing/plot_multid.py file.csv")
-        print("python src/graphing/plot_multid.py directory_name")
-        print("python src/graphing/plot_multid.py file1.csv file2.csv")
+        print("python src/graphing/plot_multid.py [--schlieren] file.csv")
+        print("python src/graphing/plot_multid.py [--schlieren] directory_name")
+        print("python src/graphing/plot_multid.py [--schlieren] file1.csv file2.csv")
         raise SystemExit(1)
 
-    args = sys.argv[1:]
+    force_schlieren = False
+    args = []
+
+    for arg in sys.argv[1:]:
+        if arg == "--schlieren":
+            force_schlieren = True
+        else:
+            args.append(arg)
+
+    if not args:
+        raise SystemExit("No input files or directories provided")
+
     data_root = Path("data/csv")
 
     if len(args) == 1:
@@ -772,13 +899,14 @@ if __name__ == "__main__":
             plot_multiple_cpp_solutions(
                 filenames,
                 title=output_name,
-                save_path=save_path
+                save_path=save_path,
+                force_schlieren=force_schlieren
             )
         else:
-            plot_multiple_cpp_solutions([args[0]])
+            plot_multiple_cpp_solutions(
+                [args[0]],
+                force_schlieren=force_schlieren
+            )
 
     else:
-        plot_multiple_cpp_solutions(args)
-
-
-
+        plot_multiple_cpp_solutions(args, force_schlieren=force_schlieren)
