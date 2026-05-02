@@ -52,7 +52,7 @@ struct Config {
     std::vector<Region<DIM>> regions{};
 
     // [3.1] Initial condition mode
-    std::string initial_condition = "regions"; // "regions" or "explosion"
+    std::string initial_condition = "regions"; // "regions", "explosion", or "shock_bubble"
 
     // [3.2] Explosion IC
     std::array<double, DIM> explosion_center{};
@@ -68,14 +68,35 @@ struct Config {
     double p_out = 0.0;
     int material_out = -1;
 
-    // [3.3] Interface method
+    // [3.3] Shock-bubble IC
+    int shock_axis = 0;
+    double shock_position = 0.0;
+
+    double rho_left = 0.0;
+    std::array<double, DIM> vel_left{};
+    double p_left = 0.0;
+    int material_left = -1;
+
+    double rho_right = 0.0;
+    std::array<double, DIM> vel_right{};
+    double p_right = 0.0;
+    int material_right = -1;
+
+    std::array<double, DIM> bubble_center{};
+    double bubble_radius = 0.0;
+    double rho_bubble = 0.0;
+    std::array<double, DIM> vel_bubble{};
+    double p_bubble = 0.0;
+    int material_bubble = -1;
+
+    // [3.4] Interface method
     std::string interface_method = "SM"; // SM, GFM, DIM
 
-    // [3.4] Level set (required for GFM)
+    // [3.5] Level set (required for GFM)
     bool use_level_set = false;
     int reinit_interval = 0;
 
-    // [3.5] Diffuse interface (DIM only)
+    // [3.6] Diffuse interface (DIM only)
     double interface_thickness = 0.0;
 };
 
