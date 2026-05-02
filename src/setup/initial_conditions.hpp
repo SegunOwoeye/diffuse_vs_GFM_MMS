@@ -241,6 +241,64 @@ inline void initialise_from_config(
         return;
     }
 
+    // [5.3] Shock-bubble Initialisation
+    if (cfg.initial_condition == "shock_bubble") {
+
+        if (cfg.shock_axis < 0 || cfg.shock_axis >= DIM) {
+            throw std::runtime_error("Invalid shock axis");
+        }
+
+        if (cfg.bubble_radius <= 0.0) {
+            throw std::runtime_error("Bubble radius must be positive");
+        }
+
+        for (int linear = 0; linear < total_cells; ++linear) {
+
+            idx = unflatten_raw_index<DIM>(linear, N);
+
+            const auto x = compute_cell_center<DIM>(idx, cfg.domain_min, dx);
+
+            Primitive<DIM> P{};
+            int mat_id = -1;
+
+            const bool inside_bubble = point_in_explosion_region<DIM>(
+                x,
+                cfg.bubble_center,
+                cfg.bubble_radius
+            );
+
+            if (inside_bubble) {
+                P.rho = cfg.rho_bubble;
+                P.vel = cfg.vel_bubble;
+                P.p = cfg.p_bubble;
+                mat_id = cfg.material_bubble;
+            }
+            else if (x[cfg.shock_axis] < cfg.shock_position) {
+                P.rho = cfg.rho_left;
+                P.vel = cfg.vel_left;
+                P.p = cfg.p_left;
+                mat_id = cfg.material_left;
+            }
+            else {
+                P.rho = cfg.rho_right;
+                P.vel = cfg.vel_right;
+                P.p = cfg.p_right;
+                mat_id = cfg.material_right;
+            }
+
+            if (mat_id < 0) {
+                throw std::runtime_error("Invalid material id in shock_bubble IC");
+            }
+
+            const EOSParams params = build_eos_params_from_material(cfg.materials, mat_id);
+
+            U[linear] = prim_to_cons<DIM, EOS>(P, params);
+            material_id[linear] = mat_id;
+        }
+
+        return;
+    }
+
     
     // Failure
     
