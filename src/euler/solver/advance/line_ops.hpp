@@ -47,6 +47,7 @@ inline void reconstruct_line_interfaces_dispatch(
     double dx,
     std::vector<Conserved<DIM>>& UL_face,
     std::vector<Conserved<DIM>>& UR_face,
+    const std::vector<int>* material_line = nullptr,
     double rho_floor = 1e-10,
     double p_floor = 1e-10
 )
@@ -55,7 +56,7 @@ inline void reconstruct_line_interfaces_dispatch(
         if (dir == 0) {
             reconstruct_line_interfaces<DIM, 0, EOS>(
                 U_line, cell_params, dt, dx,
-                UL_face, UR_face,
+                UL_face, UR_face, material_line,
                 rho_floor, p_floor
             );
             return;
@@ -66,7 +67,7 @@ inline void reconstruct_line_interfaces_dispatch(
         if (dir == 1) {
             reconstruct_line_interfaces<DIM, 1, EOS>(
                 U_line, cell_params, dt, dx,
-                UL_face, UR_face,
+                UL_face, UR_face, material_line,
                 rho_floor, p_floor
             );
             return;
@@ -77,7 +78,7 @@ inline void reconstruct_line_interfaces_dispatch(
         if (dir == 2) {
             reconstruct_line_interfaces<DIM, 2, EOS>(
                 U_line, cell_params, dt, dx,
-                UL_face, UR_face,
+                UL_face, UR_face, material_line,
                 rho_floor, p_floor
             );
             return;

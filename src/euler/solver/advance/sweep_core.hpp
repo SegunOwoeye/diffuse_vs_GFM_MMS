@@ -56,7 +56,8 @@ inline void advance_line(
         dt,
         ctx.dx[dir],
         UL_face,
-        UR_face
+        UR_face,
+        &mat_line
     );
 
     for (int i = 0; i < L - 1; ++i) {

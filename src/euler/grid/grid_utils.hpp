@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "src/euler/gfm/tracked_interface.hpp"
@@ -88,6 +89,9 @@ inline void assign_material_ids_from_phi(
         const int tracked_mat = tracked_interfaces[k].negative_material_id;
         std::vector<char> visited(Ntot, 0);
         accepted[k].assign(Ntot, 0);
+        std::vector<int> best_component_cells;
+        int best_overlap_count = -1;
+        int best_component_size = -1;
 
         for (int seed_id = 0; seed_id < Ntot; ++seed_id) {
             if (visited[seed_id] != 0 || phi_list[k][seed_id] >= -phi_tol) {
@@ -95,6 +99,7 @@ inline void assign_material_ids_from_phi(
             }
 
             bool overlaps_previous_component = !has_previous_material_map;
+            int overlap_count = 0;
             std::vector<int> queue;
             std::vector<int> component_cells;
 
@@ -108,6 +113,7 @@ inline void assign_material_ids_from_phi(
                 if (has_previous_material_map &&
                     previous_material_id[id] == tracked_mat) {
                     overlaps_previous_component = true;
+                    overlap_count += 1;
                 }
 
                 const std::array<int, DIM> idx =
@@ -138,9 +144,19 @@ inline void assign_material_ids_from_phi(
                 continue;
             }
 
-            for (const int id : component_cells) {
-                accepted[k][id] = 1;
+            const int component_size = static_cast<int>(component_cells.size());
+
+            if (overlap_count > best_overlap_count ||
+                (overlap_count == best_overlap_count &&
+                 component_size > best_component_size)) {
+                best_overlap_count = overlap_count;
+                best_component_size = component_size;
+                best_component_cells = std::move(component_cells);
             }
+        }
+
+        for (const int id : best_component_cells) {
+            accepted[k][id] = 1;
         }
     }
 
@@ -173,7 +189,42 @@ inline void assign_material_ids_from_phi(
         }
 
         if (near_interface && has_previous_material_map) {
-            material_id[id] = previous_material_id[id];
+            const int previous_mat = previous_material_id[id];
+            bool preserve_previous = false;
+
+            for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
+                if (previous_mat != tracked_interfaces[k].negative_material_id ||
+                    std::abs(phi_list[k][id]) > phi_tol) {
+                    continue;
+                }
+
+                const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
+
+                for (int dir = 0; dir < DIM && !preserve_previous; ++dir) {
+                    for (const int step : {-1, 1}) {
+                        std::array<int, DIM> nb_idx{};
+
+                        if (!try_offset_index<DIM>(idx, dir, step, grid, nb_idx)) {
+                            continue;
+                        }
+
+                        const int nb_id = flatten_index<DIM>(nb_idx, grid);
+
+                        if (accepted[k][nb_id] != 0) {
+                            preserve_previous = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (preserve_previous) {
+                    break;
+                }
+            }
+
+            if (preserve_previous) {
+                material_id[id] = previous_mat;
+            }
         }
     }
 }

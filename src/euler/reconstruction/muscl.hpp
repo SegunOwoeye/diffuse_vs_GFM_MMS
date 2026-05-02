@@ -146,6 +146,7 @@ inline void reconstruct_line_interfaces(
     double dx,
     std::vector<Conserved<DIM>>& UL_face,
     std::vector<Conserved<DIM>>& UR_face,
+    const std::vector<int>* material_line = nullptr,
     double rho_floor = 1e-10,
     double p_floor = 1e-10
 )
@@ -158,6 +159,10 @@ inline void reconstruct_line_interfaces(
 
     if (static_cast<int>(cell_params.size()) != N) {
         throw std::runtime_error("reconstruct_line_interfaces: cell_params size mismatch");
+    }
+
+    if (material_line != nullptr && static_cast<int>(material_line->size()) != N) {
+        throw std::runtime_error("reconstruct_line_interfaces: material_line size mismatch");
     }
 
     UL_face.assign(N - 1, Conserved<DIM>{});
@@ -180,11 +185,20 @@ inline void reconstruct_line_interfaces(
     for (int i = 1; i < N - 1; ++i) {
         Primitive<DIM> P_left_face{};
         Primitive<DIM> P_right_face{};
+        const bool left_same_material =
+            material_line == nullptr || (*material_line)[i - 1] == (*material_line)[i];
+        const bool right_same_material =
+            material_line == nullptr || (*material_line)[i + 1] == (*material_line)[i];
+
+        const Primitive<DIM>& P_stencil_left =
+            left_same_material ? P_line[i - 1] : P_line[i];
+        const Primitive<DIM>& P_stencil_right =
+            right_same_material ? P_line[i + 1] : P_line[i];
 
         reconstruct_cell_faces<DIM>(
-            P_line[i - 1],
+            P_stencil_left,
             P_line[i],
-            P_line[i + 1],
+            P_stencil_right,
             P_left_face,
             P_right_face,
             rho_floor,
@@ -233,11 +247,20 @@ inline void reconstruct_line_interfaces(
     for (int i = 1; i < N - 1; ++i) {
         Primitive<DIM> P_left_face{};
         Primitive<DIM> P_right_face{};
+        const bool left_same_material =
+            material_line == nullptr || (*material_line)[i - 1] == (*material_line)[i];
+        const bool right_same_material =
+            material_line == nullptr || (*material_line)[i + 1] == (*material_line)[i];
+
+        const Primitive<DIM>& P_stencil_left =
+            left_same_material ? P_half[i - 1] : P_half[i];
+        const Primitive<DIM>& P_stencil_right =
+            right_same_material ? P_half[i + 1] : P_half[i];
 
         reconstruct_cell_faces<DIM>(
-            P_half[i - 1],
+            P_stencil_left,
             P_half[i],
-            P_half[i + 1],
+            P_stencil_right,
             P_left_face,
             P_right_face,
             rho_floor,
