@@ -493,6 +493,3 @@ inline StepResult<DIM> advance_one_step(
 
     return {U_stage, phi_list_work, dt};
 }
-
-
-

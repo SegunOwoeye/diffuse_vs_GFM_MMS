@@ -9,7 +9,7 @@ RUN_PLOT=true
 ARCHIVE=false
 CLEAN=true
 RUN_METHODS="all"
-RUN_DIMS="1"
+RUN_DIMS="1,2"
 
 DATA_DIR="data"
 ARCHIVE_DIR="results/archive"

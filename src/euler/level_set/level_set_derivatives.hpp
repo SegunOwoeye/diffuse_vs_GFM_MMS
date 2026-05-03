@@ -33,7 +33,7 @@ inline void validate_phi_size(
     }
 }
 
-// STANDARD (INDEX-BASED)
+// Standard (INDEX-BASED)
 
 
 // [2] First-order one-sided minus derivative
@@ -245,9 +245,16 @@ inline double weno5_right_flat(
     );
 }
 
-// PUBLIC FLAT API 
+// Public Flat API 
 
-// [14] Public one-sided minus derivative (flat)
+/*
+    [14] Public one-sided minus derivative (flat)
+
+    The WENO helpers above reconstruct point values, not phi_x directly, so
+    they do not preserve the derivative of a linear signed-distance field.
+    Use the stable one-sided finite-difference path here until a true
+    derivative-WENO reconstruction is added.
+*/
 template<int DIM>
 inline double dminus_flat(
     const std::vector<double>& phi,
@@ -259,10 +266,6 @@ inline double dminus_flat(
 {
     const int stride = grid.stride[dir];
     const double dx = grid.dx[dir];
-
-    if (coord >= 2 && coord <= grid.N[dir] - 3) {
-        return weno5_left_flat(phi, id, stride, dx);
-    }
 
     if (coord >= 2) {
         return dminus_second_order_flat(phi, id, stride, dx);
@@ -284,10 +287,6 @@ inline double dplus_flat(
 {
     const int stride = grid.stride[dir];
     const double dx = grid.dx[dir];
-
-    if (coord >= 2 && coord <= grid.N[dir] - 3) {
-        return weno5_right_flat(phi, id, stride, dx);
-    }
 
     if (coord <= grid.N[dir] - 3) {
         return dplus_second_order_flat(phi, id, stride, dx);
