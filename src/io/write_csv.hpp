@@ -57,7 +57,8 @@ inline void write_csv(
     const std::array<int, DIM>& N,
     const std::array<double, DIM>& domain_min,
     const std::array<double, DIM>& domain_max,
-    const std::vector<EOSParams>& material_params
+    const std::vector<EOSParams>& material_params,
+    const std::vector<std::vector<double>>* phi_list = nullptr
 )
 {
     std::ofstream file(filename);
@@ -82,7 +83,15 @@ inline void write_csv(
         file << "u" << d << ",";
     }
 
-    file << "p,e,mat\n";
+    file << "p,e,mat";
+
+    if (phi_list != nullptr) {
+        for (int k = 0; k < static_cast<int>(phi_list->size()); ++k) {
+            file << ",phi" << k;
+        }
+    }
+
+    file << "\n";
 
     // loop over cells
     std::array<int, DIM> idx{};
@@ -122,7 +131,19 @@ inline void write_csv(
 
         file << P.p << ",";
         file << e << ",";
-        file << mat << "\n";
+        file << mat;
+
+        if (phi_list != nullptr) {
+            for (const auto& phi : *phi_list) {
+                if (static_cast<int>(phi.size()) != total_cells) {
+                    throw std::runtime_error("write_csv: phi field size mismatch");
+                }
+
+                file << "," << phi[linear];
+            }
+        }
+
+        file << "\n";
     }
 }
 

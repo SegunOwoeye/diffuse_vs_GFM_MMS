@@ -98,6 +98,15 @@ struct Config {
 
     // [3.6] Diffuse interface (DIM only)
     double interface_thickness = 0.0;
-};
 
+    // [3.7] Physical boundary conditions
+    std::array<std::string, DIM> bc_lo{};
+    std::array<std::string, DIM> bc_hi{};
+
+    Config()
+    {
+        bc_lo.fill("transmissive");
+        bc_hi.fill("transmissive");
+    }
+};
 

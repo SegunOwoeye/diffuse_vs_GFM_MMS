@@ -7,10 +7,10 @@ cores=6
 # -------------------------
 g++ -std=c++17 -O2 -fopenmp -I. -DAPP_DIM=1 src/app/multimaterial_main.cpp -o mm_main_1d || exit 1
 # [1.2] Tests
-tests=("test1" "test2" "test3" "test4" "test5")
+tests_1d=("test1" "test2" "test3" "test4" "test5")
 
 # [1.3] Run CPP Solver
-for t in "${tests[@]}"; do
+for t in "${tests_1d[@]}"; do
     echo "Running Fedwik $t 1D solver"
     OMP_NUM_THREADS=$cores OMP_SCHEDULE=dynamic ./mm_main_1d configs/DIM/MM_1D_validation/$t.txt || { echo "Solver failed"; continue; }
     
@@ -28,7 +28,7 @@ fi
 source .venv/bin/activate
 
 # [1.4.2] Run For loop
-for t in "${tests[@]}"; do
+for t in "${tests_1d[@]}"; do
     echo "Running Fedwik $t Postprocessing in 1D"
 
     case $t in
@@ -76,10 +76,10 @@ echo "All 1D Validation and Comparison tests are complete."
 #############################################################################
 g++ -std=c++17 -O2 -fopenmp -I. -DAPP_DIM=2 src/app/multimaterial_main.cpp -o mm_main_2d || exit 1
 # [1.2] Tests
-tests=("test1" "test2" "test3" "test4" "test5")
+tests_2d=("test1" "test2" "test3" "test4" "test5" "test6")
 
 # [1.3] Run CPP Solver
-for t in "${tests[@]}"; do
+for t in "${tests_2d[@]}"; do
     echo "Running Fedwik $t 2D solver"
     OMP_NUM_THREADS=$cores OMP_SCHEDULE=dynamic ./mm_main_2d configs/DIM/MM_2D_validation/$t.txt || { echo "Solver failed"; continue; }
     
@@ -97,7 +97,7 @@ fi
 source .venv/bin/activate
 
 # [1.4.2] Run For loop
-for t in "${tests[@]}"; do
+for t in "${tests_2d[@]}"; do
     echo "Running Fedwik $t Postprocessing in 2D"
 
     case $t in
@@ -106,11 +106,16 @@ for t in "${tests[@]}"; do
         test3) out="dim_FedkiwC" ;;
         test4) out="dim_FedkiwD1" ;;
         test5) out="dim_FedkiwD2" ;;
+        test6) out="dim_helium_bubble_2d" ;;
         *) echo "Unknown test: $t"; continue ;;
     esac
     
-    python src/graphing/plot_multid.py dim/MM_2D_validation/$out || { echo "Plot failed"; continue; }
-    python src/graphing/compute_l1.py dim/MM_2D_validation/$out || { echo "L1 failed"; continue; }
+    if [[ "$t" == "test6" ]]; then
+        python src/graphing/plot_multid.py --schlieren dim/MM_2D_validation/$out || { echo "Plot failed"; continue; }
+    else
+        python src/graphing/plot_multid.py dim/MM_2D_validation/$out || { echo "Plot failed"; continue; }
+        python src/graphing/compute_l1.py dim/MM_2D_validation/$out || { echo "L1 failed"; continue; }
+    fi
 
     echo "Completed Fedwik $t Postprocessing in 2D"
     echo "-------------------------"
@@ -133,5 +138,4 @@ echo "All 2D post-processing for Fedwik tests are complete."
 # chmod +x tests/DIM_validation_tests.sh
 # source .venv/bin/activate
 # ./tests/DIM_validation_tests.sh
-
 

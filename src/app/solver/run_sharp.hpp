@@ -98,12 +98,18 @@ inline void run_sharp_interface_case(
         }
     }
 
+    const auto* phi_output =
+        (cfg.interface_method == "GFM" && !ctx.phi_list.empty())
+            ? &ctx.phi_list
+            : nullptr;
+
     write_numerical_output<DIM, EOS>(
         cfg,
         N,
         U,
         ctx.material_id,
-        material_params
+        material_params,
+        phi_output
     );
 
     #if APP_DIM == 1

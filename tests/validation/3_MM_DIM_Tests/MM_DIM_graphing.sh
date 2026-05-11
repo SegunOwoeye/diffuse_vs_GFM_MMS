@@ -11,7 +11,8 @@ fi
 source .venv/bin/activate
 
 RUN_DIMS="${VALIDATION_DIMS:-all}"
-tests=("test1" "test2" "test3" "test4" "test5")
+tests_1d=("test1" "test2" "test3" "test4" "test5")
+tests_2d=("test1" "test2" "test3" "test4" "test5" "test6")
 
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -40,7 +41,7 @@ dimension_enabled() {
 # [2] 1D POSTPROCESSING
 # -------------------------
 if dimension_enabled 1; then
-    for t in "${tests[@]}"; do
+    for t in "${tests_1d[@]}"; do
         echo "[DIM 1D] Postprocessing $t"
 
         case $t in
@@ -65,7 +66,7 @@ fi
 # [3] 2D POSTPROCESSING
 # -------------------------
 if dimension_enabled 2; then
-    for t in "${tests[@]}"; do
+    for t in "${tests_2d[@]}"; do
         echo "[DIM 2D] Postprocessing $t"
 
         case $t in
@@ -74,11 +75,16 @@ if dimension_enabled 2; then
             test3) out="dim_FedkiwC" ;;
             test4) out="dim_FedkiwD1" ;;
             test5) out="dim_FedkiwD2" ;;
+            test6) out="dim_helium_bubble_2d" ;;
             *) echo "Unknown test: $t"; continue ;;
         esac
 
-        python src/graphing/plot_multid.py dim/MM_2D_validation/$out || { echo "Plot failed"; continue; }
-        python src/graphing/compute_l1.py dim/MM_2D_validation/$out || { echo "L1 failed"; continue; }
+        if [[ "$t" == "test6" ]]; then
+            python src/graphing/plot_multid.py --schlieren dim/MM_2D_validation/$out || { echo "Plot failed"; continue; }
+        else
+            python src/graphing/plot_multid.py dim/MM_2D_validation/$out || { echo "Plot failed"; continue; }
+            python src/graphing/compute_l1.py dim/MM_2D_validation/$out || { echo "L1 failed"; continue; }
+        fi
     done
 
     echo "[DIM 2D] Postprocessing complete"

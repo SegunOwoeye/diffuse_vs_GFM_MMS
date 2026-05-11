@@ -35,8 +35,13 @@ def load_solution_csv(filename):
     rho = df["rho"].to_numpy()
     p = df["p"].to_numpy()
     e = df["e"].to_numpy()
+    extra_fields = {
+        column: df[column].to_numpy()
+        for column in df.columns
+        if column.startswith("phi")
+    }
 
-    return dim, coords, velocity, rho, p, e
+    return dim, coords, velocity, rho, p, e, extra_fields
 
 
 # [2] Build structured 2D grid from scattered cell-centre data
@@ -141,7 +146,38 @@ def should_make_schlieren(save_path, force_schlieren=False):
     if save_path is None:
         return False
 
-    return "bubble_collapse" in str(save_path).lower()
+    path_text = str(save_path).lower()
+    return "bubble_collapse" in path_text or "helium_bubble" in path_text
+
+
+def should_mirror_bubble_half_domain(save_path):
+    if save_path is None:
+        return False
+
+    path_text = str(save_path).lower()
+    return "bubble_collapse" in path_text or "helium_bubble" in path_text
+
+
+def mirror_grid_across_y0(X, Y, field_grid):
+    y_unique = Y[:, 0]
+
+    if y_unique.size == 0 or float(np.nanmin(y_unique)) < 0.0:
+        return X, Y, field_grid
+
+    x_unique = X[0, :]
+    y_full = np.concatenate((-y_unique[::-1], y_unique))
+    field_full = np.vstack((field_grid[::-1, :], field_grid))
+
+    X_full, Y_full = np.meshgrid(x_unique, y_full)
+    return X_full, Y_full, field_full
+
+
+def select_highest_resolution_2d(xs, fields_list, velocities_list, labels):
+    items = list(zip(xs, fields_list, velocities_list, labels))
+    if not items:
+        raise ValueError("No 2D solution data available")
+
+    return sort_by_resolution(items)[0]
 
 
 def plot_wireframe_surfaces(X, Y, rho_grid, p_grid, save_path=None):
@@ -544,8 +580,14 @@ def plot_2d_transverse_diagnostics(xs, fields_list, velocities_list, labels, sli
 
 
 def plot_2d_diagnostics(xs, fields_list, labels, save_path=None):
-    x, y = xs[-1]
-    rho, p = fields_list[-1][:2]
+    coords, fields, _, _ = select_highest_resolution_2d(
+        xs,
+        fields_list,
+        [None] * len(xs),
+        labels
+    )
+    x, y = coords
+    rho, p = fields[:2]
 
     X, Y, rho_grid = build_grid(x, y, rho)
     _, _, p_grid = build_grid(x, y, p)
@@ -615,10 +657,15 @@ def plot_2d_diagnostics(xs, fields_list, labels, save_path=None):
 
 
 def plot_2d_field_maps(xs, fields_list, velocities_list, labels, save_path=None):
-    x, y = xs[-1]
-    rho, p, e = fields_list[-1]
-    u0, u1 = velocities_list[-1]
-    label = labels[-1]
+    coords, fields, velocity, label = select_highest_resolution_2d(
+        xs,
+        fields_list,
+        velocities_list,
+        labels
+    )
+    x, y = coords
+    rho, p, e = fields
+    u0, u1 = velocity
 
     X, Y, rho_grid = build_grid(x, y, rho)
     _, _, p_grid = build_grid(x, y, p)
@@ -657,22 +704,91 @@ def plot_2d_field_maps(xs, fields_list, velocities_list, labels, save_path=None)
         plt.show()
 
 
-def plot_2d_schlieren(xs, fields_list, labels, save_path=None):
-    x, y = xs[-1]
-    rho = fields_list[-1][0]
-    label = labels[-1]
+def plot_2d_schlieren(xs, fields_list, labels, save_path=None, extras_list=None):
+    if extras_list is None:
+        extras_list = [{} for _ in xs]
+
+    coords, fields, extras, label = sort_by_resolution(
+        list(zip(xs, fields_list, extras_list, labels))
+    )[0]
+    x, y = coords
+    rho = fields[0]
 
     X, Y, rho_grid = build_grid(x, y, rho)
+    phi_grid = None
+    if "phi0" in extras:
+        _, _, phi_grid = build_grid(x, y, extras["phi0"])
+
+    is_bubble_collapse = should_mirror_bubble_half_domain(save_path)
+
+    if is_bubble_collapse:
+        X_original = X
+        Y_original = Y
+        X, Y, rho_grid = mirror_grid_across_y0(X, Y, rho_grid)
+        if phi_grid is not None:
+            _, _, phi_grid = mirror_grid_across_y0(X_original, Y_original, phi_grid)
+
     x_unique = X[0, :]
     y_unique = Y[:, 0]
 
     dx = float(np.mean(np.diff(x_unique))) if len(x_unique) > 1 else 1.0
     dy = float(np.mean(np.diff(y_unique))) if len(y_unique) > 1 else 1.0
 
-    grad_y, grad_x = np.gradient(rho_grid, dy, dx)
+    if is_bubble_collapse:
+        # Bubble-collapse coordinates are stored in mm. The coursework
+        # mock-Schlieren variable uses |grad rho| per metre.
+        dx_grad = dx * 1.0e-3
+        dy_grad = dy * 1.0e-3
+    else:
+        dx_grad = dx
+        dy_grad = dy
+
+    grad_y, grad_x = np.gradient(rho_grid, dy_grad, dx_grad)
     grad_mag = np.sqrt(grad_x * grad_x + grad_y * grad_y)
-    scale = max(float(np.nanmax(grad_mag)), 1.0e-30)
-    schlieren = np.exp(-10.0 * grad_mag / scale)
+
+    if is_bubble_collapse:
+        rho_floor = np.maximum(rho_grid, 1.0e-12)
+        schlieren = np.exp(-20.0 * grad_mag / (1000.0 * np.sqrt(rho_floor)))
+    else:
+        scale = max(float(np.nanmax(grad_mag)), 1.0e-30)
+        schlieren = np.exp(-10.0 * grad_mag / scale)
+
+    if is_bubble_collapse:
+        # The reference helium-bubble figure reflects the top-half computation
+        # and then rotates the image 90 degrees clockwise for presentation.
+        display = np.flipud(np.rot90(schlieren, k=3))
+        phi_display = None
+        if phi_grid is not None:
+            phi_display = np.flipud(np.rot90(phi_grid, k=3))
+
+        height, width = display.shape
+        aspect = height / max(width, 1)
+
+        fig, ax = plt.subplots(figsize=(4.0, 4.0 * aspect), constrained_layout=True)
+        ax.imshow(display, cmap="gray", vmin=0.0, vmax=1.0, origin="lower", interpolation="nearest")
+        if phi_display is not None and np.nanmin(phi_display) <= 0.0 <= np.nanmax(phi_display):
+            ax.contour(
+                phi_display,
+                levels=[0.0],
+                colors="black",
+                linewidths=0.7,
+                origin="lower",
+            )
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+        for spine in ax.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(1.0)
+            spine.set_color("black")
+
+        if save_path is not None:
+            plt.savefig(save_path, dpi=300)
+            print(f"Saved Schlieren figure to {save_path}")
+            plt.close()
+        else:
+            plt.show()
+        return
 
     fig, ax = plt.subplots(figsize=(10, 5), constrained_layout=True)
     im = ax.pcolormesh(X, Y, schlieren, shading="auto", cmap="gray", vmin=0.0, vmax=1.0)
@@ -776,16 +892,18 @@ def plot_multiple_cpp_solutions(
     coords_list = []
     fields_list = []
     velocities_list = []
+    extras_list = []
     labels = []
     dims = []
 
     for fname in filenames:
-        dim, coords, velocity, rho, p, e = load_solution_csv(fname)
+        dim, coords, velocity, rho, p, e, extras = load_solution_csv(fname)
 
         dims.append(dim)
         coords_list.append(coords)
         fields_list.append((rho, p, e))
         velocities_list.append(velocity)
+        extras_list.append(extras)
         labels.append(build_label_from_filename(fname))
 
     if len(set(dims)) != 1:
@@ -843,7 +961,8 @@ def plot_multiple_cpp_solutions(
                 xs,
                 fields_list,
                 labels,
-                save_path=schlieren_path
+                save_path=schlieren_path,
+                extras_list=extras_list
             )
         else:
             remove_if_exists(schlieren_path)

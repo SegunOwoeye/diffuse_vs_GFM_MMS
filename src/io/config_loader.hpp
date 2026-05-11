@@ -136,6 +136,23 @@ inline std::array<int, DIM> parse_int_array(const std::string& s)
     return out;
 }
 
+template<int DIM>
+inline std::array<std::string, DIM> parse_string_array(const std::string& s)
+{
+    auto inner = strip_brackets(s);
+    auto tokens = split_top_level(inner, ',');
+
+    if ((int)tokens.size() != DIM) {
+        throw std::runtime_error("Wrong string array size");
+    }
+
+    std::array<std::string, DIM> out{};
+    for (int i = 0; i < DIM; ++i) {
+        out[i] = to_lower(trim(tokens[i]));
+    }
+    return out;
+}
+
 
 
 // [5] Material
@@ -213,6 +230,20 @@ inline void validate_config(const Config<DIM>& cfg)
 
     if (cfg.interface_method == "DIM" && cfg.use_level_set) {
         throw std::runtime_error("DIM should not use level set");
+    }
+
+    auto valid_bc = [](const std::string& bc) {
+        return bc == "transmissive" ||
+               bc == "zero_gradient" ||
+               bc == "outflow" ||
+               bc == "reflective" ||
+               bc == "reflection";
+    };
+
+    for (int d = 0; d < DIM; ++d) {
+        if (!valid_bc(cfg.bc_lo[d]) || !valid_bc(cfg.bc_hi[d])) {
+            throw std::runtime_error("Invalid boundary condition");
+        }
     }
 
     if (cfg.initial_condition == "regions" && cfg.regions.empty()) {
@@ -330,6 +361,8 @@ inline Config<DIM> load_config(const std::string& filename)
         else if (key == "use_level_set") cfg.use_level_set = parse_bool(value);
         else if (key == "reinit_interval") cfg.reinit_interval = std::stoi(value);
         else if (key == "interface_thickness") cfg.interface_thickness = std::stod(value);
+        else if (key == "bc_lo") cfg.bc_lo = parse_string_array<DIM>(value);
+        else if (key == "bc_hi") cfg.bc_hi = parse_string_array<DIM>(value);
 
         else {
             throw std::runtime_error("Unknown key: " + key);

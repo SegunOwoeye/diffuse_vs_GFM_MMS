@@ -72,7 +72,8 @@ inline void write_numerical_output(
     const std::array<int, DIM>& N,
     const std::vector<Conserved<DIM>>& U,
     const std::vector<int>& material_id,
-    const std::vector<EOSParams>& material_params
+    const std::vector<EOSParams>& material_params,
+    const std::vector<std::vector<double>>* phi_list = nullptr
 )
 {
     const std::string filename = build_solution_filename<DIM>(cfg, N);
@@ -89,7 +90,8 @@ inline void write_numerical_output(
         N,
         cfg.domain_min,
         cfg.domain_max,
-        material_params
+        material_params,
+        phi_list
     );
 
     std::cout << "Written: " << filename << "\n";

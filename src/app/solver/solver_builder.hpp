@@ -1,12 +1,34 @@
 #pragma once
 
 #include <array>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "src/app/levelset/initial_levelset.hpp"
 #include "src/euler/solver/solver_context.hpp"
 #include "src/euler/eos_params.hpp"
 #include "src/io/config.hpp"
+
+
+// [0] Translate config boundary-condition names to solver enum values
+inline BoundaryConditionType boundary_condition_from_config(
+    const std::string& name
+)
+{
+    if (name == "transmissive" ||
+        name == "zero_gradient" ||
+        name == "outflow") {
+        return BoundaryConditionType::transmissive;
+    }
+
+    if (name == "reflective" ||
+        name == "reflection") {
+        return BoundaryConditionType::reflective;
+    }
+
+    throw std::runtime_error("Unknown boundary condition: " + name);
+}
 
 
 // [0] Build solver context from config and initialised state data
@@ -34,6 +56,11 @@ inline SolverContext<DIM> build_solver_context(
     ctx.material_params = material_params;
 
     ctx.initialise_level_set_grid();
+
+    for (int d = 0; d < DIM; ++d) {
+        ctx.bc_lo[d] = boundary_condition_from_config(cfg.bc_lo[d]);
+        ctx.bc_hi[d] = boundary_condition_from_config(cfg.bc_hi[d]);
+    }
 
     ctx.phi_list = ls_data.phi_list;
     ctx.tracked_interfaces = ls_data.tracked_interfaces;

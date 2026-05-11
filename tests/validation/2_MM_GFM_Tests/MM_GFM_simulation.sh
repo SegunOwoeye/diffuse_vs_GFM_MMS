@@ -2,7 +2,8 @@
 
 cores=6
 RUN_DIMS="${VALIDATION_DIMS:-all}"
-tests=("test1" "test2" "test3" "test4" "test5")
+tests_1d=("test1" "test2" "test3" "test4" "test5")
+tests_2d=("test1" "test2" "test3" "test4" "test5" "test6")
 
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -34,7 +35,7 @@ if dimension_enabled 1; then
     echo "[GFM 1D] Compiling..."
     g++ -std=c++17 -O2 -fopenmp -I. -DAPP_DIM=1 src/app/multimaterial_main.cpp -o mm_main_1d
 
-    for t in "${tests[@]}"; do
+    for t in "${tests_1d[@]}"; do
         echo "[GFM 1D] Running $t"
         OMP_NUM_THREADS=$cores OMP_SCHEDULE=dynamic \
         ./mm_main_1d configs/GFM/MM_1D_validation/$t.txt || { echo "Solver failed"; continue; }
@@ -52,7 +53,7 @@ if dimension_enabled 2; then
     echo "[GFM 2D] Compiling..."
     g++ -std=c++17 -O2 -fopenmp -I. -DAPP_DIM=2 src/app/multimaterial_main.cpp -o mm_main_2d
 
-    for t in "${tests[@]}"; do
+    for t in "${tests_2d[@]}"; do
         echo "[GFM 2D] Running $t"
         OMP_NUM_THREADS=$cores OMP_SCHEDULE=dynamic \
         ./mm_main_2d configs/GFM/MM_2D_validation/$t.txt || { echo "Solver failed"; continue; }
