@@ -1,8 +1,18 @@
 #!/bin/bash
 
 cores=6
+CONSERVATION_TRACKING="${CONSERVATION_TRACKING:-0}"
+CONSERVATION_INTERVAL="${CONSERVATION_INTERVAL:-1}"
 tests_1d=("test1" "test2" "test3" "test4" "test5")
 tests_2d=("test1" "test2" "test3" "test4" "test5" "test6")
+
+if [ "$CONSERVATION_TRACKING" = "1" ]; then
+    export SOLVER_CONSERVATION=1
+    export SOLVER_CONSERVATION_INTERVAL="$CONSERVATION_INTERVAL"
+else
+    unset SOLVER_CONSERVATION
+    unset SOLVER_CONSERVATION_INTERVAL
+fi
 
 # -------------------------
 # [1.1] Compile in 1D - Fedwik 1999 Tests A-D

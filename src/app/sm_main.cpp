@@ -3,8 +3,10 @@
 #include <string>
 #include <filesystem>
 #include <chrono>
+#include <optional>
 
 #include "src/app/dimension.hpp"
+#include "src/app/io/conservation_report.hpp"
 #include "src/app/io/runtime_report.hpp"
 #include "src/io/config.hpp"
 #include "src/io/config_loader.hpp"
@@ -134,6 +136,24 @@ int main(int argc, char** argv)
             double time = 0.0;
             int step = 0;
             const auto wall_start = std::chrono::steady_clock::now();
+            const bool track_conservation =
+                app_io::conservation_tracking_enabled();
+            const int conservation_interval =
+                app_io::conservation_tracking_interval();
+            std::optional<app_io::ConservationReport<DIM_>> conservation_report;
+
+            if (track_conservation) {
+                const auto initial_totals =
+                    app_io::compute_sharp_conservation_totals<DIM_>(
+                        U,
+                        ctx.material_id,
+                        ctx.dx,
+                        static_cast<int>(ctx.material_params.size())
+                    );
+
+                conservation_report.emplace(cfg, N, initial_totals);
+                conservation_report->write(step, time, initial_totals);
+            }
 
             while (time < cfg.tfinal - 1e-14) {
 
@@ -151,6 +171,22 @@ int main(int argc, char** argv)
 
                 if (result.dt <= 0.0) {
                     throw std::runtime_error("Non-positive timestep");
+                }
+
+                if (conservation_report.has_value() &&
+                    (step % conservation_interval == 0 ||
+                     time >= cfg.tfinal - 1e-14))
+                {
+                    conservation_report->write(
+                        step,
+                        time,
+                        app_io::compute_sharp_conservation_totals<DIM_>(
+                            U,
+                            ctx.material_id,
+                            ctx.dx,
+                            static_cast<int>(ctx.material_params.size())
+                        )
+                    );
                 }
             }
 

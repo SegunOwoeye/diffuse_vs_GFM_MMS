@@ -10,6 +10,8 @@ ARCHIVE=false
 CLEAN=true
 RUN_METHODS="all"
 RUN_DIMS="1,2"
+RUN_CONSERVATION=false
+CONSERVATION_INTERVAL=1
 
 DATA_DIR="data"
 ARCHIVE_DIR="results/archive"
@@ -27,12 +29,16 @@ Options:
   --methods VALUE       Alias for --method
   --dims VALUE          all, 1, 2, or 1,2 for GFM/DIM (default: all)
   --dim VALUE           Alias for --dims
+  --conservation        Write conservation diagnostics during simulations
+  --conservation-interval VALUE
+                        Write conservation diagnostics every VALUE timesteps
   -h, --help            Show this help
 
 Examples:
   $0 --method gfm --dims 1
   $0 --method dim --dims 2
   $0 --method both --dims 1,2
+  $0 --method both --dims 1 --conservation
 EOF
 }
 
@@ -76,6 +82,9 @@ while [[ "$#" -gt 0 ]]; do
         --method=*|--methods=*) RUN_METHODS="${1#*=}" ;;
         --dims|--dim) shift; RUN_DIMS="$1" ;;
         --dims=*|--dim=*) RUN_DIMS="${1#*=}" ;;
+        --conservation) RUN_CONSERVATION=true ;;
+        --conservation-interval) shift; CONSERVATION_INTERVAL="$1" ;;
+        --conservation-interval=*) CONSERVATION_INTERVAL="${1#*=}" ;;
         -h|--help) usage; exit 0 ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
@@ -110,6 +119,15 @@ if [ "$RUN_SIM" = true ]; then
     echo "[INFO] Running simulations..."
     echo "[INFO] Method selection: $RUN_METHODS"
     echo "[INFO] GFM/DIM dimensions: $RUN_DIMS"
+    echo "[INFO] Conservation diagnostics: $RUN_CONSERVATION"
+
+    if [ "$RUN_CONSERVATION" = true ]; then
+        export SOLVER_CONSERVATION=1
+        export SOLVER_CONSERVATION_INTERVAL="$CONSERVATION_INTERVAL"
+    else
+        unset SOLVER_CONSERVATION
+        unset SOLVER_CONSERVATION_INTERVAL
+    fi
 
     # [4.1] Compile Files
     chmod +x tests/validation/1_SM_Euler_Tests/SM_simulation.sh

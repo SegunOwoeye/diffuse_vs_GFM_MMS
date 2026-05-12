@@ -1,6 +1,16 @@
 #!/bin/bash
 
 cores=6
+CONSERVATION_TRACKING="${CONSERVATION_TRACKING:-0}"
+CONSERVATION_INTERVAL="${CONSERVATION_INTERVAL:-1}"
+
+if [ "$CONSERVATION_TRACKING" = "1" ]; then
+    export SOLVER_CONSERVATION=1
+    export SOLVER_CONSERVATION_INTERVAL="$CONSERVATION_INTERVAL"
+else
+    unset SOLVER_CONSERVATION
+    unset SOLVER_CONSERVATION_INTERVAL
+fi
 
 # -------------------------
 # [1.1] Compile in 1D - Fedwik 1999 Tests A-D
@@ -138,4 +148,3 @@ echo "All 2D post-processing for Fedwik tests are complete."
 # chmod +x tests/DIM_validation_tests.sh
 # source .venv/bin/activate
 # ./tests/DIM_validation_tests.sh
-

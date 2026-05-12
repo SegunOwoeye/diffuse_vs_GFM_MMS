@@ -2,9 +2,11 @@
 
 #include <array>
 #include <chrono>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
+#include "src/app/io/conservation_report.hpp"
 #include "src/app/io/dim_output_utils.hpp"
 #include "src/app/io/runtime_report.hpp"
 #include "src/dim/eos_params.hpp"
@@ -31,6 +33,21 @@ inline void run_dim_case(
     double time = 0.0;
     int step = 0;
     const auto wall_start = std::chrono::steady_clock::now();
+    const bool track_conservation = app_io::conservation_tracking_enabled();
+    const int conservation_interval = app_io::conservation_tracking_interval();
+    std::optional<app_io::ConservationReport<DIM>> conservation_report;
+
+    if (track_conservation) {
+        const auto initial_totals =
+            app_io::compute_dim_conservation_totals<DIM>(
+                U,
+                dx,
+                material_params.nmat()
+            );
+
+        conservation_report.emplace(cfg, N, initial_totals);
+        conservation_report->write(step, time, initial_totals);
+    }
 
     while (time < cfg.tfinal - 1e-14) {
         const dim::StepResult<DIM> result = dim::advance_one_step<DIM>(
@@ -49,6 +66,21 @@ inline void run_dim_case(
         U = result.U_new;
         time += result.dt;
         ++step;
+
+        if (conservation_report.has_value() &&
+            (step % conservation_interval == 0 ||
+             time >= cfg.tfinal - 1e-14))
+        {
+            conservation_report->write(
+                step,
+                time,
+                app_io::compute_dim_conservation_totals<DIM>(
+                    U,
+                    dx,
+                    material_params.nmat()
+                )
+            );
+        }
     }
 
     const auto wall_end = std::chrono::steady_clock::now();
