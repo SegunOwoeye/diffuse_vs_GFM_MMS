@@ -35,7 +35,7 @@ bc_hi = [transmissive, reflective]
 # ========================
 interface_method = GFM
 use_level_set = true
-reinit_interval = 0
+reinit_interval = 10
 
 # ========================
 # Materials
