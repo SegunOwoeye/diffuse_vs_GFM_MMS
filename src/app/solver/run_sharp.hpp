@@ -1,10 +1,11 @@
 #pragma once
 
 #include <array>
-#include <iostream>
+#include <chrono>
 #include <stdexcept>
 #include <vector>
 
+#include "src/app/io/runtime_report.hpp"
 #include "src/setup/initial_conditions.hpp"
 #include "src/euler/solver/advance_step.hpp"
 #include "src/euler/solver/solver_context.hpp"
@@ -65,6 +66,7 @@ inline void run_sharp_interface_case(
 
     double time = 0.0;
     int step = 0;
+    const auto wall_start = std::chrono::steady_clock::now();
 
     while (time < cfg.tfinal - 1e-14) {
         ctx.dt_max = cfg.tfinal - time;
@@ -90,13 +92,11 @@ inline void run_sharp_interface_case(
 
         time += result.dt;
         ++step;
-
-        if (step % 25 == 0 || time >= cfg.tfinal - 1e-14) {
-            std::cout << "step=" << step
-                      << " time=" << time
-                      << " dt=" << result.dt << "\n";
-        }
     }
+
+    const auto wall_end = std::chrono::steady_clock::now();
+    const double wall_seconds =
+        std::chrono::duration<double>(wall_end - wall_start).count();
 
     const auto* phi_output =
         (cfg.interface_method == "GFM" && !ctx.phi_list.empty())
@@ -111,6 +111,8 @@ inline void run_sharp_interface_case(
         material_params,
         phi_output
     );
+
+    app_io::write_runtime_report<DIM>(cfg, N, step, time, wall_seconds);
 
     #if APP_DIM == 1
     if constexpr (DIM == 1) {

@@ -2,8 +2,10 @@
 #include <vector>
 #include <string>
 #include <filesystem>
+#include <chrono>
 
 #include "src/app/dimension.hpp"
+#include "src/app/io/runtime_report.hpp"
 #include "src/io/config.hpp"
 #include "src/io/config_loader.hpp"
 #include "src/setup/initial_conditions.hpp"
@@ -131,6 +133,7 @@ int main(int argc, char** argv)
             // [3.3] Time loop
             double time = 0.0;
             int step = 0;
+            const auto wall_start = std::chrono::steady_clock::now();
 
             while (time < cfg.tfinal - 1e-14) {
 
@@ -149,13 +152,11 @@ int main(int argc, char** argv)
                 if (result.dt <= 0.0) {
                     throw std::runtime_error("Non-positive timestep");
                 }
-
-                if (step % 25 == 0 || time >= cfg.tfinal - 1e-14) {
-                    std::cout << "step=" << step
-                            << " time=" << time
-                            << " dt=" << result.dt << "\n";
-                }
             }
+
+            const auto wall_end = std::chrono::steady_clock::now();
+            const double wall_seconds =
+                std::chrono::duration<double>(wall_end - wall_start).count();
 
             
             // [3.4] Write numerical
@@ -187,6 +188,8 @@ int main(int argc, char** argv)
             );
 
             std::cout << "Written: " << filename << "\n";
+
+            app_io::write_runtime_report<DIM_>(cfg, N, step, time, wall_seconds);
 
             
             #if APP_DIM == 1 // Loads this codeonly for 1D simulations
