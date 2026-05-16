@@ -8,7 +8,7 @@
 #include "src/euler/eos_params.hpp"
 #include "src/math/numerical_safety.hpp"
 
-// Completetly add in numerical saftey
+// Mixed-component Riemann solver used by the rGFM.
 
 // [0] Mixed Riemann Solver Result
 struct MCRSResult1D {
@@ -48,7 +48,6 @@ public:
         pL_S = require_positive(PL_S.p, "MCRS: pL invalid", tol_S);
         pR_S = require_positive(PR_S.p, "MCRS: pR invalid", tol_S);
 
-        // sound speeds (ideal gas assumption)
         cL_S = compute_c(rhoL_S, pL_S, paramsL_S);
         cR_S = compute_c(rhoR_S, pR_S, paramsR_S);
     }
@@ -65,11 +64,8 @@ public:
         const double rho_bar = 0.5 * (rhoL_S + rhoR_S);
         const double a_bar = 0.5 * (cL_S + cR_S);
 
-        double p_star = clamp_min(
-            0.5 * (pL_S + pR_S)
-            - 0.5 * (uR_S - uL_S) * rho_bar * a_bar,
-            p_floor
-        );
+        double p_star = clamp_min(0.5 * (pL_S + pR_S)
+            - 0.5 * (uR_S - uL_S) * rho_bar * a_bar, p_floor);
 
         // [1.2.2] Newton solve
         bool converged = false;
@@ -81,7 +77,7 @@ public:
             const double dFL = dfL(p_star);
             const double dFR = dfR(p_star);
 
-            const double F  = FL + FR + (uR_S - uL_S);
+            const double F  = FL + FR + (uR_S- uL_S);
             const double dF = dFL + dFR;
 
             if (std::abs(F) < tol_S) {
@@ -91,10 +87,9 @@ public:
 
             const double step = safe_div(F, dF, tol_S);
             const double p_new = p_star - step;
-
             const double p_safe = clamp_min(p_new, p_floor);
 
-            const double rel = std::abs(p_safe - p_star) / std::max(1.0, std::abs(p_star));
+            const double rel = std::abs(p_safe -p_star) / std::max(1.0, std::abs(p_star));
 
             p_star = p_safe;
 
@@ -141,28 +136,36 @@ private:
     double cL_S, cR_S;
 
 
-    // sound speed 
+    inline double shifted_pressure(double p, const EOSParams& params) const
+    {
+        return require_positive(
+            p + params.p_inf,
+            "MCRS: invalid shifted pressure",
+            tol_S
+        );
+    }
+
+
     inline double compute_c(double rho, double p, const EOSParams& params) const
     {
-        const double val = params.gamma * safe_div(p, rho, tol_S);
+        const double val = params.gamma * safe_div(shifted_pressure(p, params), rho, tol_S);
         return require_positive(std::sqrt(val), "MCRS: sound speed invalid", tol_S);
     }
 
 
-    // vacuum check 
+    // vacuum check
     inline void check_vacuum() const
     {
-        const double crit =
-            (2.0 * cL_S / (paramsL_S.gamma - 1.0))
-          + (2.0 * cR_S / (paramsR_S.gamma - 1.0));
+        const double critical = (2.0 * cL_S / (paramsL_S.gamma - 1.0))
+            + (2.0 * cR_S / (paramsR_S.gamma - 1.0));
 
-        if ((uR_S - uL_S) >= crit) {
+        if ((uR_S - uL_S) >= critical) {
             throw std::runtime_error("MCRS: vacuum state detected");
         }
     }
 
 
-    // wave functions 
+    // wave functions
     inline double fL(double p_star) const
     {
         const double p = clamp_min(p_star, tol_S);
@@ -170,16 +173,21 @@ private:
 
         if (p > pL_S) {
             const double A = 2.0 / ((g + 1.0) * rhoL_S);
-            const double B = ((g - 1.0) / (g + 1.0)) * pL_S;
+            const double B = ((g - 1.0) / (g + 1.0)) * pL_S
+                + (2.0 * g / (g + 1.0)) * paramsL_S.p_inf;
 
             const double denom = clamp_min(p + B, tol_S);
             return (p - pL_S) * std::sqrt(safe_div(A, denom, tol_S));
         }
 
-        const double ratio = safe_div(p, pL_S, tol_S);
+        const double ratio = safe_div(
+            shifted_pressure(p, paramsL_S),
+            shifted_pressure(pL_S, paramsL_S),
+            tol_S
+        );
 
-        return (2.0 * cL_S) / (g - 1.0)
-            * (std::pow(ratio, (g - 1.0) / (2.0 * g)) - 1.0);
+        return (2.0*cL_S) / (g- 1.0)
+            * (std::pow(ratio, (g -1.0)/ (2.0 * g)) - 1.0);
     }
 
 
@@ -190,20 +198,24 @@ private:
 
         if (p > pR_S) {
             const double A = 2.0 / ((g + 1.0) * rhoR_S);
-            const double B = ((g - 1.0) / (g + 1.0)) * pR_S;
+            const double B =((g - 1.0) / (g + 1.0)) * pR_S
+              + (2.0 * g / (g + 1.0)) * paramsR_S.p_inf;
 
             const double denom = clamp_min(p + B, tol_S);
             return (p - pR_S) * std::sqrt(safe_div(A, denom, tol_S));
         }
 
-        const double ratio = safe_div(p, pR_S, tol_S);
+        const double ratio = safe_div(
+            shifted_pressure(p, paramsR_S),
+            shifted_pressure(pR_S, paramsR_S),
+            tol_S
+        );
 
-        return (2.0 * cR_S) / (g - 1.0)
-            * (std::pow(ratio, (g - 1.0) / (2.0 * g)) - 1.0);
+        return (2.0 * cR_S) / (g - 1.0)* (std::pow(ratio, (g - 1.0) / (2.0 * g)) - 1.0);
     }
 
 
-    // derivatives 
+    // derivatives
     inline double dfL(double p_star) const
     {
         const double p = clamp_min(p_star, tol_S);
@@ -211,7 +223,8 @@ private:
 
         if (p > pL_S) {
             const double A = 2.0 / ((g + 1.0) * rhoL_S);
-            const double B = ((g - 1.0) / (g + 1.0)) * pL_S;
+            const double B = ((g - 1.0) / (g + 1.0)) * pL_S
+              + (2.0 * g / (g + 1.0)) * paramsL_S.p_inf;
 
             const double denom = clamp_min(p + B, tol_S);
             const double sqrt_term = std::sqrt(safe_div(A, denom, tol_S));
@@ -219,7 +232,11 @@ private:
             return sqrt_term * (1.0 - 0.5 * safe_div(p - pL_S, denom, tol_S));
         }
 
-        const double ratio = safe_div(p, pL_S, tol_S);
+        const double ratio = safe_div(
+            shifted_pressure(p, paramsL_S),
+            shifted_pressure(pL_S, paramsL_S),
+            tol_S
+        );
 
         return safe_div(1.0, rhoL_S * cL_S, tol_S)
             * std::pow(ratio, -(g + 1.0) / (2.0 * g));
@@ -233,7 +250,8 @@ private:
 
         if (p > pR_S) {
             const double A = 2.0 / ((g + 1.0) * rhoR_S);
-            const double B = ((g - 1.0) / (g + 1.0)) * pR_S;
+            const double B = ((g - 1.0) / (g + 1.0)) * pR_S
+              + (2.0 * g / (g + 1.0)) * paramsR_S.p_inf;
 
             const double denom = clamp_min(p + B, tol_S);
             const double sqrt_term = std::sqrt(safe_div(A, denom, tol_S));
@@ -241,21 +259,29 @@ private:
             return sqrt_term * (1.0 - 0.5 * safe_div(p - pR_S, denom, tol_S));
         }
 
-        const double ratio = safe_div(p, pR_S, tol_S);
+        const double ratio = safe_div(
+            shifted_pressure(p, paramsR_S),
+            shifted_pressure(pR_S, paramsR_S),
+            tol_S
+        );
 
         return safe_div(1.0, rhoR_S * cR_S, tol_S)
             * std::pow(ratio, -(g + 1.0) / (2.0 * g));
     }
 
 
-    // densities 
+    // densities
     inline double rho_star_L(double p_star) const
     {
         const double p = clamp_min(p_star, tol_S);
         const double g = paramsL_S.gamma;
 
         if (p > pL_S) {
-            const double r = safe_div(p, pL_S, tol_S);
+            const double r = safe_div(
+                shifted_pressure(p, paramsL_S),
+                shifted_pressure(pL_S, paramsL_S),
+                tol_S
+            );
 
             const double num = r + (g - 1.0) / (g + 1.0);
             const double den = ((g - 1.0) / (g + 1.0)) * r + 1.0;
@@ -263,7 +289,14 @@ private:
             return rhoL_S * safe_div(num, den, tol_S);
         }
 
-        return rhoL_S * std::pow(safe_div(p, pL_S, tol_S), 1.0 / g);
+        return rhoL_S * std::pow(
+            safe_div(
+                shifted_pressure(p, paramsL_S),
+                shifted_pressure(pL_S, paramsL_S),
+                tol_S
+            ),
+            1.0 / g
+        );
     }
 
 
@@ -273,7 +306,11 @@ private:
         const double g = paramsR_S.gamma;
 
         if (p > pR_S) {
-            const double r = safe_div(p, pR_S, tol_S);
+            const double r = safe_div(
+                shifted_pressure(p, paramsR_S),
+                shifted_pressure(pR_S, paramsR_S),
+                tol_S
+            );
 
             const double num = r + (g - 1.0) / (g + 1.0);
             const double den = ((g - 1.0) / (g + 1.0)) * r + 1.0;
@@ -281,7 +318,14 @@ private:
             return rhoR_S * safe_div(num, den, tol_S);
         }
 
-        return rhoR_S * std::pow(safe_div(p, pR_S, tol_S), 1.0 / g);
+        return rhoR_S * std::pow(
+            safe_div(
+                shifted_pressure(p, paramsR_S),
+                shifted_pressure(pR_S, paramsR_S),
+                tol_S
+            ),
+            1.0 / g
+        );
     }
 };
 

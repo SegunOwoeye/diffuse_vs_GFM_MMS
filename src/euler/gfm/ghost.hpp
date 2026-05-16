@@ -14,12 +14,21 @@
 #include "src/math/vector_ops.hpp"
 
 
+template<int DIM>
+struct RGFMInterfaceStates {
+    Conserved<DIM> left{};
+    Conserved<DIM> right{};
+    double p_star = 0.0;
+    double un_star = 0.0;
+};
+
+
 /*
-[0] Ghost Fluid Method ghost-state construction using the interface normal.
+[0] rGFM interface-state construction using the interface normal.
 
     Returns:
-        first -> ghost state to be used on the RIGHT side of the LEFT-material solve
-        second -> ghost state to be used on the LEFT side of the RIGHT-material solve
+        left-> state used to redefine the real left node and left-material ghosts
+        right -> state used to redefine the real right node and right-material ghosts
 
     Shared interface conditions:
         [0.1] pressure = p*
@@ -27,10 +36,10 @@
 
     Side-specific quantities preserved:
         [0.3] tangential velocity
-        [0.4] density branch from that side's thermodynamic relation
+        [0.4] density branch from the mixed-material Riemann solve
 */
 template<int DIM, typename EOSL, typename EOSR>
-inline std::pair<Conserved<DIM>, Conserved<DIM>> ghost_states_normal(
+inline RGFMInterfaceStates<DIM> rgfm_interface_states_normal(
     const Conserved<DIM>& UL,
     const Conserved<DIM>& UR,
     const std::array<double, DIM>& normal,
@@ -42,11 +51,11 @@ inline std::pair<Conserved<DIM>, Conserved<DIM>> ghost_states_normal(
 {
     // [0.1] Validate EOS params
     if (paramsL.gamma <= 1.0) {
-        throw std::runtime_error("ghost_states_normal: left gamma must be > 1");
+        throw std::runtime_error("rgfm_interface_states_normal: left gamma must be > 1");
     }
 
     if (paramsR.gamma <= 1.0) {
-        throw std::runtime_error("ghost_states_normal: right gamma must be > 1");
+        throw std::runtime_error("rgfm_interface_states_normal: right gamma must be > 1");
     }
 
     // [0.2] Convert real states to primitive form
@@ -54,26 +63,26 @@ inline std::pair<Conserved<DIM>, Conserved<DIM>> ghost_states_normal(
     const Primitive<DIM> PR = cons_to_prim<DIM, EOSR>(UR, paramsR);
 
     if (PL.rho <= 0.0 || !std::isfinite(PL.rho)) {
-        throw std::runtime_error("ghost_states_normal: invalid left density");
+        throw std::runtime_error("rgfm_interface_states_normal: invalid left density");
     }
 
     if (PL.p <= 0.0 || !std::isfinite(PL.p)) {
-        throw std::runtime_error("ghost_states_normal: invalid left pressure");
+        throw std::runtime_error("rgfm_interface_states_normal: invalid left pressure");
     }
 
     if (PR.rho <= 0.0 || !std::isfinite(PR.rho)) {
-        throw std::runtime_error("ghost_states_normal: invalid right density");
+        throw std::runtime_error("rgfm_interface_states_normal: invalid right density");
     }
 
     if (PR.p <= 0.0 || !std::isfinite(PR.p)) {
-        throw std::runtime_error("ghost_states_normal: invalid right pressure");
+        throw std::runtime_error("rgfm_interface_states_normal: invalid right pressure");
     }
 
     // [0.3] Validate and normalise interface normal
     const double normal_mag2 = dot<DIM>(normal, normal);
 
     if (normal_mag2 < tol * tol) {
-        throw std::runtime_error("ghost_states_normal: interface normal too small");
+        throw std::runtime_error("rgfm_interface_states_normal: interface normal too small");
     }
 
     const std::array<double, DIM> n = normalize<DIM>(normal, tol);
@@ -109,49 +118,72 @@ inline std::pair<Conserved<DIM>, Conserved<DIM>> ghost_states_normal(
 
     const MCRSResult1D result = solver.solve();
 
-    const double p_star = require_positive(result.p_star, "ghost_states_normal: p_star", tol);
-    const double un_star = require_finite(result.u_star, "ghost_states_normal: u_star");
+    const double p_star = require_positive(result.p_star, "rgfm_interface_states_normal: p_star", tol);
+    const double un_star = require_finite(result.u_star, "rgfm_interface_states_normal: u_star");
 
     // [0.7] Shared normal velocity at interface
     const std::array<double, DIM> u_star_n = scale<DIM>(un_star, n);
 
     /*
-    [0.8] ghost states
-    
-        ghost_for_left:
-            used as the right state in a left-material solve
-            preserves LEFT tangential structure and LEFT density branch
-    
-        ghost_for_right:
-            used as the left state in a right-material solve
-            preserves RIGHT tangential structure and right density branch
+    [0.8] Real-GFM states
+
+        The real-GFM correction uses the Riemann densities rho_IL/rho_IR
+        directly when redefining both the real interface-adjacent nodes and
+        ghost nodes.
     */
 
-    // [0.8] True ghost states
-    Primitive<DIM> ghost_for_left{};
-    Primitive<DIM> ghost_for_right{};
+    Primitive<DIM> state_left{};
+    Primitive<DIM> state_right{};
 
-    // [0.8.1] Compute entropy invariants
-    const double KL = EOSL::entropy_invariant(PL.rho, PL.p, paramsL);
-    const double KR = EOSR::entropy_invariant(PR.rho, PR.p, paramsR);
+    const double rhoL_star = require_positive(
+        result.rhoL_star,
+        "rgfm_interface_states_normal: rhoL_star",
+        tol
+    );
 
-    // [0.8.2] Recover densities from p*
-    const double rhoL_star = EOSL::density_from_p_invariant(p_star, KL, paramsL);
-    const double rhoR_star = EOSR::density_from_p_invariant(p_star, KR, paramsR);
+    const double rhoR_star = require_positive(
+        result.rhoR_star,
+        "rgfm_interface_states_normal: rhoR_star",
+        tol
+    );
 
-    // [0.8.3] Fill ghost states
-    ghost_for_left.rho = rhoL_star;
-    ghost_for_left.vel = add<DIM>(uL_t, u_star_n);
-    ghost_for_left.p = p_star;
+    state_left.rho = rhoL_star;
+    state_left.vel = add<DIM>(uL_t, u_star_n);
+    state_left.p = p_star;
 
-    ghost_for_right.rho = rhoR_star;
-    ghost_for_right.vel = add<DIM>(uR_t, u_star_n);
-    ghost_for_right.p = p_star;
+    state_right.rho = rhoR_star;
+    state_right.vel = add<DIM>(uR_t, u_star_n);
+    state_right.p = p_star;
 
-    const Conserved<DIM> UG_left = prim_to_cons<DIM, EOSL>(ghost_for_left, paramsL);
-    const Conserved<DIM> UG_right = prim_to_cons<DIM, EOSR>(ghost_for_right, paramsR);
+    const Conserved<DIM> U_left = prim_to_cons<DIM, EOSL>(state_left, paramsL);
+    const Conserved<DIM> U_right = prim_to_cons<DIM, EOSR>(state_right, paramsR);
 
-    return {UG_left, UG_right};
+    return {U_left, U_right, p_star, un_star};
+}
+
+
+template<int DIM, typename EOSL, typename EOSR>
+inline std::pair<Conserved<DIM>, Conserved<DIM>> ghost_states_normal(
+    const Conserved<DIM>& UL,
+    const Conserved<DIM>& UR,
+    const std::array<double, DIM>& normal,
+    const EOSParams& paramsL,
+    const EOSParams& paramsR,
+    double tol = 1e-8,
+    int max_iter = 50
+)
+{
+    const auto states = rgfm_interface_states_normal<DIM, EOSL, EOSR>(
+        UL,
+        UR,
+        normal,
+        paramsL,
+        paramsR,
+        tol,
+        max_iter
+    );
+
+    return {states.left, states.right};
 }
 
 
@@ -183,6 +215,5 @@ inline std::pair<Conserved<DIM>, Conserved<DIM>> ghost_states_pair(
         max_iter
     );
 }
-
 
 

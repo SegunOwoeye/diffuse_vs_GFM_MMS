@@ -26,6 +26,7 @@
 #include "src/euler/solver/advance/sweep_core.hpp"
 #include "src/euler/solver/advance/boundary.hpp"
 #include "src/euler/solver/advance/material_transfer.hpp"
+#include "src/euler/gfm/rgfm.hpp"
 
 
 
@@ -188,9 +189,10 @@ inline void rebuild_tracked_level_sets_from_material_map_1d(
 }
 
 
-// [1.3] Detect and preserve exactly planar level sets in multidimensional
-// validation runs. A phi field that only varies along one coordinate should not
-// acquire row-to-row interface jitter from transverse boundary stencils.
+/* 
+    [1.3] Detect and preserve planar level sets in multidimensional
+    validation runs. 
+*/
 template<int DIM>
 inline int detect_planar_level_set_axis(
     const std::vector<double>& phi,
@@ -258,6 +260,28 @@ inline int detect_planar_level_set_axis(
 
 
 template<int DIM>
+inline std::vector<std::array<double, DIM>> compute_solver_normals(
+    const std::vector<double>& phi,
+    const SolverContext<DIM>& ctx
+)
+{
+    if constexpr (DIM == 1) {
+        if (ctx.use_axis_normals_in_1d) {
+            return std::vector<std::array<double, DIM>>(
+                phi.size(),
+                axis_normal<DIM>(0)
+            );
+        }
+    }
+
+    return compute_normals<DIM>(
+        phi,
+        ctx.level_set_grid
+    );
+}
+
+
+template<int DIM>
 inline void project_planar_level_set(
     std::vector<double>& phi,
     const SolverContext<DIM>& ctx,
@@ -310,7 +334,7 @@ inline StepResult<DIM> advance_one_step(
 
     ctx.validate(Ntot);
 
-    
+
     // [2.1] Material map
     std::vector<int> material_id_current = ctx.material_id;
 
@@ -324,7 +348,7 @@ inline StepResult<DIM> advance_one_step(
         );
     }
 
-    
+
     // [2.2] CFL timestep
     const double dt = compute_dt_cfl_materials<DIM, EOS>(
         U,
@@ -335,7 +359,7 @@ inline StepResult<DIM> advance_one_step(
         ctx.dt_max
     );
 
-    
+
     // [2.3] Working level sets
     std::vector<std::vector<double>> phi_list_work = ctx.phi_list;
     std::vector<int> planar_phi_axis(phi_list_work.size(), -1);
@@ -345,8 +369,8 @@ inline StepResult<DIM> advance_one_step(
             detect_planar_level_set_axis<DIM>(phi_list_work[k], ctx);
     }
 
-    
-    // [2.4] Normals 
+
+    // [2.4] Normals
     std::vector<std::vector<std::array<double, DIM>>> normals_current(
         ctx.phi_list.size()
     );
@@ -354,43 +378,70 @@ inline StepResult<DIM> advance_one_step(
     #pragma omp parallel for
     for (int k = 0; k < static_cast<int>(ctx.phi_list.size()); ++k) {
         normals_current[k] =
-            compute_normals<DIM>(
+            compute_solver_normals<DIM>(
                 ctx.phi_list[k],
-                ctx.level_set_grid
+                ctx
             );
     }
 
-    
-    // [2.5] Level-set advection
-    if (ctx.advect_level_set && !phi_list_work.empty()) {
-
-        const auto vel = build_velocity_field<DIM, EOS>(
+    const RGFMInterfaceData<DIM> rgfm_current =
+        build_rgfm_interface_data<DIM, EOS>(
             U,
             material_id_current,
-            ctx.material_params
+            ctx.phi_list,
+            ctx.tracked_interfaces,
+            normals_current,
+            ctx
         );
 
-        const auto Vn_fields = build_interface_normal_speed_fields<DIM, EOS>(
-                U,
+
+    /*
+        [2.5] Directional splitting on the current interface.
+    
+        Wang's rGFM imposes interface states and advances the fluid before
+        moving the level set to the next intermediate time. 
+    */
+    std::vector<Conserved<DIM>> U_stage = rgfm_current.U_real;
+
+    for (int dir = 0; dir < DIM; ++dir) {
+
+        std::vector<Conserved<DIM>> U_next = U_stage;
+        const RGFMInterfaceData<DIM> rgfm_stage =
+            build_rgfm_interface_data<DIM, EOS>(
+                U_stage,
                 material_id_current,
-                vel,
                 ctx.phi_list,
                 ctx.tracked_interfaces,
                 normals_current,
-                ctx,
-                dt
+                ctx
             );
+
+        sweep_direction_dispatch<DIM, EOS>(
+            dir,
+            U_stage,
+            material_id_current,
+            ctx.phi_list,
+            ctx.tracked_interfaces,
+            normals_current,
+            ctx,
+            dt,
+            U_next,
+            &rgfm_stage.material_states
+        );
+
+        apply_boundary_conditions<DIM>(U_next, ctx);
+
+        U_stage.swap(U_next);
+    }
+
+    // [2.6] Level-set advection using the current-interface extension speed
+    if (ctx.advect_level_set && !phi_list_work.empty()) {
 
         #pragma omp parallel for
         for (int k = 0; k < static_cast<int>(phi_list_work.size()); ++k) {
-            const auto vel_ls = build_level_set_transport_velocity<DIM>(
-                Vn_fields[k],
-                normals_current[k]
-            );
-
-            phi_list_work[k] = advect_phi<DIM>(
+            phi_list_work[k] = advect_phi_normal_speed<DIM>(
                     ctx.phi_list[k],
-                    vel_ls,
+                    rgfm_current.normal_speed_fields[k],
                     ctx.level_set_grid,
                     dt
                 );
@@ -403,8 +454,8 @@ inline StepResult<DIM> advance_one_step(
         }
     }
 
-    
-    // [2.6] Reinitialisation
+
+    // [2.7] Reinitialisation
     if (ctx.reinit_enabled &&
         ((ctx.completed_steps + 1) % ctx.reinit_frequency == 0))
     {
@@ -426,8 +477,8 @@ inline StepResult<DIM> advance_one_step(
         }
     }
 
-    
-    // [2.7] Updated material map
+
+    // [2.8] Updated material map and state transfer after the interface move
     std::vector<int> material_id_work = material_id_current;
 
     if (ctx.reassign_material_from_phi) {
@@ -438,58 +489,17 @@ inline StepResult<DIM> advance_one_step(
             material_id_work,
             ctx.level_set_grid
         );
-
     }
 
-    std::vector<Conserved<DIM>> U_work =
+    std::vector<Conserved<DIM>> U_final =
         transfer_reassigned_material_states<DIM, EOS>(
-            U,
+            U_stage,
             material_id_current,
             material_id_work,
             ctx
         );
 
-    
-    // [2.8] Normals 
-    std::vector<std::vector<std::array<double, DIM>>> normals_list(
-        phi_list_work.size()
-    );
-
-    #pragma omp parallel for
-    for (int k = 0; k < static_cast<int>(phi_list_work.size()); ++k) {
-        normals_list[k] =
-            compute_normals<DIM>(
-                phi_list_work[k],
-                ctx.level_set_grid
-            );
-    }
-
-    
-    // [2.9] Directional splitting
-    std::vector<Conserved<DIM>> U_stage = U_work;
-
-    for (int dir = 0; dir < DIM; ++dir) {
-
-        std::vector<Conserved<DIM>> U_next = U_stage;
-
-        sweep_direction_dispatch<DIM, EOS>(
-            dir,
-            U_stage,
-            material_id_work,
-            phi_list_work,
-            ctx.tracked_interfaces,
-            normals_list,
-            ctx,
-            dt,
-            U_next
-        );
-
-        apply_boundary_conditions<DIM>(U_next, ctx);
-
-        U_stage.swap(U_next);
-    }
-
     ctx.completed_steps += 1;
 
-    return {U_stage, phi_list_work, dt};
+    return {U_final, phi_list_work, dt};
 }

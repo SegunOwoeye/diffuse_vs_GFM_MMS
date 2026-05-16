@@ -20,7 +20,7 @@
 #include "src/math/vector_ops.hpp"
 
 
-// [4] Build projected normal speed field 
+// [1] Build projected normal speed field
 template<int DIM>
 inline std::vector<double> build_projected_normal_speed_field(
     const std::vector<std::array<double, DIM>>& vel,
@@ -43,7 +43,7 @@ inline std::vector<double> build_projected_normal_speed_field(
     return Vn;
 }
 
-// [5] Select active interface on a face
+// [2] Select active interface on a face
 template<int DIM>
 inline int select_face_interface(
     int idL,
@@ -67,16 +67,12 @@ inline int select_face_interface(
         const double phiR = phi_list[k][idR];
 
         const int neg_mat = tracked_interfaces[k].negative_material_id;
-        const bool left_matches =
-            (neg_mat == matL) &&
-            (phiL <= phi_tol) &&
-            (phiR >= -phi_tol);
-        const bool right_matches =
-            (neg_mat == matR) &&
-            (phiR <= phi_tol) &&
-            (phiL >= -phi_tol);
+        const bool tracked_material_on_face = (neg_mat == matL) || (neg_mat == matR);
+        const bool brackets_or_touches_interface =
+            ((phiL <= phi_tol) && (phiR >= -phi_tol)) ||
+            ((phiR <= phi_tol) && (phiL >= -phi_tol));
 
-        if (!left_matches && !right_matches) {
+        if (!tracked_material_on_face || !brackets_or_touches_interface) {
             continue;
         }
 
@@ -92,7 +88,7 @@ inline int select_face_interface(
 }
 
 
-// [8] Accumulate interface-normal speed from one extracted line
+// [3] Accumulate interface-normal speed from one extracted line
 template<int DIM, typename EOS>
 inline void accumulate_interface_normal_speed_line(
     int dir,
@@ -114,25 +110,6 @@ inline void accumulate_interface_normal_speed_line(
     if (L < 2) {
         return;
     }
-
-    std::vector<Conserved<DIM>> UL_face;
-    std::vector<Conserved<DIM>> UR_face;
-    std::vector<EOSParams> cell_params(U_line.size());
-
-    for (int i = 0; i < static_cast<int>(U_line.size()); ++i) {
-        cell_params[i] = ctx.material_params[mat_line[i]];
-    }
-
-    reconstruct_line_interfaces_dispatch<DIM, EOS>(
-        dir,
-        U_line,
-        cell_params,
-        dt,
-        ctx.dx[dir],
-        UL_face,
-        UR_face,
-        &mat_line
-    );
 
     for (int i = 0; i < L - 1; ++i) {
         const int idL = id_line[i];
@@ -168,12 +145,15 @@ inline void accumulate_interface_normal_speed_line(
         const std::array<double, DIM> n_transport =
             build_face_normal<DIM>(normals_list[k], idL, idR, dir);
 
-        enforce_positive_conserved<DIM, EOS>(UL_face[i], paramsL);
-        enforce_positive_conserved<DIM, EOS>(UR_face[i], paramsR);
+        Conserved<DIM> UL_real = U_line[i];
+        Conserved<DIM> UR_real = U_line[i + 1];
+
+        enforce_positive_conserved<DIM, EOS>(UL_real, paramsL);
+        enforce_positive_conserved<DIM, EOS>(UR_real, paramsR);
 
         const double Vn_flux = interface_normal_speed_mcrs<DIM, EOS, EOS>(
-            UL_face[i],
-            UR_face[i],
+            UL_real,
+            UR_real,
             n_flux,
             paramsL,
             paramsR
@@ -188,7 +168,7 @@ inline void accumulate_interface_normal_speed_line(
     }
 }
 
-// [9] Recursive accumulation over all transverse index combinations
+// [4] Recursive accumulation over all transverse index combinations
 template<int DIM, typename EOS, int DIR>
 inline void accumulate_interface_normal_speed_recursive(
     int depth,
@@ -276,7 +256,7 @@ inline void accumulate_interface_normal_speed_recursive(
 }
 
 /*
-[10] Build per-level-set normal speed fields
+[5] Build per-level-set normal speed fields
 
     Starts from projected bulk velocity as an extension field and then
     overwrites interface-adjacent cells with HLLC/MCRS-consistent interface speed.
@@ -298,12 +278,12 @@ inline std::vector<std::vector<double>> build_interface_normal_speed_fields(
 
     std::vector<std::vector<double>> Vn_fields(nphi, std::vector<double>(Ntot, 0.0));
 
-    // [10.1] Start from projected bulk velocity as a global extension field
+    // [5.1] Start from projected bulk velocity as a global extension field
     for (int k = 0; k < nphi; ++k) {
         Vn_fields[k] = build_projected_normal_speed_field<DIM>(vel, normals_list[k]);
     }
 
-    // [10.2] Accumulate interface-consistent speed where interfaces exist
+    // [5.2] Accumulate interface-consistent speed where interfaces exist
     std::vector<std::vector<double>> Vn_sum(nphi, std::vector<double>(Ntot, 0.0));
     std::vector<std::vector<int>> Vn_count(nphi, std::vector<int>(Ntot, 0));
 
@@ -359,7 +339,7 @@ inline std::vector<std::vector<double>> build_interface_normal_speed_fields(
         );
     }
 
-    // [10.3] Overwrite interface-adjacent cells with averaged interface speed
+    // [5.3] Overwrite interface-adjacent cells with averaged interface speed
     #pragma omp parallel for collapse(2)
     for (int k = 0; k < nphi; ++k) {
         for (int id = 0; id < Ntot; ++id) {
@@ -371,5 +351,3 @@ inline std::vector<std::vector<double>> build_interface_normal_speed_fields(
 
     return Vn_fields;
 }
-
-
