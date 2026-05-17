@@ -1,0 +1,169 @@
+{
+  "source_image": "data/digitized/fedkiw/FedkiwA/reference.png",
+  "suite": "fedkiw",
+  "test": "FedkiwA",
+  "layout": "four-panel",
+  "notes": [
+    "crop is [left, top, right, bottom]. Values <= 1 are treated as image fractions.",
+    "axis_points map data values to crop image pixels as [row, column].",
+    "Provide at least three axis_points: two on the x/r-axis and one on the y-axis."
+  ],
+  "fields": {
+    "density": {
+      "crop": [
+        0.0,
+        0.0,
+        0.5,
+        0.5
+      ],
+      "image": "images/density.png",
+      "output": "rho.csv",
+      "columns": [
+        "x",
+        "rho"
+      ],
+      "axis_points": [
+        {
+          "data": [
+            0.0,
+            0.0
+          ],
+          "pixel": null
+        },
+        {
+          "data": [
+            1.0,
+            0.0
+          ],
+          "pixel": null
+        },
+        {
+          "data": [
+            0.0,
+            1.4
+          ],
+          "pixel": null
+        }
+      ],
+      "preprocess": false,
+      "x_column": "x"
+    },
+    "velocity": {
+      "crop": [
+        0.5,
+        0.0,
+        1.0,
+        0.5
+      ],
+      "image": "images/velocity.png",
+      "output": "u0.csv",
+      "columns": [
+        "x",
+        "u0"
+      ],
+      "axis_points": [
+        {
+          "data": [
+            0.0,
+            0.0
+          ],
+          "pixel": null
+        },
+        {
+          "data": [
+            1.0,
+            0.0
+          ],
+          "pixel": null
+        },
+        {
+          "data": [
+            0.0,
+            180.0
+          ],
+          "pixel": null
+        }
+      ],
+      "preprocess": false,
+      "x_column": "x"
+    },
+    "entropy": {
+      "crop": [
+        0.0,
+        0.5,
+        0.5,
+        1.0
+      ],
+      "image": "images/entropy.png",
+      "output": "entropy.csv",
+      "columns": [
+        "x",
+        "entropy"
+      ],
+      "axis_points": [
+        {
+          "data": [
+            0.0,
+            0.0
+          ],
+          "pixel": null
+        },
+        {
+          "data": [
+            1.0,
+            0.0
+          ],
+          "pixel": null
+        },
+        {
+          "data": [
+            0.0,
+            3000000.0
+          ],
+          "pixel": null
+        }
+      ],
+      "preprocess": false,
+      "x_column": "x"
+    },
+    "pressure": {
+      "crop": [
+        0.5,
+        0.5,
+        1.0,
+        1.0
+      ],
+      "image": "images/pressure.png",
+      "output": "p.csv",
+      "columns": [
+        "x",
+        "p"
+      ],
+      "axis_points": [
+        {
+          "data": [
+            0.0,
+            100000.0
+          ],
+          "pixel": null
+        },
+        {
+          "data": [
+            1.0,
+            100000.0
+          ],
+          "pixel": null
+        },
+        {
+          "data": [
+            0.0,
+            150000.0
+          ],
+          "pixel": null
+        }
+      ],
+      "preprocess": false,
+      "x_column": "x"
+    }
+  }
+}
