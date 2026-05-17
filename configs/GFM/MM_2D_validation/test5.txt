@@ -24,7 +24,7 @@ cfl = 0.3
 # ========================
 interface_method = GFM
 use_level_set = true
-reinit_interval = 1
+reinit_interval = 0
 
 # ========================
 # Materials (different EOS)
