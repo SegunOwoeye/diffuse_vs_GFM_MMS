@@ -7,14 +7,16 @@
 RUN_SIM=true
 RUN_PLOT=true
 ARCHIVE=false
-CLEAN=true
-RUN_METHODS="all"
-RUN_DIMS="1,2"
+CLEAN=false
+RUN_METHODS="both"
+RUN_DIMS="1"
 RUN_CONSERVATION=false
 CONSERVATION_INTERVAL=1
 
 DATA_DIR="data"
 ARCHIVE_DIR="results/archive"
+DIGITIZED_DIR="$DATA_DIR/digitized"
+PRESERVED_DIGITIZED_DIR=""
 
 usage() {
     cat <<EOF
@@ -69,6 +71,34 @@ dim_enabled() {
     esac
 }
 
+run_validation_stage() {
+    local stage_name="$1"
+    shift
+    local sim_cmd="$1"
+    shift
+    local plot_cmd="$1"
+    shift
+
+    echo "[INFO] ===== $stage_name ====="
+
+    if [ "$RUN_SIM" = true ]; then
+        echo "[INFO] Running $stage_name simulations..."
+        eval "$sim_cmd"
+    else
+        echo "[INFO] Skipping $stage_name simulations"
+    fi
+
+    if [ "$RUN_PLOT" = true ]; then
+        echo "[INFO] Running $stage_name postprocessing..."
+        eval "$plot_cmd"
+    else
+        echo "[INFO] Skipping $stage_name postprocessing"
+    fi
+
+    echo "[INFO] Finished $stage_name"
+    echo "-------------------------"
+}
+
 # -------------------------
 # [2] Parse Flags
 # -------------------------
@@ -96,6 +126,11 @@ done
 # -------------------------
 timestamp=$(date +"%Y%m%d_%H%M%S")
 
+if [ -d "$DIGITIZED_DIR" ]; then
+    PRESERVED_DIGITIZED_DIR=$(mktemp -d)
+    cp -a "$DIGITIZED_DIR" "$PRESERVED_DIGITIZED_DIR/digitized"
+fi
+
 if [ -d "$DATA_DIR" ]; then
     if [ "$ARCHIVE" = true ]; then
         echo "[INFO] Archiving existing data..."
@@ -112,78 +147,75 @@ fi
 # Ensure fresh directory exists
 mkdir -p "$DATA_DIR"
 
-# -------------------------
-# [4] Run Simulations
-# -------------------------
-if [ "$RUN_SIM" = true ]; then
-    echo "[INFO] Running simulations..."
-    echo "[INFO] Method selection: $RUN_METHODS"
-    echo "[INFO] GFM/DIM dimensions: $RUN_DIMS"
-    echo "[INFO] Conservation diagnostics: $RUN_CONSERVATION"
-
-    if [ "$RUN_CONSERVATION" = true ]; then
-        export SOLVER_CONSERVATION=1
-        export SOLVER_CONSERVATION_INTERVAL="$CONSERVATION_INTERVAL"
-    else
-        unset SOLVER_CONSERVATION
-        unset SOLVER_CONSERVATION_INTERVAL
-    fi
-
-    # [4.1] Compile Files
-    chmod +x tests/validation/1_SM_Euler_Tests/SM_simulation.sh
-    chmod +x tests/validation/2_MM_GFM_Tests/MM_GFM_simulation.sh
-    chmod +x tests/validation/3_MM_DIM_Tests/MM_DIM_simulation.sh
-
-    # [4.2] Run Files
-    if method_enabled sm; then
-        ./tests/validation/1_SM_Euler_Tests/SM_simulation.sh
-    fi
-
-    if method_enabled gfm; then
-        ./tests/validation/2_MM_GFM_Tests/MM_GFM_simulation.sh --dims "$RUN_DIMS"
-    fi
-
-    if method_enabled dim; then
-        ./tests/validation/3_MM_DIM_Tests/MM_DIM_simulation.sh --dims "$RUN_DIMS"
-    fi
-
-else
-    echo "[INFO] Skipping simulations"
+if [ -n "$PRESERVED_DIGITIZED_DIR" ] && [ -d "$PRESERVED_DIGITIZED_DIR/digitized" ]; then
+    cp -a "$PRESERVED_DIGITIZED_DIR/digitized" "$DIGITIZED_DIR"
+    rm -rf "$PRESERVED_DIGITIZED_DIR"
 fi
 
 # -------------------------
-# [5] Run Postprocessing
+# [4] Run staged simulations and postprocessing
 # -------------------------
-if [ "$RUN_PLOT" = true ]; then
-    echo "[INFO] Running postprocessing..."
-    echo "[INFO] Method selection: $RUN_METHODS"
-    echo "[INFO] GFM/DIM dimensions: $RUN_DIMS"
+echo "[INFO] Method selection: $RUN_METHODS"
+echo "[INFO] GFM/DIM dimensions: $RUN_DIMS"
+echo "[INFO] Conservation diagnostics: $RUN_CONSERVATION"
 
-    # [5.1] Compile Files
-    chmod +x tests/validation/1_SM_Euler_Tests/SM_graphing.sh
-    chmod +x tests/validation/2_MM_GFM_Tests/MM_GFM_graphing.sh
-    chmod +x tests/validation/3_MM_DIM_Tests/MM_DIM_graphing.sh
-    chmod +x tests/validation/3_MM_DIM_Tests/gfm_dim_comparison.sh
-
-    # [5.2] Run Files
-    if method_enabled sm; then
-        ./tests/validation/1_SM_Euler_Tests/SM_graphing.sh
-    fi
-
-    if method_enabled gfm; then
-        ./tests/validation/2_MM_GFM_Tests/MM_GFM_graphing.sh --dims "$RUN_DIMS"
-    fi
-
-    if method_enabled dim; then
-        ./tests/validation/3_MM_DIM_Tests/MM_DIM_graphing.sh --dims "$RUN_DIMS"
-    fi
-
-    if method_enabled gfm && method_enabled dim && dim_enabled 1; then
-        ./tests/validation/3_MM_DIM_Tests/gfm_dim_comparison.sh
-    fi
-
+if [ "$RUN_CONSERVATION" = true ]; then
+    export SOLVER_CONSERVATION=1
+    export SOLVER_CONSERVATION_INTERVAL="$CONSERVATION_INTERVAL"
 else
-    echo "[INFO] Skipping postprocessing"
+    unset SOLVER_CONSERVATION
+    unset SOLVER_CONSERVATION_INTERVAL
+fi
+
+# [4.1] Make stage scripts executable
+chmod +x tests/validation/1_SM_Euler_Tests/SM_simulation.sh
+chmod +x tests/validation/1_SM_Euler_Tests/SM_graphing.sh
+chmod +x tests/validation/2_MM_GFM_Tests/MM_GFM_simulation.sh
+chmod +x tests/validation/2_MM_GFM_Tests/MM_GFM_graphing.sh
+chmod +x tests/validation/3_MM_DIM_Tests/MM_DIM_simulation.sh
+chmod +x tests/validation/3_MM_DIM_Tests/MM_DIM_graphing.sh
+chmod +x tests/validation/3_MM_DIM_Tests/gfm_dim_comparison.sh
+
+# [4.2] Run each stage and postprocess before moving on
+if method_enabled sm; then
+    run_validation_stage \
+        "SM all dimensions" \
+        "./tests/validation/1_SM_Euler_Tests/SM_simulation.sh" \
+        "./tests/validation/1_SM_Euler_Tests/SM_graphing.sh"
+fi
+
+if method_enabled dim && dim_enabled 1; then
+    run_validation_stage \
+        "DIM 1D" \
+        "./tests/validation/3_MM_DIM_Tests/MM_DIM_simulation.sh --dims 1" \
+        "./tests/validation/3_MM_DIM_Tests/MM_DIM_graphing.sh --dims 1"
+fi
+
+if method_enabled gfm && dim_enabled 1; then
+    run_validation_stage \
+        "GFM 1D" \
+        "./tests/validation/2_MM_GFM_Tests/MM_GFM_simulation.sh --dims 1" \
+        "./tests/validation/2_MM_GFM_Tests/MM_GFM_graphing.sh --dims 1"
+fi
+
+if method_enabled gfm && method_enabled dim && dim_enabled 1 && [ "$RUN_PLOT" = true ]; then
+    echo "[INFO] Running GFM vs DIM 1D comparison after both 1D stages..."
+    ./tests/validation/3_MM_DIM_Tests/gfm_dim_comparison.sh
+    echo "-------------------------"
+fi
+
+if method_enabled gfm && dim_enabled 2; then
+    run_validation_stage \
+        "GFM 2D" \
+        "./tests/validation/2_MM_GFM_Tests/MM_GFM_simulation.sh --dims 2" \
+        "./tests/validation/2_MM_GFM_Tests/MM_GFM_graphing.sh --dims 2"
+fi
+
+if method_enabled dim && dim_enabled 2; then
+    run_validation_stage \
+        "DIM 2D" \
+        "./tests/validation/3_MM_DIM_Tests/MM_DIM_simulation.sh --dims 2" \
+        "./tests/validation/3_MM_DIM_Tests/MM_DIM_graphing.sh --dims 2"
 fi
 
 echo "[INFO] Validation pipeline complete."
