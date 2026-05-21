@@ -27,6 +27,7 @@
 #include "src/euler/solver/advance/boundary.hpp"
 #include "src/euler/solver/advance/material_transfer.hpp"
 #include "src/euler/gfm/rgfm.hpp"
+#include "src/math/numerical_safety.hpp"
 
 
 
@@ -267,10 +268,37 @@ inline std::vector<std::array<double, DIM>> compute_solver_normals(
 {
     if constexpr (DIM == 1) {
         if (ctx.use_axis_normals_in_1d) {
-            return std::vector<std::array<double, DIM>>(
-                phi.size(),
-                axis_normal<DIM>(0)
-            );
+            const int N = static_cast<int>(phi.size());
+            std::vector<std::array<double, DIM>> normals(N);
+
+            for (int i = 0; i < N; ++i) {
+                double grad = 0.0;
+
+                if (N <= 1) {
+                    grad = 1.0;
+                }
+                else if (i == 0) {
+                    grad = phi[1] - phi[0];
+                }
+                else if (i == N - 1) {
+                    grad = phi[N - 1] - phi[N - 2];
+                }
+                else {
+                    grad = phi[i + 1] - phi[i - 1];
+
+                    if (std::abs(grad) <= 1e-14) {
+                        const double grad_left = phi[i] - phi[i - 1];
+                        const double grad_right = phi[i + 1] - phi[i];
+                        grad = (std::abs(grad_left) >= std::abs(grad_right))
+                            ? grad_left
+                            : grad_right;
+                    }
+                }
+
+                normals[i][0] = (grad < 0.0) ? -1.0 : 1.0;
+            }
+
+            return normals;
         }
     }
 
@@ -318,6 +346,126 @@ inline void project_planar_level_set(
 }
 
 
+template<int DIM>
+inline int common_planar_level_set_axis(
+    const std::vector<int>& planar_phi_axis
+)
+{
+    int common_axis = -1;
+
+    for (const int axis : planar_phi_axis) {
+        if (axis < 0) {
+            return -1;
+        }
+
+        if (common_axis < 0) {
+            common_axis = axis;
+        }
+        else if (common_axis != axis) {
+            return -1;
+        }
+    }
+
+    return common_axis;
+}
+
+
+template<int DIM>
+inline void zero_roundoff_planar_transverse_momentum(
+    std::vector<Conserved<DIM>>& U,
+    int axis
+)
+{
+    if (axis < 0 || axis >= DIM) {
+        return;
+    }
+
+    double max_axis_velocity = 0.0;
+    std::array<double, DIM> max_transverse_velocity{};
+
+    for (const auto& state : U) {
+        if (state.rho <= 0.0 || !std::isfinite(state.rho)) {
+            return;
+        }
+
+        max_axis_velocity = std::max(
+            max_axis_velocity,
+            std::abs(state.mom[axis] / state.rho)
+        );
+
+        for (int d = 0; d < DIM; ++d) {
+            if (d == axis) {
+                continue;
+            }
+
+            max_transverse_velocity[d] = std::max(
+                max_transverse_velocity[d],
+                std::abs(state.mom[d] / state.rho)
+            );
+        }
+    }
+
+    const double velocity_tol = std::max(
+        1.0e-12,
+        1.0e-8 * std::max(1.0, max_axis_velocity)
+    );
+
+    for (int d = 0; d < DIM; ++d) {
+        if (d == axis || max_transverse_velocity[d] > velocity_tol) {
+            continue;
+        }
+
+        #pragma omp parallel for if(static_cast<int>(U.size()) > 512)
+        for (int id = 0; id < static_cast<int>(U.size()); ++id) {
+            U[id].mom[d] = 0.0;
+        }
+    }
+}
+
+
+template<int DIM>
+inline void enforce_level_set_sign_from_material_map(
+    std::vector<std::vector<double>>& phi_list,
+    const std::vector<int>& material_id,
+    const SolverContext<DIM>& ctx
+)
+{
+    const int Ntot = static_cast<int>(material_id.size());
+
+    if (static_cast<int>(phi_list.size()) !=
+        static_cast<int>(ctx.tracked_interfaces.size())) {
+        throw std::runtime_error(
+            "enforce_level_set_sign_from_material_map: tracked interface mismatch"
+        );
+    }
+
+    double min_dx = ctx.dx[0];
+    for (int d = 1; d < DIM; ++d) {
+        min_dx = std::min(min_dx, ctx.dx[d]);
+    }
+
+    const double sign_floor = geometry_tolerance(min_dx, 1e-12, 1e-14);
+
+    for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
+        if (static_cast<int>(phi_list[k].size()) != Ntot) {
+            throw std::runtime_error(
+                "enforce_level_set_sign_from_material_map: level-set size mismatch"
+            );
+        }
+
+        const int tracked_mat = ctx.tracked_interfaces[k].negative_material_id;
+
+        #pragma omp parallel for if(Ntot > 512)
+        for (int id = 0; id < Ntot; ++id) {
+            const double magnitude = std::max(std::abs(phi_list[k][id]), sign_floor);
+            phi_list[k][id] = (material_id[id] == tracked_mat)
+                ? -magnitude
+                : magnitude;
+        }
+    }
+}
+
+
 
 // [2] Advance One Step
 template<int DIM, typename EOS>
@@ -346,6 +494,13 @@ inline StepResult<DIM> advance_one_step(
             material_id_current,
             ctx.level_set_grid
         );
+
+        fill_small_enclosed_background_cavities<DIM>(
+            material_id_current,
+            ctx.tracked_interfaces,
+            ctx.background_material_id,
+            ctx.level_set_grid
+        );
     }
 
 
@@ -368,6 +523,9 @@ inline StepResult<DIM> advance_one_step(
         planar_phi_axis[k] =
             detect_planar_level_set_axis<DIM>(phi_list_work[k], ctx);
     }
+
+    const int planar_flow_axis =
+        common_planar_level_set_axis<DIM>(planar_phi_axis);
 
 
     // [2.4] Normals
@@ -402,6 +560,10 @@ inline StepResult<DIM> advance_one_step(
         moving the level set to the next intermediate time. 
     */
     std::vector<Conserved<DIM>> U_stage = rgfm_current.U_real;
+    zero_roundoff_planar_transverse_momentum<DIM>(
+        U_stage,
+        planar_flow_axis
+    );
 
     for (int dir = 0; dir < DIM; ++dir) {
 
@@ -430,21 +592,45 @@ inline StepResult<DIM> advance_one_step(
         );
 
         apply_boundary_conditions<DIM>(U_next, ctx);
+        zero_roundoff_planar_transverse_momentum<DIM>(
+            U_next,
+            planar_flow_axis
+        );
 
         U_stage.swap(U_next);
     }
 
     // [2.6] Level-set advection using the current-interface extension speed
     if (ctx.advect_level_set && !phi_list_work.empty()) {
+        std::vector<std::array<double, DIM>> level_set_velocity_field;
+
+        if (ctx.level_set_advection == "flow") {
+            level_set_velocity_field =
+                build_velocity_field<DIM, EOS>(
+                    rgfm_current.U_real,
+                    material_id_current,
+                    ctx.material_params
+                );
+        }
 
         #pragma omp parallel for
         for (int k = 0; k < static_cast<int>(phi_list_work.size()); ++k) {
-            phi_list_work[k] = advect_phi_normal_speed<DIM>(
+            if (ctx.level_set_advection == "flow") {
+                phi_list_work[k] = advect_phi<DIM>(
+                    ctx.phi_list[k],
+                    level_set_velocity_field,
+                    ctx.level_set_grid,
+                    dt
+                );
+            }
+            else {
+                phi_list_work[k] = advect_phi_normal_speed<DIM>(
                     ctx.phi_list[k],
                     rgfm_current.normal_speed_fields[k],
                     ctx.level_set_grid,
                     dt
                 );
+            }
 
             project_planar_level_set<DIM>(
                 phi_list_work[k],
@@ -489,6 +675,19 @@ inline StepResult<DIM> advance_one_step(
             material_id_work,
             ctx.level_set_grid
         );
+
+        fill_small_enclosed_background_cavities<DIM>(
+            material_id_work,
+            ctx.tracked_interfaces,
+            ctx.background_material_id,
+            ctx.level_set_grid
+        );
+
+        enforce_level_set_sign_from_material_map<DIM>(
+            phi_list_work,
+            material_id_work,
+            ctx
+        );
     }
 
     std::vector<Conserved<DIM>> U_final =
@@ -498,6 +697,11 @@ inline StepResult<DIM> advance_one_step(
             material_id_work,
             ctx
         );
+
+    zero_roundoff_planar_transverse_momentum<DIM>(
+        U_final,
+        planar_flow_axis
+    );
 
     ctx.completed_steps += 1;
 

@@ -11,9 +11,11 @@ FIELD_LABELS = {
     "u": ("Velocity", r"Velocity, $u$"),
     "u0": ("Velocity", r"Velocity, $u$"),
     "u1": ("Transverse velocity", r"Velocity, $u_1$"),
+    "u_radial": ("Velocity", r"Radial velocity, $u_r$"),
     "p": ("Pressure", r"Pressure, $p$"),
     "e": ("Specific internal energy", r"Specific internal energy, $e$"),
     "e_plot": ("Specific internal energy", r"Specific internal energy, $e$"),
+    "entropy": ("Entropy", r"Entropy, $s$"),
 }
 
 RESOLUTION_STYLES = {
@@ -73,7 +75,12 @@ def resolution_from_label(label):
 
 
 def legend_label(label):
-    if "exact" in str(label).lower():
+    text = str(label).lower()
+
+    if "reference" in text:
+        return "Reference"
+
+    if "exact" in text:
         return "Exact"
 
     resolution = resolution_from_label(label)
@@ -109,13 +116,13 @@ def numerical_style(label, index=0):
 def plot_profile(ax, x, y, label, index=0):
     display_label = legend_label(label)
 
-    if display_label == "Exact":
+    if display_label in {"Exact", "Reference"}:
         ax.plot(
             x,
             y,
             color="black",
-            linestyle="-.",
-            linewidth=1.0,
+            linestyle="-",
+            linewidth=1.2,
             label=display_label,
         )
         return
@@ -125,24 +132,30 @@ def plot_profile(ax, x, y, label, index=0):
     ax.plot(
         x,
         y,
-        linestyle="-",
-        linewidth=1.0,
+        linestyle="None",
+        linewidth=0.0,
         marker=style["marker"],
-        markersize=2.4,
+        markersize=2.8,
         markerfacecolor="none",
         markeredgewidth=0.8,
-        markevery=marker_step(x, target_markers=32),
         color=style["color"],
         label=display_label,
     )
 
 
-def configure_profile_axis(ax, field_key=None, x_label=r"$x$", show_legend=True):
+def configure_profile_axis(
+    ax,
+    field_key=None,
+    x_label=r"$x$",
+    show_legend=True,
+    show_title=True,
+):
     ax.set_xlabel(x_label)
 
     if field_key is not None:
         ax.set_ylabel(field_ylabel(field_key))
-        ax.set_title(field_title(field_key))
+        if show_title:
+            ax.set_title(field_title(field_key))
 
     ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
     ax.yaxis.set_major_locator(MaxNLocator(nbins=5))
@@ -162,7 +175,8 @@ def configure_profile_axis(ax, field_key=None, x_label=r"$x$", show_legend=True)
 def sort_by_resolution(items, label_index=-1):
     def key(item):
         label = item[label_index]
-        if "exact" in str(label).lower():
+        label_text = str(label).lower()
+        if "exact" in label_text or "reference" in label_text:
             return (1, float("inf"))
 
         resolution = resolution_from_label(label)

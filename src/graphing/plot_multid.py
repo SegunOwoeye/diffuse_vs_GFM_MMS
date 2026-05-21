@@ -1,5 +1,6 @@
 # [0] Import libraries
 from pathlib import Path
+import re
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -10,6 +11,9 @@ from plot_style import (
     field_ylabel,
     plot_profile,
     sort_by_resolution,
+)
+from exact_reference import (
+    load_optional_exact_reference_for_context,
 )
 
 
@@ -38,7 +42,13 @@ def load_solution_csv(filename):
     extra_fields = {
         column: df[column].to_numpy()
         for column in df.columns
-        if column.startswith("phi")
+        if (
+            column.startswith("phi")
+            or column.startswith("alpha")
+            or column.startswith("rho_mat")
+            or column.startswith("mass")
+            or column == "mat"
+        )
     }
 
     return dim, coords, velocity, rho, p, e, extra_fields
@@ -90,6 +100,30 @@ def compute_radial_profile(coords, field, center=None, nbins=100):
     return centers, avg
 
 
+def compute_radial_velocity(coords, velocity, center=None):
+    dim = len(coords)
+
+    if center is None:
+        center = [0.5 * (coords[d].min() + coords[d].max()) for d in range(dim)]
+
+    r2 = np.zeros_like(velocity[0], dtype=float)
+    offsets = []
+
+    for d in range(dim):
+        offset = coords[d] - center[d]
+        offsets.append(offset)
+        r2 += offset ** 2
+
+    r = np.sqrt(r2)
+    radial_velocity = np.zeros_like(velocity[0], dtype=float)
+
+    nonzero = r > 0.0
+    for d in range(dim):
+        radial_velocity[nonzero] += velocity[d][nonzero] * offsets[d][nonzero] / r[nonzero]
+
+    return radial_velocity
+
+
 # [4] Extract mid-plane slice from 3D data
 def extract_midplane_slice(coords, field, axis=2):
     if len(coords) != 3:
@@ -126,11 +160,48 @@ def build_label_from_filename(fname):
     return Path(fname).stem
 
 
+def time_from_filename(fname):
+    match = re.search(r"_t([0-9peEm+\-]+)_N", Path(fname).name)
+    if match is None:
+        return None
+
+    text = match.group(1)
+    tagged = re.fullmatch(r"([0-9]+)p([0-9]+)e([pm+\-])([0-9]+)", text)
+
+    if tagged is not None:
+        integer, fraction, sign_token, exponent = tagged.groups()
+        sign = "-" if sign_token in {"m", "-"} else "+"
+        return float(f"{integer}.{fraction}e{sign}{exponent}")
+
+    text = text.replace("m", "-").replace("p", ".")
+    return float(text)
+
+
+def format_time_label(time_value):
+    exponent = int(np.floor(np.log10(abs(time_value)))) if time_value != 0.0 else 0
+    mantissa = time_value / (10.0 ** exponent)
+    return rf"$t = {mantissa:.3f}\times 10^{{{exponent}}}$"
+
+
 # [6] Build output name from folder path
 def build_output_name(folder_path: str):
     p = Path(folder_path)
     parts = p.parts[-2:]
     return "_".join(parts)
+
+
+def time_tagged_csv_files(folder_path):
+    files = []
+
+    for csv_path in sorted(folder_path.glob("*.csv")):
+        if "_N" not in csv_path.name:
+            continue
+
+        time_value = time_from_filename(csv_path.name)
+        if time_value is not None:
+            files.append((time_value, csv_path))
+
+    return sorted(files, key=lambda item: item[0])
 
 
 # [7] Plot 3D wireframe surfaces from 2D slice grids
@@ -158,6 +229,29 @@ def should_mirror_bubble_half_domain(save_path):
     return "bubble_collapse" in path_text or "helium_bubble" in path_text
 
 
+def remove_bubble_collapse_auxiliary_plots(save_path, include_driver_outputs=False):
+    if save_path is None:
+        return
+
+    suffixes = [
+        "_raw_density_gradient",
+        "_same_material",
+        "_raw_interface",
+        "_interface_overlay",
+        "_material0_only",
+        "_material1_only",
+        "_alpha0_only",
+        "_alpha1_only",
+    ]
+
+    for suffix in suffixes:
+        remove_if_exists(save_path.with_name(f"{save_path.stem}{suffix}{save_path.suffix}"))
+
+    if include_driver_outputs:
+        for suffix in ["_field_maps", "_maps", "_maps_3d", "_3d"]:
+            remove_if_exists(save_path.with_name(f"{save_path.stem}{suffix}{save_path.suffix}"))
+
+
 def mirror_grid_across_y0(X, Y, field_grid):
     y_unique = Y[:, 0]
 
@@ -165,11 +259,193 @@ def mirror_grid_across_y0(X, Y, field_grid):
         return X, Y, field_grid
 
     x_unique = X[0, :]
-    y_full = np.concatenate((-y_unique[::-1], y_unique))
-    field_full = np.vstack((field_grid[::-1, :], field_grid))
+    mirror_rows = np.where(y_unique > 0.0)[0][::-1]
+    y_full = np.concatenate((-y_unique[mirror_rows], y_unique))
+    field_full = np.vstack((field_grid[mirror_rows, :], field_grid))
 
     X_full, Y_full = np.meshgrid(x_unique, y_full)
     return X_full, Y_full, field_full
+
+
+def fedkiw_bubble_reference_circle_display(X, Y, center=(175.0, 0.0), radius=25.0):
+    x_unique = X[0, :]
+    y_unique = Y[:, 0]
+    xlim = infer_domain_limits(x_unique)
+    ylim = infer_domain_limits(y_unique)
+
+    theta = np.linspace(0.0, 2.0 * np.pi, 720)
+    x = center[0] + radius * np.cos(theta)
+    y = center[1] + radius * np.sin(theta)
+
+    x = (x - xlim[0]) / (xlim[1] - xlim[0])
+    y = (y - ylim[0]) / (ylim[1] - ylim[0])
+
+    # The Fedkiw/Haas-Sturtevant presentation rotates the reflected half-domain
+    # 90 degrees clockwise. These are image-axis fractions after that rotation.
+    return y, 1.0 - x
+
+
+def suppress_current_interface_band(schlieren, phi_grid, dx, dy, band_cells=1.5):
+    if phi_grid is None:
+        return schlieren
+
+    band_width = band_cells * min(abs(dx), abs(dy))
+    band = np.abs(phi_grid) <= band_width
+
+    if not np.any(band):
+        return schlieren
+
+    outside = schlieren[~band]
+    if outside.size == 0:
+        return schlieren
+
+    lifted = schlieren.copy()
+    black_cutoff = float(np.percentile(outside, 18.0))
+    replacement = float(np.percentile(outside, 72.0))
+    bold_interface = band & (schlieren <= black_cutoff)
+    lifted[bold_interface] = np.maximum(lifted[bold_interface], replacement)
+
+    return lifted
+
+
+def same_material_density_gradient(field_grid, material_grid, dx, dy):
+    gx = np.zeros_like(field_grid)
+    gy = np.zeros_like(field_grid)
+
+    same_left = material_grid[:, 1:-1] == material_grid[:, :-2]
+    same_right = material_grid[:, 1:-1] == material_grid[:, 2:]
+    both_x = same_left & same_right
+    right_x = ~same_left & same_right
+    left_x = same_left & ~same_right
+
+    gx_mid = gx[:, 1:-1]
+    gx_mid[both_x] = (field_grid[:, 2:][both_x] - field_grid[:, :-2][both_x]) / (2.0 * dx)
+    gx_mid[right_x] = (field_grid[:, 2:][right_x] - field_grid[:, 1:-1][right_x]) / dx
+    gx_mid[left_x] = (field_grid[:, 1:-1][left_x] - field_grid[:, :-2][left_x]) / dx
+
+    if field_grid.shape[1] > 1:
+        same = material_grid[:, 0] == material_grid[:, 1]
+        gx_left = gx[:, 0]
+        gx_left[same] = (field_grid[:, 1][same] - field_grid[:, 0][same]) / dx
+        same = material_grid[:, -1] == material_grid[:, -2]
+        gx_right = gx[:, -1]
+        gx_right[same] = (field_grid[:, -1][same] - field_grid[:, -2][same]) / dx
+
+    same_down = material_grid[1:-1, :] == material_grid[:-2, :]
+    same_up = material_grid[1:-1, :] == material_grid[2:, :]
+    both_y = same_down & same_up
+    up_y = ~same_down & same_up
+    down_y = same_down & ~same_up
+
+    gy_mid = gy[1:-1, :]
+    gy_mid[both_y] = (field_grid[2:, :][both_y] - field_grid[:-2, :][both_y]) / (2.0 * dy)
+    gy_mid[up_y] = (field_grid[2:, :][up_y] - field_grid[1:-1, :][up_y]) / dy
+    gy_mid[down_y] = (field_grid[1:-1, :][down_y] - field_grid[:-2, :][down_y]) / dy
+
+    if field_grid.shape[0] > 1:
+        same = material_grid[0, :] == material_grid[1, :]
+        gy_bottom = gy[0, :]
+        gy_bottom[same] = (field_grid[1, :][same] - field_grid[0, :][same]) / dy
+        same = material_grid[-1, :] == material_grid[-2, :]
+        gy_top = gy[-1, :]
+        gy_top[same] = (field_grid[-1, :][same] - field_grid[-2, :][same]) / dy
+
+    return gx, gy
+
+
+def fedkiw_mock_schlieren(rho_grid, grad_mag):
+    rho_safe = np.maximum(rho_grid, 1.0e-30)
+    exponent = -20.0 * grad_mag / (1000.0 * np.sqrt(rho_safe))
+    return np.exp(np.clip(exponent, -745.0, 0.0))
+
+
+def is_dim_plot_path(save_path):
+    if save_path is None:
+        return False
+
+    path_text = str(save_path).lower()
+    return "/dim/" in path_text or "\\dim\\" in path_text or "dim_" in path_text
+
+
+def enhance_dim_schlieren_contrast(schlieren, save_path):
+    if not is_dim_plot_path(save_path):
+        return schlieren
+
+    return np.clip(schlieren, 0.0, 1.0) ** 3.0
+
+
+def rotate_bubble_display(field):
+    return np.flipud(np.rot90(field, k=3))
+
+
+def contour_level_is_present(field, level):
+    if field is None:
+        return False
+
+    finite = field[np.isfinite(field)]
+    if finite.size == 0:
+        return False
+
+    return float(np.min(finite)) <= level <= float(np.max(finite))
+
+
+def save_rotated_bubble_schlieren(
+    display,
+    X,
+    Y,
+    save_path,
+    draw_reference_circle=True,
+    contour_display=None,
+    contour_level=None,
+    contour_color="tab:red",
+    interpolation="bilinear"
+):
+    height, width = display.shape[:2]
+    aspect = height / max(width, 1)
+
+    fig, ax = plt.subplots(figsize=(4.0, 4.0 * aspect), constrained_layout=True)
+    ax.imshow(
+        display,
+        cmap="gray",
+        vmin=0.0,
+        vmax=1.0,
+        origin="lower",
+        interpolation=interpolation,
+    )
+
+    if contour_display is not None and contour_level is not None:
+        if contour_level_is_present(contour_display, contour_level):
+            ax.contour(
+                contour_display,
+                levels=[contour_level],
+                colors=contour_color,
+                linewidths=0.75,
+                origin="lower",
+            )
+
+    if draw_reference_circle:
+        cx, cy = fedkiw_bubble_reference_circle_display(X, Y)
+        ax.plot(
+            cx * (width - 1),
+            cy * (height - 1),
+            color="black",
+            linewidth=0.7,
+        )
+
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(1.0)
+        spine.set_color("black")
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300)
+        print(f"Saved Schlieren figure to {save_path}")
+        plt.close()
+    else:
+        plt.show()
 
 
 def select_highest_resolution_2d(xs, fields_list, velocities_list, labels):
@@ -370,6 +646,100 @@ def relative_transverse_absmax_by_x(x, y, field, reference, floor=1.0e-12):
     return x_unique, zero_roundoff_line(relative_absmax, atol=floor)
 
 
+def sorted_prefixed_fields(extras, prefix):
+    return sorted(
+        [name for name in extras if name.startswith(prefix)],
+        key=lambda name: (len(name), name)
+    )
+
+
+def material_grid_from_extras(x, y, extras):
+    if "mat" in extras:
+        _, _, material_grid = build_grid(x, y, extras["mat"])
+        return material_grid
+
+    alpha_names = sorted_prefixed_fields(extras, "alpha")
+    if not alpha_names:
+        return None
+
+    alpha_grids = []
+    for name in alpha_names:
+        _, _, alpha_grid = build_grid(x, y, extras[name])
+        alpha_grids.append(alpha_grid)
+
+    return np.argmax(np.stack(alpha_grids, axis=0), axis=0)
+
+
+def bubble_interface_grid_from_extras(x, y, extras):
+    phi_names = sorted_prefixed_fields(extras, "phi")
+    if phi_names:
+        _, _, phi_grid = build_grid(x, y, extras[phi_names[0]])
+        return phi_grid, 0.0, phi_names[0]
+
+    alpha_names = sorted_prefixed_fields(extras, "alpha")
+    if len(alpha_names) > 1:
+        _, _, alpha_grid = build_grid(x, y, extras[alpha_names[1]])
+        return alpha_grid, 0.5, alpha_names[1]
+
+    if "mat" in extras:
+        _, _, material_grid = build_grid(x, y, extras["mat"])
+        return material_grid.astype(float), 0.5, "mat"
+
+    return None, None, None
+
+
+def material_indicator_grids_from_extras(x, y, extras):
+    indicators = []
+
+    if "mat" in extras:
+        _, _, material_grid = build_grid(x, y, extras["mat"])
+        material_ids = [
+            int(value)
+            for value in sorted(np.unique(material_grid[np.isfinite(material_grid)]))
+        ]
+        for material_id in material_ids:
+            indicators.append((
+                f"material{material_id}",
+                (material_grid == material_id).astype(float),
+                0.5,
+            ))
+        return indicators
+
+    alpha_names = sorted_prefixed_fields(extras, "alpha")
+    for name in alpha_names:
+        _, _, alpha_grid = build_grid(x, y, extras[name])
+        indicators.append((name, alpha_grid, 0.5))
+
+    return indicators
+
+
+def plot_exact_reference_on_axes(axes, field_keys, exact_fields):
+    if not exact_fields:
+        return
+
+    for ax, field_key in zip(axes, field_keys):
+        if field_key in exact_fields:
+            exact_x, exact_y = exact_fields[field_key]
+            plot_profile(ax, exact_x, exact_y, "Exact", index=0)
+
+
+def exact_field_for_plot(field_key, exact_fields):
+    if not exact_fields:
+        return None
+
+    aliases = {
+        "u_radial": ("u_radial", "u0", "u"),
+        "u0": ("u0", "u"),
+        "e": ("e",),
+    }
+
+    for exact_key in aliases.get(field_key, (field_key,)):
+        if exact_key in exact_fields:
+            return exact_fields[exact_key]
+
+    return None
+
+
 def plot_2d_solution_slice(
     xs,
     fields_list,
@@ -377,7 +747,9 @@ def plot_2d_solution_slice(
     labels,
     axis="x",
     slice_value=None,
-    save_path=None
+    save_path=None,
+    show_titles=True,
+    exact_fields=None,
 ):
     fig, axes = plt.subplots(2, 3, figsize=(16, 8), sharex=True)
     axis_label = axis
@@ -414,8 +786,13 @@ def plot_2d_solution_slice(
     slice_xlabel = r"$x$" if axis == "x" else r"$y$"
     plot_axes = [axes[0, 0], axes[0, 1], axes[0, 2], axes[1, 0], axes[1, 1]]
 
+    if axis == "x":
+        plot_exact_reference_on_axes(plot_axes, field_keys, exact_fields)
+
     for ax, field_key in zip(plot_axes, field_keys):
         configure_profile_axis(ax, field_key, x_label=slice_xlabel)
+        if not show_titles:
+            ax.set_title("")
 
     axes[1, 2].axis("off")
 
@@ -450,7 +827,8 @@ def plot_2d_y_deviation_slice(
     velocities_list,
     labels,
     slice_value=None,
-    save_path=None
+    save_path=None,
+    show_titles=True,
 ):
     fig, axes = plt.subplots(2, 3, figsize=(16, 8), sharex=True)
 
@@ -498,7 +876,7 @@ def plot_2d_y_deviation_slice(
 
     for ax, title_text, ylabel in zip(plot_axes, titles, ylabels):
         configure_profile_axis(ax, None, x_label=r"$y$")
-        ax.set_title(title_text)
+        ax.set_title(title_text if show_titles else "")
         ax.set_ylabel(ylabel)
 
     axes[1, 2].axis("off")
@@ -520,7 +898,16 @@ def plot_2d_y_deviation_slice(
         plt.show()
 
 
-def plot_2d_transverse_diagnostics(xs, fields_list, velocities_list, labels, slice_value=None, save_path=None):
+def plot_2d_transverse_diagnostics(
+    xs,
+    fields_list,
+    velocities_list,
+    labels,
+    slice_value=None,
+    save_path=None,
+    show_titles=True,
+    exact_fields=None,
+):
     fig, axes = plt.subplots(2, 4, figsize=(18, 8), sharex="row")
 
     if slice_value is None:
@@ -554,13 +941,17 @@ def plot_2d_transverse_diagnostics(xs, fields_list, velocities_list, labels, sli
         plot_profile(axes[1, 3], x_tr, u1_abs, label, index=index)
 
     top_keys = ["rho", "u0", "p", "e"]
+    plot_exact_reference_on_axes(axes[0, :], top_keys, exact_fields)
+
     for ax, field_key in zip(axes[0, :], top_keys):
         configure_profile_axis(ax, field_key, x_label=r"$x$")
+        if not show_titles:
+            ax.set_title("")
 
-    axes[1, 0].set_title("Relative density transverse range")
-    axes[1, 1].set_title("Relative u0 transverse range")
-    axes[1, 2].set_title("Relative pressure transverse range")
-    axes[1, 3].set_title("max |u1| / max |u0|")
+    axes[1, 0].set_title("Relative density transverse range" if show_titles else "")
+    axes[1, 1].set_title("Relative u0 transverse range" if show_titles else "")
+    axes[1, 2].set_title("Relative pressure transverse range" if show_titles else "")
+    axes[1, 3].set_title("max |u1| / max |u0|" if show_titles else "")
 
     for ax in axes[1, :]:
         configure_profile_axis(ax, None, x_label=r"$x$")
@@ -580,6 +971,61 @@ def plot_2d_transverse_diagnostics(xs, fields_list, velocities_list, labels, sli
 
 
 def plot_2d_diagnostics(xs, fields_list, labels, save_path=None):
+    plot_2d_diagnostics_maps(xs, fields_list, labels, save_path=save_path)
+
+
+def plot_radial_diagnostics(
+    xs,
+    fields_list,
+    velocities_list,
+    labels,
+    save_path=None,
+    exact_fields=None,
+):
+    fig, axes = plt.subplots(2, 2, figsize=(7.2, 5.2))
+    axes = axes.flatten()
+    fourth_key = "e"
+
+    plotted_items = sort_by_resolution(list(zip(xs, fields_list, velocities_list, labels)))
+
+    for index, (coords, fields, velocity, label) in enumerate(plotted_items):
+        rho, p, e = fields
+        u_radial = compute_radial_velocity(coords, velocity)
+
+        radial_fields = [
+            ("rho", rho),
+            ("u_radial", u_radial),
+            ("p", p),
+            (fourth_key, e),
+        ]
+
+        for ax, (_, field) in zip(axes, radial_fields):
+            r, radial_avg = compute_radial_profile(coords, field)
+            plot_profile(ax, r, radial_avg, label, index=index)
+
+    field_keys = ["rho", "u_radial", "p", fourth_key]
+
+    for ax, field_key in zip(axes, field_keys):
+        exact_field = exact_field_for_plot(field_key, exact_fields)
+        if exact_field is not None:
+            exact_x, exact_y = exact_field
+            plot_profile(ax, exact_x, exact_y, "Exact", index=0)
+
+    for ax, field_key in zip(axes, field_keys):
+        configure_profile_axis(ax, field_key, x_label=r"$r$", show_title=False)
+        ax.set_xlim(0.0, 1.0)
+
+    plt.tight_layout()
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Saved radial profile figure to {save_path}")
+        plt.close()
+    else:
+        plt.show()
+
+
+def plot_2d_diagnostics_maps(xs, fields_list, labels, save_path=None):
     coords, fields, _, _ = select_highest_resolution_2d(
         xs,
         fields_list,
@@ -595,9 +1041,9 @@ def plot_2d_diagnostics(xs, fields_list, labels, save_path=None):
     xmin, xmax = x.min(), x.max()
     ymin, ymax = y.min(), y.max()
 
-    fig = plt.figure(figsize=(12, 10))
+    fig = plt.figure(figsize=(12, 5), constrained_layout=True)
 
-    ax1 = fig.add_subplot(2, 2, 1)
+    ax1 = fig.add_subplot(1, 2, 1)
     im1 = ax1.pcolormesh(X, Y, rho_grid, shading="auto")
     fig.colorbar(im1, ax=ax1)
     ax1.set_title("Density (2D)")
@@ -606,7 +1052,7 @@ def plot_2d_diagnostics(xs, fields_list, labels, save_path=None):
     ax1.set_xlim(xmin, xmax)
     ax1.set_ylim(ymin, ymax)
 
-    ax2 = fig.add_subplot(2, 2, 2)
+    ax2 = fig.add_subplot(1, 2, 2)
     im2 = ax2.pcolormesh(X, Y, p_grid, shading="auto")
     fig.colorbar(im2, ax=ax2)
     ax2.set_title("Pressure (2D)")
@@ -615,39 +1061,9 @@ def plot_2d_diagnostics(xs, fields_list, labels, save_path=None):
     ax2.set_xlim(xmin, xmax)
     ax2.set_ylim(ymin, ymax)
 
-    ax3 = fig.add_subplot(2, 2, 3)
-
-    for coords, fields, label in zip(xs, fields_list, labels):
-        x_i, y_i = coords
-        rho_i, p_i = fields[:2]
-        r, rho_avg = compute_radial_profile([x_i, y_i], rho_i)
-        ax3.plot(r, rho_avg, label=label)
-
-    ax3.set_title("Radial density")
-    ax3.set_xlabel("r")
-    ax3.set_ylabel("rho")
-    ax3.grid(True)
-    ax3.legend()
-
-    ax4 = fig.add_subplot(2, 2, 4)
-
-    for coords, fields, label in zip(xs, fields_list, labels):
-        x_i, y_i = coords
-        rho_i, p_i = fields[:2]
-        r, p_avg = compute_radial_profile([x_i, y_i], p_i)
-        ax4.plot(r, p_avg, label=label)
-
-    ax4.set_title("Radial pressure")
-    ax4.set_xlabel("r")
-    ax4.set_ylabel("p")
-    ax4.grid(True)
-    ax4.legend()
-
-    plt.tight_layout()
-
     if save_path is not None:
-        plt.savefig(save_path, dpi=300)
-        print(f"Saved figure to {save_path}")
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Saved map figure to {save_path}")
         plt.close()
     else:
         plt.show()
@@ -704,7 +1120,13 @@ def plot_2d_field_maps(xs, fields_list, velocities_list, labels, save_path=None)
         plt.show()
 
 
-def plot_2d_schlieren(xs, fields_list, labels, save_path=None, extras_list=None):
+def plot_2d_schlieren(
+    xs,
+    fields_list,
+    labels,
+    save_path=None,
+    extras_list=None,
+):
     if extras_list is None:
         extras_list = [{} for _ in xs]
 
@@ -715,18 +1137,15 @@ def plot_2d_schlieren(xs, fields_list, labels, save_path=None, extras_list=None)
     rho = fields[0]
 
     X, Y, rho_grid = build_grid(x, y, rho)
-    phi_grid = None
-    if "phi0" in extras:
-        _, _, phi_grid = build_grid(x, y, extras["phi0"])
 
     is_bubble_collapse = should_mirror_bubble_half_domain(save_path)
 
+    material_grid = material_grid_from_extras(x, y, extras) if is_bubble_collapse else None
+
     if is_bubble_collapse:
-        X_original = X
-        Y_original = Y
+        if material_grid is not None:
+            _, _, material_grid = mirror_grid_across_y0(X, Y, material_grid)
         X, Y, rho_grid = mirror_grid_across_y0(X, Y, rho_grid)
-        if phi_grid is not None:
-            _, _, phi_grid = mirror_grid_across_y0(X_original, Y_original, phi_grid)
 
     x_unique = X[0, :]
     y_unique = Y[:, 0]
@@ -747,8 +1166,8 @@ def plot_2d_schlieren(xs, fields_list, labels, save_path=None, extras_list=None)
     grad_mag = np.sqrt(grad_x * grad_x + grad_y * grad_y)
 
     if is_bubble_collapse:
-        rho_floor = np.maximum(rho_grid, 1.0e-12)
-        schlieren = np.exp(-20.0 * grad_mag / (1000.0 * np.sqrt(rho_floor)))
+        schlieren = fedkiw_mock_schlieren(rho_grid, grad_mag)
+        schlieren = enhance_dim_schlieren_contrast(schlieren, save_path)
     else:
         scale = max(float(np.nanmax(grad_mag)), 1.0e-30)
         schlieren = np.exp(-10.0 * grad_mag / scale)
@@ -756,38 +1175,11 @@ def plot_2d_schlieren(xs, fields_list, labels, save_path=None, extras_list=None)
     if is_bubble_collapse:
         # The reference helium-bubble figure reflects the top-half computation
         # and then rotates the image 90 degrees clockwise for presentation.
-        display = np.flipud(np.rot90(schlieren, k=3))
-        phi_display = None
-        if phi_grid is not None:
-            phi_display = np.flipud(np.rot90(phi_grid, k=3))
-
-        height, width = display.shape
-        aspect = height / max(width, 1)
-
-        fig, ax = plt.subplots(figsize=(4.0, 4.0 * aspect), constrained_layout=True)
-        ax.imshow(display, cmap="gray", vmin=0.0, vmax=1.0, origin="lower", interpolation="nearest")
-        if phi_display is not None and np.nanmin(phi_display) <= 0.0 <= np.nanmax(phi_display):
-            ax.contour(
-                phi_display,
-                levels=[0.0],
-                colors="black",
-                linewidths=0.7,
-                origin="lower",
-            )
-        ax.set_xticks([])
-        ax.set_yticks([])
-
-        for spine in ax.spines.values():
-            spine.set_visible(True)
-            spine.set_linewidth(1.0)
-            spine.set_color("black")
-
+        display = rotate_bubble_display(schlieren)
         if save_path is not None:
-            plt.savefig(save_path, dpi=300)
-            print(f"Saved Schlieren figure to {save_path}")
-            plt.close()
-        else:
-            plt.show()
+            remove_bubble_collapse_auxiliary_plots(save_path)
+
+        save_rotated_bubble_schlieren(display, X, Y, save_path, draw_reference_circle=True)
         return
 
     fig, ax = plt.subplots(figsize=(10, 5), constrained_layout=True)
@@ -806,80 +1198,174 @@ def plot_2d_schlieren(xs, fields_list, labels, save_path=None, extras_list=None)
         plt.show()
 
 
+def load_pressure_contour_frame(csv_path):
+    df = pd.read_csv(csv_path)
+    required = {"x0", "x1", "p"}
+
+    if not required.issubset(df.columns):
+        raise ValueError(f"{csv_path} must contain x0,x1,p columns")
+
+    X, Y, pressure = build_grid(
+        df["x0"].to_numpy(),
+        df["x1"].to_numpy(),
+        df["p"].to_numpy(),
+    )
+
+    phi_grid = None
+    if "phi0" in df.columns:
+        _, _, phi_grid = build_grid(
+            df["x0"].to_numpy(),
+            df["x1"].to_numpy(),
+            df["phi0"].to_numpy(),
+        )
+
+    return X, Y, pressure, phi_grid
+
+
+def pressure_contour_levels(frames, count=14):
+    values = np.concatenate([
+        np.asarray(frame[3], dtype=float).ravel()
+        for frame in frames
+    ])
+    values = values[np.isfinite(values) & (values > 0.0)]
+
+    if values.size == 0:
+        return None
+
+    low = max(float(np.percentile(values, 5.0)), 1.0e-30)
+    high = max(float(np.percentile(values, 99.5)), low * 1.001)
+
+    return np.linspace(np.log10(low), np.log10(high), count)
+
+
+def make_pressure_contour_axes(fig, nframes):
+    if nframes == 3:
+        axes = [
+            fig.add_subplot(2, 4, (1, 2)),
+            fig.add_subplot(2, 4, (3, 4)),
+            fig.add_subplot(2, 4, (6, 7)),
+        ]
+        return axes
+
+    rows = int(np.ceil(nframes / 2))
+    return [fig.add_subplot(rows, 2, i + 1) for i in range(nframes)]
+
+
+def plot_pressure_contours_from_times(folder_path, save_path=None):
+    time_files = time_tagged_csv_files(folder_path)
+
+    if not time_files:
+        raise FileNotFoundError(f"No time-tagged CSV files found in {folder_path}")
+
+    frames = [
+        (time_value, *load_pressure_contour_frame(csv_path))
+        for time_value, csv_path in time_files
+    ]
+    contour_levels = pressure_contour_levels(frames)
+
+    fig = plt.figure(figsize=(8.0, 9.2))
+    axes = make_pressure_contour_axes(fig, len(frames))
+    letters = "abcdefghijklmnopqrstuvwxyz"
+
+    for index, (ax, frame) in enumerate(zip(axes, frames)):
+        time_value, X, Y, pressure, phi_grid = frame
+        log_pressure = np.log10(np.maximum(pressure, 1.0e-30))
+
+        ax.contour(
+            X,
+            Y,
+            log_pressure,
+            levels=contour_levels,
+            colors="0.25",
+            linewidths=0.45,
+        )
+
+        if phi_grid is not None and np.nanmin(phi_grid) <= 0.0 <= np.nanmax(phi_grid):
+            ax.contour(
+                X,
+                Y,
+                phi_grid,
+                levels=[0.0],
+                colors="black",
+                linewidths=1.4,
+            )
+            ax.text(2.0, 3.15, "Interface", ha="center", va="bottom", fontsize=8, fontweight="bold")
+            ax.annotate("", xy=(1.4, 2.3), xytext=(1.9, 3.08), arrowprops={"arrowstyle": "-", "lw": 0.8})
+            ax.annotate("", xy=(2.6, 2.3), xytext=(2.1, 3.08), arrowprops={"arrowstyle": "-", "lw": 0.8})
+
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_xlim(float(np.nanmin(X)), float(np.nanmax(X)))
+        ax.set_ylim(float(np.nanmin(Y)), float(np.nanmax(Y)))
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_title(
+            rf"({letters[index]}) {format_time_label(time_value)}",
+            y=-0.18,
+            fontsize=11,
+        )
+
+        for spine in ax.spines.values():
+            spine.set_linewidth(1.1)
+
+    fig.text(0.5, 0.025, "Problem 6: Pressure contours", ha="center", va="bottom", fontsize=12)
+    fig.subplots_adjust(left=0.06, right=0.94, top=0.97, bottom=0.10, hspace=0.38, wspace=0.05)
+
+    if save_path is None:
+        save_path = folder_path / f"{folder_path.name}_pressure_contours.png"
+
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    print(f"Saved pressure contour figure to {save_path}")
+    plt.close(fig)
+
+
+def plot_schlieren_sequence_from_times(
+    folder_path,
+    data_root,
+    save_path=None,
+):
+    time_files = time_tagged_csv_files(folder_path)
+
+    if not time_files:
+        raise FileNotFoundError(f"No time-tagged CSV files found in {folder_path}")
+
+    output_stem = save_path.stem if save_path is not None else folder_path.name
+    for time_value, csv_path in time_files:
+        relative_csv = csv_path.relative_to(data_root)
+        time_tag = re.search(r"_(t[0-9peEm+\-]+)_N", csv_path.name)
+        if time_tag is not None:
+            tag = time_tag.group(1)
+        else:
+            tag = f"t{time_value:.6g}".replace(".", "p")
+
+        frame_path = folder_path / f"{output_stem}_{tag}.png"
+        plot_multiple_cpp_solutions(
+            [str(relative_csv)],
+            save_path=frame_path,
+            force_schlieren=True,
+            diagnostics=False,
+        )
+
+
 # [9] Plot 3D diagnostics
-def plot_3d_diagnostics(xs, fields_list, labels, save_path=None):
-    x, y, z = xs[0]
-    rho, p = fields_list[0][:2]
-
-    rho_slice_coords, rho_slice, slice_value = extract_midplane_slice([x, y, z], rho, axis=2)
-    p_slice_coords, p_slice, _ = extract_midplane_slice([x, y, z], p, axis=2)
-
-    x2d, y2d = rho_slice_coords
-
-    X, Y, rho_grid = build_grid(x2d, y2d, rho_slice)
-    _, _, p_grid = build_grid(x2d, y2d, p_slice)
-
-    xmin, xmax = x2d.min(), x2d.max()
-    ymin, ymax = y2d.min(), y2d.max()
-
-    fig = plt.figure(figsize=(12, 10))
-
-    ax1 = fig.add_subplot(2, 2, 1)
-    im1 = ax1.pcolormesh(X, Y, rho_grid, shading="auto")
-    fig.colorbar(im1, ax=ax1)
-    ax1.set_title(f"Density slice (x-y plane, z={slice_value:.3f})")
-    ax1.set_xlabel("x")
-    ax1.set_ylabel("y")
-    ax1.set_xlim(xmin, xmax)
-    ax1.set_ylim(ymin, ymax)
-
-    ax2 = fig.add_subplot(2, 2, 2)
-    im2 = ax2.pcolormesh(X, Y, p_grid, shading="auto")
-    fig.colorbar(im2, ax=ax2)
-    ax2.set_title(f"Pressure slice (x-y plane, z={slice_value:.3f})")
-    ax2.set_xlabel("x")
-    ax2.set_ylabel("y")
-    ax2.set_xlim(xmin, xmax)
-    ax2.set_ylim(ymin, ymax)
-
-    ax3 = fig.add_subplot(2, 2, 3)
-
-    for coords, fields, label in zip(xs, fields_list, labels):
-        x_i, y_i, z_i = coords
-        rho_i, p_i = fields[:2]
-        r, rho_avg = compute_radial_profile([x_i, y_i, z_i], rho_i)
-        ax3.plot(r, rho_avg, label=label)
-
-    ax3.set_title("Radial density")
-    ax3.set_xlabel("r")
-    ax3.set_ylabel("rho")
-    ax3.grid(True)
-    ax3.legend()
-
-    ax4 = fig.add_subplot(2, 2, 4)
-
-    for coords, fields, label in zip(xs, fields_list, labels):
-        x_i, y_i, z_i = coords
-        rho_i, p_i = fields[:2]
-        r, p_avg = compute_radial_profile([x_i, y_i, z_i], p_i)
-        ax4.plot(r, p_avg, label=label)
-
-    ax4.set_title("Radial pressure")
-    ax4.set_xlabel("r")
-    ax4.set_ylabel("p")
-    ax4.grid(True)
-    ax4.legend()
-
-
+def plot_3d_diagnostics(
+    xs,
+    fields_list,
+    velocities_list,
+    labels,
+    save_path=None,
+    exact_fields=None,
+):
+    plot_radial_diagnostics(
+        xs,
+        fields_list,
+        velocities_list,
+        labels,
+        save_path=save_path,
+        exact_fields=exact_fields,
+    )
     if save_path is not None:
-        plt.savefig(save_path, dpi=300)
-        print(f"Saved figure to {save_path}")
-        plt.close()
-    else:
-        plt.show()
-
-    wireframe_path = (save_path.parent / f"{save_path.stem}_3d.png") if save_path else None
-    plot_wireframe_surfaces(X, Y, rho_grid, p_grid, save_path=wireframe_path)
+        remove_if_exists(save_path.parent / f"{save_path.stem}_midplane_maps.png")
+        remove_if_exists(save_path.parent / f"{save_path.stem}_3d.png")
 
 
 # [10] Plot multiple multidimensional C++ outputs
@@ -887,7 +1373,9 @@ def plot_multiple_cpp_solutions(
     filenames,
     title="Multidimensional Euler Solution",
     save_path=None,
-    force_schlieren=False
+    force_schlieren=False,
+    diagnostics=True,
+    exact_root=Path("data/exact"),
 ):
     coords_list = []
     fields_list = []
@@ -910,51 +1398,86 @@ def plot_multiple_cpp_solutions(
         raise ValueError("All files passed to plot_multid.py must have the same dimension")
 
     dim = dims[0]
+    exact_context = " ".join([str(save_path) if save_path else "", title, *map(str, filenames)])
+    exact_fields = load_optional_exact_reference_for_context(
+        exact_root,
+        exact_context,
+        context=title,
+    )
+
+    if exact_fields and "explosion" in exact_context.lower():
+        exact_fields = dict(exact_fields)
+        if "e" not in exact_fields and "entropy" in exact_fields:
+            exact_fields["e"] = exact_fields["entropy"]
 
     if dim == 2:
         xs = [(coords[0], coords[1]) for coords in coords_list]
-        plot_2d_diagnostics(xs, fields_list, labels, save_path=save_path)
+        is_bubble_collapse_output = should_mirror_bubble_half_domain(save_path)
+        suppress_diagnostic_titles = (
+            save_path is not None and
+            "explosion" in str(save_path).lower()
+        )
+
+        if is_bubble_collapse_output:
+            remove_if_exists(save_path)
+        else:
+            plot_radial_diagnostics(
+                xs,
+                fields_list,
+                velocities_list,
+                labels,
+                save_path=save_path,
+                exact_fields=exact_fields,
+            )
 
         x_slice_path = (save_path.parent / f"{save_path.stem}_x_slices.png") if save_path else None
         y_slice_path = (save_path.parent / f"{save_path.stem}_y_slices.png") if save_path else None
         old_y_deviation_path = (save_path.parent / f"{save_path.stem}_y_deviation_slices.png") if save_path else None
         transverse_path = (save_path.parent / f"{save_path.stem}_transverse.png") if save_path else None
         field_map_path = (save_path.parent / f"{save_path.stem}_field_maps.png") if save_path else None
+        map_diagnostic_path = (save_path.parent / f"{save_path.stem}_maps.png") if save_path else None
+        map_wireframe_path = (save_path.parent / f"{save_path.stem}_maps_3d.png") if save_path else None
+        old_wireframe_path = (save_path.parent / f"{save_path.stem}_3d.png") if save_path else None
         schlieren_path = (save_path.parent / f"{save_path.stem}_schlieren.png") if save_path else None
         legacy_slice_path = (save_path.parent / f"{save_path.stem}_slices.png") if save_path else None
 
-        plot_2d_solution_slice(
-            xs,
-            fields_list,
-            velocities_list,
-            labels,
-            axis="x",
-            save_path=x_slice_path
-        )
-        plot_2d_y_deviation_slice(
-            xs,
-            fields_list,
-            velocities_list,
-            labels,
-            save_path=y_slice_path
-        )
+        if diagnostics:
+            plot_2d_solution_slice(
+                xs,
+                fields_list,
+                velocities_list,
+                labels,
+                axis="x",
+                save_path=x_slice_path,
+                show_titles=not suppress_diagnostic_titles,
+                exact_fields=exact_fields,
+            )
+            plot_2d_y_deviation_slice(
+                xs,
+                fields_list,
+                velocities_list,
+                labels,
+                save_path=y_slice_path,
+                show_titles=not suppress_diagnostic_titles,
+            )
+
         remove_if_exists(old_y_deviation_path)
         remove_if_exists(legacy_slice_path)
+        remove_if_exists(field_map_path)
+        remove_if_exists(map_diagnostic_path)
+        remove_if_exists(map_wireframe_path)
+        remove_if_exists(old_wireframe_path)
 
-        plot_2d_transverse_diagnostics(
-            xs,
-            fields_list,
-            velocities_list,
-            labels,
-            save_path=transverse_path
-        )
-        plot_2d_field_maps(
-            xs,
-            fields_list,
-            velocities_list,
-            labels,
-            save_path=field_map_path
-        )
+        if diagnostics:
+            plot_2d_transverse_diagnostics(
+                xs,
+                fields_list,
+                velocities_list,
+                labels,
+                save_path=transverse_path,
+                show_titles=not suppress_diagnostic_titles,
+                exact_fields=exact_fields,
+            )
 
         if should_make_schlieren(save_path, force_schlieren):
             plot_2d_schlieren(
@@ -962,7 +1485,7 @@ def plot_multiple_cpp_solutions(
                 fields_list,
                 labels,
                 save_path=schlieren_path,
-                extras_list=extras_list
+                extras_list=extras_list,
             )
         else:
             remove_if_exists(schlieren_path)
@@ -970,7 +1493,14 @@ def plot_multiple_cpp_solutions(
 
     if dim == 3:
         xs = [(coords[0], coords[1], coords[2]) for coords in coords_list]
-        plot_3d_diagnostics(xs, fields_list, labels, save_path=save_path)
+        plot_3d_diagnostics(
+            xs,
+            fields_list,
+            velocities_list,
+            labels,
+            save_path=save_path,
+            exact_fields=exact_fields,
+        )
         return
 
     raise ValueError(f"Unsupported dimension: {dim}")
@@ -982,17 +1512,22 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 2:
         print("Usage:")
-        print("python src/graphing/plot_multid.py [--schlieren] file.csv")
-        print("python src/graphing/plot_multid.py [--schlieren] directory_name")
+        print("python src/graphing/plot_multid.py [--schlieren] [--pressure-contours] file.csv")
+        print("python src/graphing/plot_multid.py [--schlieren] [--pressure-contours] directory_name")
         print("python src/graphing/plot_multid.py [--schlieren] file1.csv file2.csv")
         raise SystemExit(1)
 
     force_schlieren = False
+    pressure_contours = False
     args = []
 
     for arg in sys.argv[1:]:
         if arg == "--schlieren":
             force_schlieren = True
+        elif arg == "--paper-schlieren":
+            force_schlieren = True
+        elif arg == "--pressure-contours":
+            pressure_contours = True
         else:
             args.append(arg)
 
@@ -1005,6 +1540,11 @@ if __name__ == "__main__":
         path_arg = data_root / args[0]
 
         if path_arg.is_dir():
+            if pressure_contours:
+                save_path = path_arg / f"{path_arg.name}_pressure_contours.png"
+                plot_pressure_contours_from_times(path_arg, save_path=save_path)
+                raise SystemExit(0)
+
             csv_files = sorted([f.name for f in path_arg.glob("*.csv") if "_N" in f.name])
 
             if not csv_files:
@@ -1015,16 +1555,24 @@ if __name__ == "__main__":
             output_name = build_output_name(args[0])
             save_path = path_arg / f"{output_name}.png"
 
+            if force_schlieren and time_tagged_csv_files(path_arg):
+                plot_schlieren_sequence_from_times(
+                    path_arg,
+                    data_root,
+                    save_path=save_path,
+                )
+                raise SystemExit(0)
+
             plot_multiple_cpp_solutions(
                 filenames,
                 title=output_name,
                 save_path=save_path,
-                force_schlieren=force_schlieren
+                force_schlieren=force_schlieren,
             )
         else:
             plot_multiple_cpp_solutions(
                 [args[0]],
-                force_schlieren=force_schlieren
+                force_schlieren=force_schlieren,
             )
 
     else:

@@ -87,6 +87,18 @@ if dimension_enabled 2; then
         fi
     done
 
+    if compgen -G "data/csv/dim/MM_1D_validation/dim_FedkiwA/*.csv" > /dev/null; then
+        echo "[DIM 2D] Writing 1D vs 2D centerline validation figures"
+        python src/graphing/plot_gfm_dim_2d.py \
+            --methods dim \
+            --overlay-n 400 \
+            --output-dir data/plots/2d_rGFM_Allaire5eq_validation || {
+                echo "2D reduction validation plotting failed"
+            }
+    else
+        echo "[DIM 2D] Skipping 1D vs 2D centerline validation; DIM 1D CSVs are missing"
+    fi
+
     echo "[DIM 2D] Postprocessing complete"
     echo "-------------------------"
 fi

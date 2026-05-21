@@ -31,6 +31,16 @@ inline double safe_div(double num, double denom, double tol = 1e-10
     return num / safe_denom(denom, tol);
 }
 
+// [2.1] Roundoff-scale tolerance for geometry/level-set comparisons
+inline double geometry_tolerance(
+    double length_scale,
+    double rel_tol = 1e-10,
+    double abs_tol = 1e-12
+)
+{
+    return std::max(abs_tol, rel_tol * std::max(std::abs(length_scale), abs_tol));
+}
+
 // [3] Ensures the value being returned is a finite number
 inline double require_finite(double x, const std::string& msg)
 {

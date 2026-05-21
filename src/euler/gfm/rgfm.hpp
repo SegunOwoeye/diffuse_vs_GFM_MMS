@@ -521,13 +521,21 @@ inline void rgfm_extrapolate_primitive_field(
                 continue;
             }
 
-            field.rho[id] = rho_sum / weight_sum;
-            field.p[id] = p_sum / weight_sum;
-            field.normal_velocity[id] = un_sum / weight_sum;
-            field.tangential_velocity[id] = ut_sum / weight_sum;
+            field.rho[id] = require_positive(
+                safe_div(rho_sum, weight_sum, 1e-14),
+                "rgfm_extrapolate_primitive_field: rho",
+                1e-12
+            );
+            field.p[id] = require_positive(
+                safe_div(p_sum, weight_sum, 1e-14),
+                "rgfm_extrapolate_primitive_field: pressure",
+                1e-12
+            );
+            field.normal_velocity[id] = safe_div(un_sum, weight_sum, 1e-14);
+            field.tangential_velocity[id] = safe_div(ut_sum, weight_sum, 1e-14);
 
             for (int d = 0; d < DIM; ++d) {
-                field.vel[id][d] = vel_sum[d] / weight_sum;
+                field.vel[id][d] = safe_div(vel_sum[d], weight_sum, 1e-14);
             }
 
             field.assigned[id] = 1;
@@ -586,13 +594,22 @@ inline void rgfm_extrapolate_primitive_field(
                 continue;
             }
 
-            field.rho[id] = rho_sum / static_cast<double>(count);
-            field.p[id] = p_sum / static_cast<double>(count);
-            field.normal_velocity[id] = un_sum / static_cast<double>(count);
-            field.tangential_velocity[id] = ut_sum / static_cast<double>(count);
+            const double denom = static_cast<double>(count);
+            field.rho[id] = require_positive(
+                safe_div(rho_sum, denom, 1e-14),
+                "rgfm_extrapolate_primitive_field: fallback rho",
+                1e-12
+            );
+            field.p[id] = require_positive(
+                safe_div(p_sum, denom, 1e-14),
+                "rgfm_extrapolate_primitive_field: fallback pressure",
+                1e-12
+            );
+            field.normal_velocity[id] = safe_div(un_sum, denom, 1e-14);
+            field.tangential_velocity[id] = safe_div(ut_sum, denom, 1e-14);
 
             for (int d = 0; d < DIM; ++d) {
-                field.vel[id][d] = vel_sum[d] / static_cast<double>(count);
+                field.vel[id][d] = safe_div(vel_sum[d], denom, 1e-14);
             }
 
             field.assigned[id] = 1;
@@ -787,6 +804,40 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
                 ctx.material_params[pos_mat]
             );
 
+            if constexpr (DIM == 1) {
+                const int direction_to_pos = (pos_id > neg_id) ? 1 : -1;
+
+                for (int m = 0; m < 4; ++m) {
+                    const int id = neg_id + m * direction_to_pos;
+                    if (id < 0 || id >= Ntot) {
+                        continue;
+                    }
+
+                    rgfm_store_primitive<DIM>(
+                        material_fields[neg_mat],
+                        id,
+                        P_neg,
+                        true
+                    );
+                    material_interface_score[neg_mat][id] = 0.0;
+                }
+
+                for (int m = 0; m < 4; ++m) {
+                    const int id = pos_id - m * direction_to_pos;
+                    if (id < 0 || id >= Ntot) {
+                        continue;
+                    }
+
+                    rgfm_store_primitive<DIM>(
+                        material_fields[pos_mat],
+                        id,
+                        P_pos,
+                        true
+                    );
+                    material_interface_score[pos_mat][id] = 0.0;
+                }
+            }
+
             if (score_neg < material_interface_score[neg_mat][neg_id]) {
                 rgfm_store_primitive<DIM>(
                     material_fields[neg_mat],
@@ -883,8 +934,6 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
 
     return data;
 }
-
-
 
 
 

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "src/euler/eos_params.hpp"
@@ -43,6 +44,7 @@ struct SolverContext {
     bool advect_level_set = true;
     bool reassign_material_from_phi = true;
     bool use_axis_normals_in_1d = true;
+    std::string level_set_advection = "normal_speed";
 
     // [1.5] Physical boundary conditions
     std::array<BoundaryConditionType, DIM> bc_lo{};
@@ -111,6 +113,11 @@ struct SolverContext {
 
         if (reinit_enabled && reinit_frequency <= 0) {
             throw std::runtime_error("SolverContext: reinit_frequency must be positive");
+        }
+
+        if (level_set_advection != "normal_speed" &&
+            level_set_advection != "flow") {
+            throw std::runtime_error("SolverContext: invalid level_set_advection");
         }
 
         if (reinit_iterations < 0) {

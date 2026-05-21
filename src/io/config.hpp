@@ -41,6 +41,7 @@ struct Config {
     std::vector<std::array<int, DIM>> N_list{};
 
     double tfinal = 0.0;
+    std::vector<double> output_times{};
     double cfl = 0.0;
 
     bool exact_riemann = false;
@@ -52,10 +53,11 @@ struct Config {
     std::vector<Region<DIM>> regions{};
 
     // [3.1] Initial condition mode
-    std::string initial_condition = "regions"; // "regions", "explosion", or "shock_bubble"
+    std::string initial_condition = "regions"; // "regions", "explosion", "double_explosion", or "shock_bubble"
 
     // [3.2] Explosion IC
     std::array<double, DIM> explosion_center{};
+    std::vector<std::array<double, DIM>> explosion_centers{};
     double explosion_radius = 0.0;
 
     double rho_in = 0.0;
@@ -95,6 +97,7 @@ struct Config {
     // [3.5] Level set (required for GFM)
     bool use_level_set = false;
     int reinit_interval = 0;
+    std::string level_set_advection = "normal_speed";
 
     // [3.6] Diffuse interface (DIM only)
     double interface_thickness = 0.0;
@@ -109,4 +112,3 @@ struct Config {
         bc_hi.fill("transmissive");
     }
 };
-

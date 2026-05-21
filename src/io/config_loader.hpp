@@ -99,6 +99,21 @@ inline bool parse_bool(const std::string& s)
     throw std::runtime_error("Invalid boolean: " + s);
 }
 
+inline std::vector<double> parse_double_list(const std::string& s)
+{
+    auto inner = strip_brackets(s);
+    auto tokens = split_top_level(inner, ',');
+
+    std::vector<double> out;
+    out.reserve(tokens.size());
+
+    for (const auto& token : tokens) {
+        out.push_back(std::stod(token));
+    }
+
+    return out;
+}
+
 
 
 // [4] Array Parser
@@ -150,6 +165,22 @@ inline std::array<std::string, DIM> parse_string_array(const std::string& s)
     for (int i = 0; i < DIM; ++i) {
         out[i] = to_lower(trim(tokens[i]));
     }
+    return out;
+}
+
+template<int DIM>
+inline std::vector<std::array<double, DIM>> parse_array_list(const std::string& s)
+{
+    auto inner = strip_brackets(s);
+    auto tokens = split_top_level(inner, ',');
+
+    std::vector<std::array<double, DIM>> out;
+    out.reserve(tokens.size());
+
+    for (const auto& token : tokens) {
+        out.push_back(parse_array<DIM>(token));
+    }
+
     return out;
 }
 
@@ -218,6 +249,34 @@ inline void validate_config(const Config<DIM>& cfg)
         throw std::runtime_error("No grid resolution specified");
     }
 
+    for (double output_time : cfg.output_times) {
+        if (output_time <= 0.0) {
+            throw std::runtime_error("output_times must be positive");
+        }
+    }
+
+    if (!std::is_sorted(cfg.output_times.begin(), cfg.output_times.end())) {
+        throw std::runtime_error("output_times must be sorted in ascending order");
+    }
+
+    for (std::size_t i = 1; i < cfg.output_times.size(); ++i) {
+        if (cfg.output_times[i] <= cfg.output_times[i - 1]) {
+            throw std::runtime_error("output_times must be strictly increasing");
+        }
+    }
+
+    if (!cfg.output_times.empty()) {
+        const double last_output_time = cfg.output_times.back();
+
+        if (cfg.tfinal <= 0.0) {
+            throw std::runtime_error("tfinal must be positive when output_times is set");
+        }
+
+        if (last_output_time > cfg.tfinal + 1e-14) {
+            throw std::runtime_error("output_times cannot exceed tfinal");
+        }
+    }
+
     if (cfg.interface_method != "SM" &&
         cfg.interface_method != "GFM" &&
         cfg.interface_method != "DIM") {
@@ -226,6 +285,11 @@ inline void validate_config(const Config<DIM>& cfg)
 
     if (cfg.interface_method == "GFM" && !cfg.use_level_set) {
         throw std::runtime_error("GFM requires level set");
+    }
+
+    if (cfg.level_set_advection != "normal_speed" &&
+        cfg.level_set_advection != "flow") {
+        throw std::runtime_error("level_set_advection must be normal_speed or flow");
     }
 
     if (cfg.interface_method == "DIM" && cfg.use_level_set) {
@@ -250,9 +314,15 @@ inline void validate_config(const Config<DIM>& cfg)
         throw std::runtime_error("No regions defined");
     }
 
-    if (cfg.initial_condition == "explosion") {
+    if (cfg.initial_condition == "explosion" ||
+        cfg.initial_condition == "double_explosion") {
         if (cfg.explosion_radius <= 0.0) {
             throw std::runtime_error("Invalid explosion radius");
+        }
+
+        if (cfg.initial_condition == "double_explosion" &&
+            cfg.explosion_centers.empty()) {
+            throw std::runtime_error("double_explosion requires explosion_centers");
         }
     }
 
@@ -316,6 +386,7 @@ inline Config<DIM> load_config(const std::string& filename)
         else if (key == "domain_max") cfg.domain_max = parse_array<DIM>(value);
         else if (key == "N") cfg.N_list.push_back(parse_int_array<DIM>(value));
         else if (key == "tfinal") cfg.tfinal = std::stod(value);
+        else if (key == "output_times") cfg.output_times = parse_double_list(value);
         else if (key == "cfl") cfg.cfl = std::stod(value);
         else if (key == "exact_riemann") cfg.exact_riemann = parse_bool(value);
         else if (key == "output_prefix") cfg.output_prefix = value;
@@ -325,6 +396,7 @@ inline Config<DIM> load_config(const std::string& filename)
         else if (key == "initial_condition") cfg.initial_condition = value;
 
         else if (key == "explosion_center") cfg.explosion_center = parse_array<DIM>(value);
+        else if (key == "explosion_centers") cfg.explosion_centers = parse_array_list<DIM>(value);
         else if (key == "explosion_radius") cfg.explosion_radius = std::stod(value);
 
         else if (key == "rho_in") cfg.rho_in = std::stod(value);
@@ -360,6 +432,7 @@ inline Config<DIM> load_config(const std::string& filename)
         else if (key == "interface_method") cfg.interface_method = value;
         else if (key == "use_level_set") cfg.use_level_set = parse_bool(value);
         else if (key == "reinit_interval") cfg.reinit_interval = std::stoi(value);
+        else if (key == "level_set_advection") cfg.level_set_advection = to_lower(value);
         else if (key == "interface_thickness") cfg.interface_thickness = std::stod(value);
         else if (key == "bc_lo") cfg.bc_lo = parse_string_array<DIM>(value);
         else if (key == "bc_hi") cfg.bc_hi = parse_string_array<DIM>(value);

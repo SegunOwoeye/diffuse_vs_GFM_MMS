@@ -32,6 +32,7 @@ inline void run_dim_case(
 
     double time = 0.0;
     int step = 0;
+    std::size_t next_output_index = 0;
     const auto wall_start = std::chrono::steady_clock::now();
     const bool track_conservation = app_io::conservation_tracking_enabled();
     const int conservation_interval = app_io::conservation_tracking_interval();
@@ -49,14 +50,30 @@ inline void run_dim_case(
         conservation_report->write(step, time, initial_totals);
     }
 
+    auto write_snapshot = [&](double snapshot_time) {
+        dim_app::write_numerical_output<DIM>(
+            cfg,
+            N,
+            U,
+            material_params,
+            dim_app::format_time_tag(snapshot_time)
+        );
+    };
+
     while (time < cfg.tfinal - 1e-14) {
+        const double next_output_time =
+            (next_output_index < cfg.output_times.size())
+                ? cfg.output_times[next_output_index]
+                : cfg.tfinal;
+
         const dim::StepResult<DIM> result = dim::advance_one_step<DIM>(
             U,
             N,
             dx,
             material_params,
+            cfg,
             cfg.cfl,
-            cfg.tfinal - time
+            next_output_time - time
         );
 
         if (result.dt <= 0.0) {
@@ -66,6 +83,13 @@ inline void run_dim_case(
         U = result.U_new;
         time += result.dt;
         ++step;
+
+        while (next_output_index < cfg.output_times.size() &&
+               time >= cfg.output_times[next_output_index] - 1e-14)
+        {
+            write_snapshot(cfg.output_times[next_output_index]);
+            ++next_output_index;
+        }
 
         if (conservation_report.has_value() &&
             (step % conservation_interval == 0 ||
@@ -87,6 +111,9 @@ inline void run_dim_case(
     const double wall_seconds =
         std::chrono::duration<double>(wall_end - wall_start).count();
 
-    dim_app::write_numerical_output<DIM>(cfg, N, U, material_params);
+    if (cfg.output_times.empty()) {
+        dim_app::write_numerical_output<DIM>(cfg, N, U, material_params);
+    }
+
     app_io::write_runtime_report<DIM>(cfg, N, step, time, wall_seconds);
 }

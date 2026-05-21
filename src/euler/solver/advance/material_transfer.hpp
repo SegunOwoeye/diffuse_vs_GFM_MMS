@@ -16,6 +16,7 @@
 #include "src/euler/solver/solver_context.hpp"
 #include "src/euler/state.hpp"
 #include "src/euler/thermo_compute.hpp"
+#include "src/math/numerical_safety.hpp"
 
 template<int DIM>
 inline int find_reassigned_material_donor(
@@ -142,19 +143,43 @@ inline std::vector<Conserved<DIM>> transfer_reassigned_material_states(
             compute_thermo<DIM, EOS>(U[id], ctx.material_params[old_mat]);
 
         Primitive<DIM> P{};
-        P.rho = old_cell.rho;
+        P.rho = require_positive(
+            old_cell.rho,
+            "transfer_reassigned_material_states: old rho",
+            1e-12
+        );
         P.vel = old_cell.vel;
-        P.p = old_cell.p;
+        P.p = require_positive(
+            old_cell.p,
+            "transfer_reassigned_material_states: old pressure",
+            1e-12
+        );
 
         if (donor_id >= 0) {
             const ThermoState<DIM> donor =
                 compute_thermo<DIM, EOS>(U[donor_id], ctx.material_params[new_mat]);
             const EOSParams& new_params = ctx.material_params[new_mat];
             const double donor_entropy =
-                EOS::entropy_invariant(donor.rho, donor.p, new_params);
+                EOS::entropy_invariant(
+                    require_positive(
+                        donor.rho,
+                        "transfer_reassigned_material_states: donor rho",
+                        1e-12
+                    ),
+                    require_positive(
+                        donor.p,
+                        "transfer_reassigned_material_states: donor pressure",
+                        1e-12
+                    ),
+                    new_params
+                );
 
             P.rho =
-                EOS::density_from_p_invariant(P.p, donor_entropy, new_params);
+                require_positive(
+                    EOS::density_from_p_invariant(P.p, donor_entropy, new_params),
+                    "transfer_reassigned_material_states: transferred rho",
+                    1e-12
+                );
         }
 
         U_transferred[id] =

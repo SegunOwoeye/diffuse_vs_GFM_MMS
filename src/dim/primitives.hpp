@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <stdexcept>
 #include <vector>
@@ -240,27 +241,84 @@ namespace dim {
         State<DIM>& U,
         const EOSParams& params,
         double mass_floor = 1e-12,
-        double p_floor = 1e-12
+        double p_floor = 1e-12,
+        double inactive_alpha_floor = 1e-10
     )
     {
         params.validate();
         require_compatible_state(U, params.nmat(), "dim::repair_state");
-        
+
+        const double rho_before = std::max(total_density(U), mass_floor);
+        std::array<double, DIM> velocity_before{};
+        double velocity_squared_before = 0.0;
+        for (int d = 0; d < DIM; ++d) {
+            velocity_before[d] = safe_div(U.mom[d], rho_before);
+            velocity_squared_before += velocity_before[d] * velocity_before[d];
+        }
+
+        std::vector<double> alpha_before = full_alpha(U, params.nmat());
+        sanitise_alpha(alpha_before, 0.0);
+
+        const double kinetic_before = 0.5 * rho_before * velocity_squared_before;
+        const double internal_before =
+            std::max(safe_div(U.E - kinetic_before, rho_before), 0.0);
+        const double pressure_before = std::max(
+            IdealGasEOS::pressure_from_internal_energy(
+                rho_before,
+                internal_before,
+                alpha_before,
+                params
+            ),
+            p_floor
+        );
+
         // clamps invalid masses
         for (double& value : U.partial_mass) {
             value = std::max(value, 0.0);
-        }
-
-        double rho_total = total_density(U);
-        if (rho_total <= 0.0) {
-            U.partial_mass[0] = mass_floor;
-            rho_total = mass_floor;
         }
         
         // re-normalizes alphas
         std::vector<double> alpha_full = full_alpha(U, params.nmat());
         sanitise_alpha(alpha_full, 0.0);
         U.alpha = independent_alpha(alpha_full);
+
+        bool removed_inactive_mass = false;
+        for (int k = 0; k < params.nmat(); ++k) {
+            if (alpha_full[k] <= inactive_alpha_floor &&
+                U.partial_mass[k] > mass_floor)
+            {
+                U.partial_mass[k] = 0.0;
+                removed_inactive_mass = true;
+            }
+        }
+
+        double rho_total = total_density(U);
+        if (rho_total <= 0.0) {
+            int dominant_material = 0;
+            for (int k = 1; k < params.nmat(); ++k) {
+                if (alpha_full[k] > alpha_full[dominant_material]) {
+                    dominant_material = k;
+                }
+            }
+            U.partial_mass[dominant_material] = mass_floor;
+            rho_total = mass_floor;
+        }
+
+        if (removed_inactive_mass) {
+            for (int d = 0; d < DIM; ++d) {
+                U.mom[d] = rho_total * velocity_before[d];
+            }
+
+            const double internal_energy =
+                IdealGasEOS::internal_energy_from_pressure(
+                    rho_total,
+                    pressure_before,
+                    alpha_full,
+                    params
+                );
+            U.E = rho_total * internal_energy +
+                  0.5 * rho_total * velocity_squared_before;
+        }
 
         // enforces enough total energy to keep pressure/internal energy physical
         double velocity_squared = 0.0;

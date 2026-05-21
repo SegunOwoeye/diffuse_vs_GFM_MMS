@@ -10,13 +10,20 @@ fi
 
 source .venv/bin/activate
 
-echo "[COMPARE] Running GFM vs DIM validation"
+echo "[COMPARE] Running rGFM vs Allaire 5eq validation"
+echo "[COMPARE] Writing method-only validation figures; Fedkiw reference images are kept separate."
 
+echo "[COMPARE] Writing 1D Fedkiw comparison figures"
 python src/graphing/plot_gfm_dim_1d.py \
     --convergence-test test2 \
-    --overlay-n 200 \
+    --overlay-n 400 \
     --include-convergence-overlay \
-    --output-dir data/plots/1d_GFM_DIM_validation
+    --output-dir data/plots/1d_rGFM_Allaire5eq_validation
+
+echo "[COMPARE] Writing 2D Fedkiw reduction figures"
+python src/graphing/plot_gfm_dim_2d.py \
+    --overlay-n 400 \
+    --output-dir data/plots/2d_rGFM_Allaire5eq_validation
 
 echo "[COMPARE] Completed"
 echo "-------------------------"

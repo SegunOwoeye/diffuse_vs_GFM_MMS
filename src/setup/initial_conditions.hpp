@@ -84,11 +84,18 @@ inline EOSParams build_eos_params_from_material(
 
     EOSParams params{};
 
-    if (mat.type == "ideal_gas") {
+    if (mat.type == "ideal_gas" || mat.type == "stiffened_gas") {
         if (mat.params.count("gamma") == 0) {
             throw std::runtime_error("Missing gamma in material id=" + std::to_string(mat_id));
         }
         params.gamma = mat.params.at("gamma");
+
+        if (mat.type == "stiffened_gas") {
+            if (mat.params.count("p_inf") == 0) {
+                throw std::runtime_error("Missing p_inf in material id=" + std::to_string(mat_id));
+            }
+            params.p_inf = mat.params.at("p_inf");
+        }
     }
     else {
         throw std::runtime_error("Unsupported EOS type: " + mat.type);
@@ -194,10 +201,16 @@ inline void initialise_from_config(
 
     
     // [5.2] Explosion Initialisation
-    if (cfg.initial_condition == "explosion") {
+    if (cfg.initial_condition == "explosion" ||
+        cfg.initial_condition == "double_explosion") {
 
         if (cfg.explosion_radius <= 0.0) {
             throw std::runtime_error("Explosion radius must be positive");
+        }
+
+        const bool use_multiple_centers = (cfg.initial_condition == "double_explosion");
+        if (use_multiple_centers && cfg.explosion_centers.empty()) {
+            throw std::runtime_error("double_explosion requires explosion_centers");
         }
 
         for (int linear = 0; linear < total_cells; ++linear) {
@@ -206,11 +219,22 @@ inline void initialise_from_config(
 
             const auto x = compute_cell_center<DIM>(idx, cfg.domain_min, dx);
 
-            const bool inside = point_in_explosion_region<DIM>(
-                x,
-                cfg.explosion_center,
-                cfg.explosion_radius
-            );
+            bool inside = false;
+            if (use_multiple_centers) {
+                for (const auto& center : cfg.explosion_centers) {
+                    if (point_in_explosion_region<DIM>(x, center, cfg.explosion_radius)) {
+                        inside = true;
+                        break;
+                    }
+                }
+            }
+            else {
+                inside = point_in_explosion_region<DIM>(
+                    x,
+                    cfg.explosion_center,
+                    cfg.explosion_radius
+                );
+            }
 
             Primitive<DIM> P{};
             int mat_id = -1;

@@ -2,7 +2,9 @@
 
 #include <array>
 #include <filesystem>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -21,18 +23,44 @@ inline void ensure_directory(
     }
 }
 
+inline std::string format_time_tag(double time)
+{
+    std::ostringstream stream;
+    stream << std::scientific << std::setprecision(6) << time;
+    std::string text = stream.str();
+
+    for (char& c : text) {
+        if (c == '.') {
+            c = 'p';
+        }
+        else if (c == '+') {
+            c = 'p';
+        }
+        else if (c == '-') {
+            c = 'm';
+        }
+    }
+
+    return "t" + text;
+}
+
 
 // [1] Build numerical solution output path
 template<int DIM>
 inline std::string build_solution_filename(
     const Config<DIM>& cfg,
-    const std::array<int, DIM>& N
+    const std::array<int, DIM>& N,
+    const std::string& suffix = ""
 )
 {
     std::string filename = cfg.output_prefix;
 
     if (!cfg.output_dir.empty()) {
         filename = cfg.output_dir + "/" + filename + "/" + filename;
+    }
+
+    if (!suffix.empty()) {
+        filename += "_" + suffix;
     }
 
     for (int d = 0; d < DIM; ++d) {
@@ -73,10 +101,11 @@ inline void write_numerical_output(
     const std::vector<Conserved<DIM>>& U,
     const std::vector<int>& material_id,
     const std::vector<EOSParams>& material_params,
-    const std::vector<std::vector<double>>* phi_list = nullptr
+    const std::vector<std::vector<double>>* phi_list = nullptr,
+    const std::string& suffix = ""
 )
 {
-    const std::string filename = build_solution_filename<DIM>(cfg, N);
+    const std::string filename = build_solution_filename<DIM>(cfg, N, suffix);
 
     std::cout << "Writing to: " << filename << "\n";
 

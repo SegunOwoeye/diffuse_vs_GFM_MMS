@@ -12,6 +12,7 @@
 #include "src/euler/eos_params.hpp"
 #include "src/euler/gfm/mcrs.hpp"
 #include "src/euler/level_set/level_set_core.hpp"
+#include "src/math/numerical_safety.hpp"
 #include "src/math/vector_ops.hpp"
 
 
@@ -42,7 +43,7 @@ inline double interface_fraction(
         return 0.5;
     }
 
-    return std::clamp(phiL / denom, 0.0, 1.0);
+    return std::clamp(safe_div(phiL, denom, 1e-14), 0.0, 1.0);
 }
 
 

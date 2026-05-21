@@ -17,6 +17,7 @@
 #include "src/euler/gfm/interface_utils.hpp"
 #include "src/euler/gfm/ghost.hpp"
 #include "src/euler/eos.hpp"
+#include "src/math/numerical_safety.hpp"
 #include "src/math/vector_ops.hpp"
 
 
@@ -105,7 +106,7 @@ inline void accumulate_interface_normal_speed_line(
 )
 {
     const int L = static_cast<int>(U_line.size());
-    const double phi_tol = 1e-3 * ctx.dx[dir];
+    const double phi_tol = geometry_tolerance(ctx.dx[dir]);
 
     if (L < 2) {
         return;

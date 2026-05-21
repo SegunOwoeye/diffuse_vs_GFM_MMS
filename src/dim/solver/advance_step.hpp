@@ -9,6 +9,7 @@
 #include "src/dim/solver/advance/geometry.hpp"
 #include "src/dim/solver/advance/line_ops.hpp"
 #include "src/dim/solver/advance/sweep_core.hpp"
+#include "src/io/config.hpp"
 
 namespace dim {
     // [0] Step Result
@@ -25,6 +26,7 @@ namespace dim {
         const std::array<int, DIM>& N,
         const std::array<double, DIM>& dx,
         const EOSParams& params,
+        const Config<DIM>& cfg,
         double cfl,
         double dt_max
     )
@@ -44,7 +46,7 @@ namespace dim {
         for (int dir = 0; dir < DIM; ++dir) {
             std::vector<State<DIM>> U_next = U_stage;
             sweep_direction_dispatch<DIM>(dir, U_stage, N, dx, params, dt, U_next);
-            apply_boundary_conditions<DIM>(U_next, N);
+            apply_boundary_conditions<DIM>(U_next, N, cfg);
             U_stage.swap(U_next);
         }
 
@@ -53,4 +55,3 @@ namespace dim {
     }
 
 } 
-

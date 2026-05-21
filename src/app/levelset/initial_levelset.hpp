@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
@@ -350,6 +351,7 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
 
     if (cfg.initial_condition != "regions" &&
         cfg.initial_condition != "explosion" &&
+        cfg.initial_condition != "double_explosion" &&
         cfg.initial_condition != "shock_bubble") {
         throw std::runtime_error(
             "initialise_phi_data_from_regions: unsupported initial condition for GFM level sets"
@@ -377,11 +379,9 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
     );
 
     if (cfg.initial_condition == "explosion" ||
+        cfg.initial_condition == "double_explosion" ||
         cfg.initial_condition == "shock_bubble") {
         const bool is_shock_bubble = (cfg.initial_condition == "shock_bubble");
-        const auto center = is_shock_bubble
-            ? cfg.bubble_center
-            : cfg.explosion_center;
         const double radius = is_shock_bubble
             ? cfg.bubble_radius
             : cfg.explosion_radius;
@@ -410,14 +410,35 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
                     dx
                 );
 
-            double r2 = 0.0;
+            double r_min = std::numeric_limits<double>::max();
 
-            for (int d = 0; d < DIM; ++d) {
-                const double delta = x[d] - center[d];
-                r2 += delta * delta;
+            if (is_shock_bubble || cfg.initial_condition == "explosion") {
+                const auto center = is_shock_bubble
+                    ? cfg.bubble_center
+                    : cfg.explosion_center;
+                double r2 = 0.0;
+
+                for (int d = 0; d < DIM; ++d) {
+                    const double delta = x[d] - center[d];
+                    r2 += delta * delta;
+                }
+
+                r_min = std::sqrt(r2);
+            }
+            else {
+                for (const auto& center : cfg.explosion_centers) {
+                    double r2 = 0.0;
+
+                    for (int d = 0; d < DIM; ++d) {
+                        const double delta = x[d] - center[d];
+                        r2 += delta * delta;
+                    }
+
+                    r_min = std::min(r_min, std::sqrt(r2));
+                }
             }
 
-            const double signed_distance = std::sqrt(r2) - radius;
+            const double signed_distance = r_min - radius;
             phi[id] = track_inside ? signed_distance : -signed_distance;
         }
 
@@ -488,6 +509,4 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
 
     return out;
 }
-
-
 

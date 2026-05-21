@@ -8,15 +8,14 @@ RUN_SIM=true
 RUN_PLOT=true
 ARCHIVE=false
 CLEAN=false
-RUN_METHODS="both"
-RUN_DIMS="1"
+RUN_METHODS="sm"
+RUN_DIMS="all"
+RUN_CASES="all"
 RUN_CONSERVATION=false
 CONSERVATION_INTERVAL=1
 
 DATA_DIR="data"
 ARCHIVE_DIR="results/archive"
-DIGITIZED_DIR="$DATA_DIR/digitized"
-PRESERVED_DIGITIZED_DIR=""
 
 usage() {
     cat <<EOF
@@ -31,6 +30,8 @@ Options:
   --methods VALUE       Alias for --method
   --dims VALUE          all, 1, 2, or 1,2 for GFM/DIM (default: all)
   --dim VALUE           Alias for --dims
+  --case VALUE          all or bubble (default: all)
+  --cases VALUE         Alias for --case
   --conservation        Write conservation diagnostics during simulations
   --conservation-interval VALUE
                         Write conservation diagnostics every VALUE timesteps
@@ -40,6 +41,7 @@ Examples:
   $0 --method gfm --dims 1
   $0 --method dim --dims 2
   $0 --method both --dims 1,2
+  $0 --case bubble --method both
   $0 --method both --dims 1 --conservation
 EOF
 }
@@ -112,6 +114,8 @@ while [[ "$#" -gt 0 ]]; do
         --method=*|--methods=*) RUN_METHODS="${1#*=}" ;;
         --dims|--dim) shift; RUN_DIMS="$1" ;;
         --dims=*|--dim=*) RUN_DIMS="${1#*=}" ;;
+        --case|--cases) shift; RUN_CASES="$1" ;;
+        --case=*|--cases=*) RUN_CASES="${1#*=}" ;;
         --conservation) RUN_CONSERVATION=true ;;
         --conservation-interval) shift; CONSERVATION_INTERVAL="$1" ;;
         --conservation-interval=*) CONSERVATION_INTERVAL="${1#*=}" ;;
@@ -125,11 +129,6 @@ done
 # [3] Data Handling
 # -------------------------
 timestamp=$(date +"%Y%m%d_%H%M%S")
-
-if [ -d "$DIGITIZED_DIR" ]; then
-    PRESERVED_DIGITIZED_DIR=$(mktemp -d)
-    cp -a "$DIGITIZED_DIR" "$PRESERVED_DIGITIZED_DIR/digitized"
-fi
 
 if [ -d "$DATA_DIR" ]; then
     if [ "$ARCHIVE" = true ]; then
@@ -146,11 +145,6 @@ fi
 
 # Ensure fresh directory exists
 mkdir -p "$DATA_DIR"
-
-if [ -n "$PRESERVED_DIGITIZED_DIR" ] && [ -d "$PRESERVED_DIGITIZED_DIR/digitized" ]; then
-    cp -a "$PRESERVED_DIGITIZED_DIR/digitized" "$DIGITIZED_DIR"
-    rm -rf "$PRESERVED_DIGITIZED_DIR"
-fi
 
 # -------------------------
 # [4] Run staged simulations and postprocessing
@@ -175,6 +169,24 @@ chmod +x tests/validation/2_MM_GFM_Tests/MM_GFM_graphing.sh
 chmod +x tests/validation/3_MM_DIM_Tests/MM_DIM_simulation.sh
 chmod +x tests/validation/3_MM_DIM_Tests/MM_DIM_graphing.sh
 chmod +x tests/validation/3_MM_DIM_Tests/gfm_dim_comparison.sh
+chmod +x tests/bubble_collapse_tests.sh
+
+if [ "$RUN_CASES" = "bubble" ]; then
+    case "$RUN_METHODS" in
+        gfm|GFM) bubble_mode="gfm" ;;
+        dim|DIM) bubble_mode="dim" ;;
+        both|all|gfm-dim|dim-gfm) bubble_mode="both" ;;
+        *) echo "[ERROR] Bubble collapse supports --method gfm, dim, both, or all"; exit 1 ;;
+    esac
+
+    echo "[INFO] Running bubble collapse only: $bubble_mode"
+    CORES="${CORES:-6}" ./tests/bubble_collapse_tests.sh "$bubble_mode"
+    echo "[INFO] Bubble collapse pipeline complete."
+    exit 0
+elif [ "$RUN_CASES" != "all" ]; then
+    echo "[ERROR] Unknown case selection: $RUN_CASES"
+    exit 1
+fi
 
 # [4.2] Run each stage and postprocess before moving on
 if method_enabled sm; then
@@ -201,6 +213,18 @@ fi
 if method_enabled gfm && method_enabled dim && dim_enabled 1 && [ "$RUN_PLOT" = true ]; then
     echo "[INFO] Running GFM vs DIM 1D comparison after both 1D stages..."
     ./tests/validation/3_MM_DIM_Tests/gfm_dim_comparison.sh
+    echo "-------------------------"
+fi
+
+if method_enabled gfm && dim_enabled 2 && ! dim_enabled 1 && [ "$RUN_SIM" = true ]; then
+    echo "[INFO] Running GFM 1D baseline needed for 2D reduction validation..."
+    ./tests/validation/2_MM_GFM_Tests/MM_GFM_simulation.sh --dims 1
+    echo "-------------------------"
+fi
+
+if method_enabled dim && dim_enabled 2 && ! dim_enabled 1 && [ "$RUN_SIM" = true ]; then
+    echo "[INFO] Running DIM 1D baseline needed for 2D reduction validation..."
+    ./tests/validation/3_MM_DIM_Tests/MM_DIM_simulation.sh --dims 1
     echo "-------------------------"
 fi
 

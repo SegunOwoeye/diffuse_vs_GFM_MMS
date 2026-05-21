@@ -10,9 +10,8 @@
 #include "src/io/config.hpp"
 #include "src/io/config_loader.hpp"
 
-// Declaring EOS used for Multimateials
-// - Need to figure out how to adapt for different EOS
-using EOS = IdealGasEOS;
+// StiffenedGasEOS reduces to ideal gas when p_inf = 0, so one EOS path covers
+using EOS = StiffenedGasEOS;
 
 // [0] Main
 int main(int argc, char** argv)

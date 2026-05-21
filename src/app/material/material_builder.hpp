@@ -20,7 +20,7 @@ inline std::vector<EOSParams> build_material_params(
             throw std::runtime_error("build_material_params: invalid material id");
         }
 
-        if (m.type != "ideal_gas") {
+        if (m.type != "ideal_gas" && m.type != "stiffened_gas") {
             throw std::runtime_error("build_material_params: unsupported EOS type: " + m.type);
         }
 
@@ -29,6 +29,12 @@ inline std::vector<EOSParams> build_material_params(
         }
 
         params[m.id].gamma = m.params.at("gamma");
+        if (m.type == "stiffened_gas") {
+            if (!m.params.count("p_inf")) {
+                throw std::runtime_error("build_material_params: missing p_inf in stiffened gas material");
+            }
+            params[m.id].p_inf = m.params.at("p_inf");
+        }
     }
 
     return params;
@@ -61,4 +67,3 @@ inline dim::EOSParams build_dim_material_params(
     params.validate();
     return params;
 }
-

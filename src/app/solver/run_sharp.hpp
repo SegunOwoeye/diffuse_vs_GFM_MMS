@@ -64,10 +64,18 @@ inline void run_sharp_interface_case(
             ctx.material_id,
             ctx.level_set_grid
         );
+
+        fill_small_enclosed_background_cavities<DIM>(
+            ctx.material_id,
+            ctx.tracked_interfaces,
+            ctx.background_material_id,
+            ctx.level_set_grid
+        );
     }
 
     double time = 0.0;
     int step = 0;
+    std::size_t next_output_index = 0;
     const auto wall_start = std::chrono::steady_clock::now();
     const bool track_conservation = app_io::conservation_tracking_enabled();
     const int conservation_interval = app_io::conservation_tracking_interval();
@@ -86,8 +94,31 @@ inline void run_sharp_interface_case(
         conservation_report->write(step, time, initial_totals);
     }
 
+    const auto* phi_output =
+        (cfg.interface_method == "GFM" && !ctx.phi_list.empty())
+            ? &ctx.phi_list
+            : nullptr;
+
+    auto write_snapshot = [&](double snapshot_time) {
+        const std::string suffix = format_time_tag(snapshot_time);
+        write_numerical_output<DIM, EOS>(
+            cfg,
+            N,
+            U,
+            ctx.material_id,
+            material_params,
+            phi_output,
+            suffix
+        );
+    };
+
     while (time < cfg.tfinal - 1e-14) {
-        ctx.dt_max = cfg.tfinal - time;
+        const double next_output_time =
+            (next_output_index < cfg.output_times.size())
+                ? cfg.output_times[next_output_index]
+                : cfg.tfinal;
+
+        ctx.dt_max = next_output_time - time;
 
         StepResult<DIM> result = advance_one_step<DIM, EOS>(U, ctx);
 
@@ -106,10 +137,29 @@ inline void run_sharp_interface_case(
                 ctx.material_id,
                 ctx.level_set_grid
             );
+
+            fill_small_enclosed_background_cavities<DIM>(
+                ctx.material_id,
+                ctx.tracked_interfaces,
+                ctx.background_material_id,
+                ctx.level_set_grid
+            );
         }
 
         time += result.dt;
         ++step;
+
+        phi_output =
+            (cfg.interface_method == "GFM" && !ctx.phi_list.empty())
+                ? &ctx.phi_list
+                : nullptr;
+
+        while (next_output_index < cfg.output_times.size() &&
+               time >= cfg.output_times[next_output_index] - 1e-14)
+        {
+            write_snapshot(cfg.output_times[next_output_index]);
+            ++next_output_index;
+        }
 
         if (conservation_report.has_value() &&
             (step % conservation_interval == 0 ||
@@ -132,19 +182,16 @@ inline void run_sharp_interface_case(
     const double wall_seconds =
         std::chrono::duration<double>(wall_end - wall_start).count();
 
-    const auto* phi_output =
-        (cfg.interface_method == "GFM" && !ctx.phi_list.empty())
-            ? &ctx.phi_list
-            : nullptr;
-
-    write_numerical_output<DIM, EOS>(
-        cfg,
-        N,
-        U,
-        ctx.material_id,
-        material_params,
-        phi_output
-    );
+    if (cfg.output_times.empty()) {
+        write_numerical_output<DIM, EOS>(
+            cfg,
+            N,
+            U,
+            ctx.material_id,
+            material_params,
+            phi_output
+        );
+    }
 
     app_io::write_runtime_report<DIM>(cfg, N, step, time, wall_seconds);
 

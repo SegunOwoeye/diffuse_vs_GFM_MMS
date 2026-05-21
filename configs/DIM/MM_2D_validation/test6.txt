@@ -11,19 +11,21 @@ dimension = 2
 domain_min = [0.0, 0.0]
 domain_max = [325, 44.5]
 
-# Test grid, about one third of the paper figure resolution.
-# Paper figure grid: N = [1300, 178].
-#N = [433, 59]
+
 N = [1300, 178]
 
 # ========================
 # Time
 # ========================
-# Figure time is 427 microseconds after the incident shock reaches the bubble.
-# Since this IC places the shock at x=225 and the bubble edge at x=200, include
-# the initial shock travel time: 25 / (1.22 * sqrt(1.4)). The 427 us physical
-# interval maps to code time as 427 * 0.343 / sqrt(1.4).
-tfinal = 141.2
+# Fedkiw Fig. 30 is t = 427 microseconds after shock-bubble encounter.
+# The solver uses nondimensional flow states with mm coordinates, so this is
+# code time, not microseconds. 427 microseconds after encounter maps to about
+# 123 code-time units. Our IC starts with the shock at x=225 and the bubble
+# right edge at x=175+25=200, so the shock first travels 25 mm before encounter.
+# With shock speed M*c = 1.22*sqrt(1.4) = 1.4435, that offset is
+# 25/1.4435 = 17.3 code-time units. 
+tfinal = 141.1
+output_times = [7.055, 14.110, 21.165, 28.220, 35.275, 42.330, 49.385, 56.440, 63.495, 70.550, 77.605, 84.660, 91.715, 98.770, 105.825, 112.880, 119.935, 126.990, 134.045, 141.1]
 cfl = 0.8
 
 # Left/right: zero-gradient. Symmetry/wall boundaries in y: reflection.
@@ -41,7 +43,8 @@ interface_thickness = 1.5
 # Materials
 # ========================
 material = 0, ideal_gas, gamma=1.4
-material = 1, ideal_gas, gamma=1.67
+#material = 1, ideal_gas, gamma=1.67
+material = 1, ideal_gas, gamma=1.648
 
 # ========================
 # Initial condition
@@ -67,7 +70,8 @@ material_right = 0
 # Helium bubble.
 bubble_center = [175, 0.0]
 bubble_radius = 25
-rho_bubble = 0.138
+#rho_bubble = 0.138
+rho_bubble = 0.182
 vel_bubble = [0.0, 0.0]
 p_bubble = 1
 material_bubble = 1

@@ -11,18 +11,17 @@ dimension = 2
 domain_min = [0.0, 0.0]
 domain_max = [325, 44.5]
 
-# Test grid, about one third of the paper figure resolution.
-# Paper figure grid: N = [1300, 178].
-N = [433, 59]
+
+N = [1300, 178]
 
 # ========================
 # Time
 # ========================
-# Figure time is 427 microseconds after the incident shock reaches the bubble.
-# Since this IC places the shock at x=225 and the bubble edge at x=200, include
-# the initial shock travel time: 25 / (1.22 * sqrt(1.4)). The 427 us physical
-# interval maps to code time as 427 * 0.343 / sqrt(1.4).
+# Fedkiw Fig. 30 is t = 427 microseconds after shock-bubble encounter.
+# With mm coordinates and nondimensional velocities, that corresponds to
+# code time about 141.2 from this initial shock position.
 tfinal = 141.2
+output_times = [23.5333, 47.0667, 70.6, 94.1333, 117.667, 141.2]
 cfl = 0.8
 
 # Left/right: zero-gradient. Symmetry/wall boundaries in y: reflection.
@@ -35,6 +34,7 @@ bc_hi = [transmissive, reflective]
 interface_method = GFM
 use_level_set = true
 reinit_interval = 0
+level_set_advection = flow
 
 # ========================
 # Materials
@@ -76,4 +76,4 @@ material_bubble = 1
 # Output
 # ========================
 output_prefix = gfm_helium_bubble_2d
-output_dir = data/csv/gfm/bubble_collapse
+output_dir = data/csv/gfm/MM_2D_validation

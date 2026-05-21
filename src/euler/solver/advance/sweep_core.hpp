@@ -19,6 +19,7 @@
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
 #include "src/euler/flux.hpp"
+#include "src/math/numerical_safety.hpp"
 
 
 // [1] Advance one extracted line by one split sweep
@@ -38,7 +39,7 @@ inline void advance_line(
 )
 {
     const int L = static_cast<int>(U_line.size());
-    const double phi_tol = 1e-3 * ctx.dx[dir];
+    const double phi_tol = geometry_tolerance(ctx.dx[dir]);
 
     if (L < 2) {
         return;
