@@ -12,7 +12,10 @@ __pycache__/
 # [data + outputs]
 data/csv
 data/plots
-*.csv
+!data/
+!data/exact/
+!data/exact/fedkiw/
+!data/exact/fedkiw/*.csv
 
 # [misc]
 *.log
