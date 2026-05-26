@@ -456,34 +456,55 @@ def select_highest_resolution_2d(xs, fields_list, velocities_list, labels):
     return sort_by_resolution(items)[0]
 
 
+def select_highest_resolution_3d(xs, fields_list, velocities_list, labels):
+    items = list(zip(xs, fields_list, velocities_list, labels))
+    if not items:
+        raise ValueError("No 3D solution data available")
+
+    return sort_by_resolution(items)[0]
+
+
 def plot_wireframe_surfaces(X, Y, rho_grid, p_grid, save_path=None):
     ny, nx = rho_grid.shape
     rstride = max(1, ny // 45)
     cstride = max(1, nx // 45)
-    elev = 24
-    azim = -125
+    elev = 26
 
-    fig = plt.figure(figsize=(14, 5), constrained_layout=True)
+    fig = plt.figure(figsize=(10.8, 4.3))
+    surface_specs = [
+        ("rho", rho_grid, 1, -128),
+        ("p", p_grid, 2, -52),
+    ]
 
-    ax1 = fig.add_subplot(1, 2, 1, projection="3d")
-    ax1.plot_wireframe(X, Y, rho_grid, rstride=rstride, cstride=cstride, linewidth=0.5)
-    ax1.set_title("Density")
-    ax1.set_xlabel("x")
-    ax1.set_ylabel("y")
-    ax1.set_zlabel("rho")
-    ax1.view_init(elev=elev, azim=azim)
-    ax1.set_box_aspect([1.3, 1.0, 0.45])
-    ax1.margins(x=0.0, y=0.0, z=0.02)
+    for field_key, grid, position, azim in surface_specs:
+        ax = fig.add_subplot(1, 2, position, projection="3d")
+        ax.plot_wireframe(
+            X,
+            Y,
+            grid,
+            rstride=rstride,
+            cstride=cstride,
+            color="black",
+            linewidth=0.35,
+        )
+        ax.set_title("")
+        ax.set_xlabel(r"$x$", labelpad=6)
+        ax.set_ylabel(r"$y$", labelpad=6)
+        ax.set_zlabel(field_ylabel(field_key), labelpad=4)
+        ax.view_init(elev=elev, azim=azim)
+        ax.set_proj_type("ortho")
+        try:
+            ax.set_box_aspect([1.28, 1.0, 0.52], zoom=1.10)
+        except TypeError:
+            ax.set_box_aspect([1.28, 1.0, 0.52])
+        ax.margins(x=0.0, y=0.0, z=0.02)
+        ax.tick_params(axis="both", which="major", labelsize=8, pad=1)
+        ax.zaxis.set_tick_params(labelsize=8, pad=2)
+        ax.xaxis.pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
+        ax.yaxis.pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
+        ax.zaxis.pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
 
-    ax2 = fig.add_subplot(1, 2, 2, projection="3d")
-    ax2.plot_wireframe(X, Y, p_grid, rstride=rstride, cstride=cstride, linewidth=0.5)
-    ax2.set_title("Pressure")
-    ax2.set_xlabel("x")
-    ax2.set_ylabel("y")
-    ax2.set_zlabel("p")
-    ax2.view_init(elev=elev, azim=azim)
-    ax2.set_box_aspect([1.3, 1.0, 0.45])
-    ax2.margins(x=0.0, y=0.0, z=0.02)
+    fig.subplots_adjust(left=0.08, right=0.91, bottom=0.06, top=0.90, wspace=-0.04)
 
     if save_path is not None:
         plt.savefig(save_path, dpi=300)
@@ -1367,6 +1388,48 @@ def plot_3d_diagnostics(
         remove_if_exists(save_path.parent / f"{save_path.stem}_midplane_maps.png")
         remove_if_exists(save_path.parent / f"{save_path.stem}_3d.png")
 
+    midplane_surface_path = (save_path.parent / f"{save_path.stem}_midplane_3d.png") if save_path else None
+    plot_3d_midplane_wireframe_surfaces(
+        xs,
+        fields_list,
+        velocities_list,
+        labels,
+        save_path=midplane_surface_path,
+    )
+
+
+def plot_3d_midplane_wireframe_surfaces(
+    xs,
+    fields_list,
+    velocities_list,
+    labels,
+    save_path=None,
+    axis=2,
+):
+    coords, fields, _, label = select_highest_resolution_3d(
+        xs,
+        fields_list,
+        velocities_list,
+        labels
+    )
+    rho, p = fields[:2]
+
+    slice_coords, rho_slice, mid_value = extract_midplane_slice(
+        list(coords),
+        rho,
+        axis=axis,
+    )
+    _, p_slice, _ = extract_midplane_slice(
+        list(coords),
+        p,
+        axis=axis,
+    )
+
+    X, Y, rho_grid = build_grid(slice_coords[0], slice_coords[1], rho_slice)
+    _, _, p_grid = build_grid(slice_coords[0], slice_coords[1], p_slice)
+
+    plot_wireframe_surfaces(X, Y, rho_grid, p_grid, save_path=save_path)
+
 
 # [10] Plot multiple multidimensional C++ outputs
 def plot_multiple_cpp_solutions(
@@ -1477,6 +1540,12 @@ def plot_multiple_cpp_solutions(
                 save_path=transverse_path,
                 show_titles=not suppress_diagnostic_titles,
                 exact_fields=exact_fields,
+            )
+            plot_2d_diagnostics_maps(
+                xs,
+                fields_list,
+                labels,
+                save_path=map_diagnostic_path,
             )
 
         if should_make_schlieren(save_path, force_schlieren):
