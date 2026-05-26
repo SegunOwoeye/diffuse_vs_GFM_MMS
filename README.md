@@ -1,8 +1,10 @@
 # Diffuse Interface and rGFM Solvers for Multimaterial Compressible Flow
 
-This repository contains the research code used to compare sharp and diffuse-interface treatments for compressible multimaterial flow. It includes a single-material Euler solver, a real Ghost Fluid Method (rGFM) sharp-interface solver, and a diffuse-interface method (DIM) based on the Allaire five-equation model.
+Author: Olusegun Owoeye
 
-The code is intended for reproducible academic validation rather than as a general-purpose CFD package. The standard way to use it is through the scripts in `tests/validation/`.
+This repository contains the research code used to compare sharp and diffuse-interface treatments for compressible multimaterial flow. It includes a single-material Euler solver, a real Ghost Fluid Method (rGFM) sharp-interface method (SIM) solver, and a diffuse-interface method (DIM) based on the Allaire five-equation model.
+
+The standard way to use it is through the scripts in `tests/validation/`.
 
 ---
 
@@ -24,7 +26,6 @@ src/dim/       Diffuse-interface Allaire-model code
 src/io/        Config parsing and CSV output
 src/setup/     Initial conditions
 src/graphing/  Plotting and error analysis
-src/analysis/  Shock-bubble feature extraction
 ```
 
 ---
@@ -223,7 +224,6 @@ Useful driver options:
 - 2D centreline and transverse slices.
 - 2D field maps and 3D wireframe surface plots.
 - Schlieren-style density-gradient plots for bubble collapse.
-- Automatic shock-bubble feature extraction from CSV files.
 
 ---
 
@@ -332,22 +332,6 @@ python src/graphing/plot_multid.py toro/explosion2
 
 python src/graphing/plot_multid.py --schlieren gfm/MM_2D_validation/gfm_helium_bubble_2d
 python src/graphing/plot_multid.py --schlieren dim/MM_2D_validation/dim_helium_bubble_2d
-```
-
-Shock-bubble feature extraction:
-
-```bash
-python src/analysis/extract_shock_bubble_features.py \
-    --input data/csv/gfm/MM_2D_validation/gfm_helium_bubble_2d \
-    --output data/analysis/shock_bubble_features/gfm_helium_bubble_2d
-```
-
-This writes:
-
-```text
-feature_positions.csv
-feature_velocities.csv
-feature_xt_diagram.svg
 ```
 
 ---
