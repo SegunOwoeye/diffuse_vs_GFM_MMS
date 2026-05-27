@@ -4,6 +4,7 @@ cores=6
 RUN_DIMS="${VALIDATION_DIMS:-all}"
 tests_1d=("test1" "test2" "test3" "test4" "test5")
 tests_2d=("test1" "test2" "test3" "test4" "test5" "test6")
+tests_2d_oblique=("test1_oblique45" "test2_oblique45" "test3_oblique45" "test4_oblique45" "test5_oblique45")
 
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -55,6 +56,12 @@ if dimension_enabled 2; then
 
     for t in "${tests_2d[@]}"; do
         echo "[DIM 2D] Running $t"
+        OMP_NUM_THREADS=$cores OMP_SCHEDULE=dynamic \
+        ./mm_main_2d configs/DIM/MM_2D_validation/$t.txt || { echo "Solver failed"; continue; }
+    done
+
+    for t in "${tests_2d_oblique[@]}"; do
+        echo "[DIM 2D oblique45] Running $t"
         OMP_NUM_THREADS=$cores OMP_SCHEDULE=dynamic \
         ./mm_main_2d configs/DIM/MM_2D_validation/$t.txt || { echo "Solver failed"; continue; }
     done

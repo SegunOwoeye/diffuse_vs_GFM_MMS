@@ -136,15 +136,15 @@ if [ -d "$DATA_DIR" ]; then
         mkdir -p "$ARCHIVE_DIR"
         mv "$DATA_DIR" "${ARCHIVE_DIR}/run_${timestamp}"
     elif [ "$CLEAN" = true ]; then
-        echo "[INFO] Deleting existing data..."
-        rm -rf "$DATA_DIR"
+        echo "[INFO] Deleting generated CSV and plot outputs..."
+        rm -rf "$DATA_DIR/csv" "$DATA_DIR/plots"
     else
         echo "[WARNING] Existing data folder detected. No action taken."
     fi
 fi
 
-# Ensure fresh directory exists
-mkdir -p "$DATA_DIR"
+# Ensure fresh generated-output directories exist
+mkdir -p "$DATA_DIR/csv" "$DATA_DIR/plots"
 
 # -------------------------
 # [4] Run staged simulations and postprocessing
@@ -210,12 +210,6 @@ if method_enabled gfm && dim_enabled 1; then
         "./tests/validation/2_MM_GFM_Tests/MM_GFM_graphing.sh --dims 1"
 fi
 
-if method_enabled gfm && method_enabled dim && dim_enabled 1 && [ "$RUN_PLOT" = true ]; then
-    echo "[INFO] Running GFM vs DIM 1D comparison after both 1D stages..."
-    ./tests/validation/3_MM_DIM_Tests/gfm_dim_comparison.sh
-    echo "-------------------------"
-fi
-
 if method_enabled gfm && dim_enabled 2 && ! dim_enabled 1 && [ "$RUN_SIM" = true ]; then
     echo "[INFO] Running GFM 1D baseline needed for 2D reduction validation..."
     ./tests/validation/2_MM_GFM_Tests/MM_GFM_simulation.sh --dims 1
@@ -240,6 +234,12 @@ if method_enabled dim && dim_enabled 2; then
         "DIM 2D" \
         "./tests/validation/3_MM_DIM_Tests/MM_DIM_simulation.sh --dims 2" \
         "./tests/validation/3_MM_DIM_Tests/MM_DIM_graphing.sh --dims 2"
+fi
+
+if method_enabled gfm && method_enabled dim && [ "$RUN_PLOT" = true ]; then
+    echo "[INFO] Running GFM vs DIM comparison after required data stages..."
+    ./tests/validation/3_MM_DIM_Tests/gfm_dim_comparison.sh
+    echo "-------------------------"
 fi
 
 echo "[INFO] Validation pipeline complete."

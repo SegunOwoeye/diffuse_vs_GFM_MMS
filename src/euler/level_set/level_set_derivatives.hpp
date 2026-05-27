@@ -252,8 +252,6 @@ inline double weno5_right_flat(
 
     The WENO helpers above reconstruct point values, not phi_x directly, so
     they do not preserve the derivative of a linear signed-distance field.
-    Use the stable one-sided finite-difference path here until a true
-    derivative-WENO reconstruction is added.
 */
 template<int DIM>
 inline double dminus_flat(

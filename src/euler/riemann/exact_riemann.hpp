@@ -72,8 +72,7 @@ public:
         const double aL = require_positive(TL.c, "exact solver: invalid aL", tol_S);
         const double aR = require_positive(TR.c, "exact solver: invalid aR", tol_S);
 
-        const double pPV =
-            0.5 * (pL + pR)
+        const double pPV = 0.5 * (pL + pR)
             - 0.125 * (uR - uL) * (rhoL + rhoR) * (aL + aR);
 
         double p = require_positive(

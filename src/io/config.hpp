@@ -53,7 +53,10 @@ struct Config {
     std::vector<Region<DIM>> regions{};
 
     // [3.1] Initial condition mode
-    std::string initial_condition = "regions"; // "regions", "explosion", "double_explosion", or "shock_bubble"
+    std::string initial_condition = "regions"; // "regions", "planar_regions", "explosion", "double_explosion", or "shock_bubble"
+
+    // [3.1.1] Oblique planar region IC
+    std::array<double, DIM> planar_normal{};
 
     // [3.2] Explosion IC
     std::array<double, DIM> explosion_center{};

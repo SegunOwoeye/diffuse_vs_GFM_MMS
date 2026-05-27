@@ -102,6 +102,12 @@ Run both multimaterial methods in 1D:
 ./tests/validation/validation_Tests.sh --method both --dims 1
 ```
 
+Run the 2D multimaterial validation suite, including the 45-degree oblique Fedkiw reductions:
+
+```bash
+./tests/validation/validation_Tests.sh --method both --dims 2
+```
+
 Run the 2D helium shock-bubble case:
 
 ```bash
@@ -186,7 +192,7 @@ Useful driver options:
 --conservation-interval N
 ```
 
-`--clean` deletes the existing `data/` directory. Use it only when old outputs are no longer needed.
+`--clean` deletes generated outputs in `data/csv/` and `data/plots/` while preserving other `data/` assets such as references and validation images.
 
 ---
 
@@ -205,7 +211,7 @@ Useful driver options:
 - Level-set representation of the material interface.
 - Material-specific equations of state.
 - Real/ghost state construction near the interface.
-- 1D and 2D Fedkiw-style validation cases.
+- 1D, 2D grid-aligned, and 45-degree oblique Fedkiw-style validation cases.
 - 2D shock interaction with a helium bubble.
 
 ### Diffuse-Interface Solver
@@ -215,13 +221,14 @@ Useful driver options:
 - HLLC update for the conservative mixture subsystem.
 - Separate volume-fraction update using the Riemann face velocity.
 - Volume-fraction bounding and positivity recovery in mixed cells.
-- 1D/2D validation cases matching the rGFM workflow.
+- 1D, 2D grid-aligned, and 45-degree oblique validation cases matching the rGFM workflow.
 
 ### Post-Processing
 
 - 1D profile plots.
 - L1 error summaries.
 - 2D centreline and transverse slices.
+- 45-degree oblique normal-coordinate validation slices.
 - 2D field maps and 3D wireframe surface plots.
 - Schlieren-style density-gradient plots for bubble collapse.
 

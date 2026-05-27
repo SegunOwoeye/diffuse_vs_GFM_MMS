@@ -310,8 +310,21 @@ inline void validate_config(const Config<DIM>& cfg)
         }
     }
 
-    if (cfg.initial_condition == "regions" && cfg.regions.empty()) {
+    if ((cfg.initial_condition == "regions" ||
+         cfg.initial_condition == "planar_regions") &&
+        cfg.regions.empty()) {
         throw std::runtime_error("No regions defined");
+    }
+
+    if (cfg.initial_condition == "planar_regions") {
+        double normal_norm_sq = 0.0;
+        for (int d = 0; d < DIM; ++d) {
+            normal_norm_sq += cfg.planar_normal[d] * cfg.planar_normal[d];
+        }
+
+        if (normal_norm_sq <= 0.0) {
+            throw std::runtime_error("planar_regions requires non-zero planar_normal");
+        }
     }
 
     if (cfg.initial_condition == "explosion" ||
@@ -394,6 +407,7 @@ inline Config<DIM> load_config(const std::string& filename)
         else if (key == "material") cfg.materials.push_back(parse_material(value));
         else if (key == "region") cfg.regions.push_back(parse_region<DIM>(value));
         else if (key == "initial_condition") cfg.initial_condition = value;
+        else if (key == "planar_normal") cfg.planar_normal = parse_array<DIM>(value);
 
         else if (key == "explosion_center") cfg.explosion_center = parse_array<DIM>(value);
         else if (key == "explosion_centers") cfg.explosion_centers = parse_array_list<DIM>(value);
@@ -445,5 +459,4 @@ inline Config<DIM> load_config(const std::string& filename)
     validate_config(cfg);
     return cfg;
 }
-
 

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include "src/euler/gfm/tracked_interface.hpp"
@@ -105,6 +106,110 @@ namespace initial_level_set_detail {
         }
 
         return x;
+    }
+
+    template<int DIM>
+    inline std::array<double, DIM> normalised_planar_normal(
+        const Config<DIM>& cfg
+    )
+    {
+        double norm_sq = 0.0;
+        for (int d = 0; d < DIM; ++d) {
+            norm_sq += cfg.planar_normal[d] * cfg.planar_normal[d];
+        }
+
+        if (norm_sq <= 0.0) {
+            throw std::runtime_error("initialise_phi_data_from_regions: zero planar normal");
+        }
+
+        const double inv_norm = 1.0 / std::sqrt(norm_sq);
+        std::array<double, DIM> normal{};
+
+        for (int d = 0; d < DIM; ++d) {
+            normal[d] = cfg.planar_normal[d] * inv_norm;
+        }
+
+        return normal;
+    }
+
+    template<int DIM>
+    inline double planar_coordinate(
+        const std::array<double, DIM>& x,
+        const std::array<double, DIM>& normal
+    )
+    {
+        double s = 0.0;
+        for (int d = 0; d < DIM; ++d) {
+            s += normal[d] * x[d];
+        }
+
+        return s;
+    }
+
+    template<int DIM>
+    inline double distance_to_planar_interval(
+        double s,
+        const Region<DIM>& region
+    )
+    {
+        if (s < region.lower[0]) {
+            return region.lower[0] - s;
+        }
+
+        if (s > region.upper[0]) {
+            return s - region.upper[0];
+        }
+
+        return -std::min(s - region.lower[0], region.upper[0] - s);
+    }
+
+    inline std::vector<std::pair<double, double>> merge_planar_intervals(
+        std::vector<std::pair<double, double>> intervals
+    )
+    {
+        if (intervals.empty()) {
+            return intervals;
+        }
+
+        std::sort(intervals.begin(), intervals.end());
+
+        std::vector<std::pair<double, double>> merged;
+        merged.push_back(intervals.front());
+
+        for (std::size_t i = 1; i < intervals.size(); ++i) {
+            auto& back = merged.back();
+
+            if (intervals[i].first <= back.second + 1e-14) {
+                back.second = std::max(back.second, intervals[i].second);
+            }
+            else {
+                merged.push_back(intervals[i]);
+            }
+        }
+
+        return merged;
+    }
+
+    inline double signed_distance_to_merged_planar_intervals(
+        double s,
+        const std::vector<std::pair<double, double>>& intervals
+    )
+    {
+        double best_positive = std::numeric_limits<double>::max();
+
+        for (const auto& interval : intervals) {
+            const double lower = interval.first;
+            const double upper = interval.second;
+
+            if (s >= lower && s <= upper) {
+                return -std::min(s - lower, upper - s);
+            }
+
+            const double distance = (s < lower) ? lower - s : s - upper;
+            best_positive = std::min(best_positive, distance);
+        }
+
+        return best_positive;
     }
 
     /*
@@ -350,6 +455,7 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
     }
 
     if (cfg.initial_condition != "regions" &&
+        cfg.initial_condition != "planar_regions" &&
         cfg.initial_condition != "explosion" &&
         cfg.initial_condition != "double_explosion" &&
         cfg.initial_condition != "shock_bubble") {
@@ -358,7 +464,9 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
         );
     }
 
-    if (cfg.initial_condition == "regions" && cfg.regions.size() < 2) {
+    if ((cfg.initial_condition == "regions" ||
+         cfg.initial_condition == "planar_regions") &&
+        cfg.regions.size() < 2) {
         throw std::runtime_error(
             "initialise_phi_data_from_regions: GFM requires at least 2 regions/materials"
         );
@@ -377,6 +485,60 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
         material_id,
         static_cast<int>(cfg.materials.size())
     );
+
+    if (cfg.initial_condition == "planar_regions") {
+        const auto normal =
+            initial_level_set_detail::normalised_planar_normal<DIM>(cfg);
+        std::vector<int> tracked_materials;
+
+        for (const auto& region : cfg.regions) {
+            if (region.material_id == out.background_material_id) {
+                continue;
+            }
+
+            if (std::find(tracked_materials.begin(), tracked_materials.end(), region.material_id) ==
+                tracked_materials.end()) {
+                tracked_materials.push_back(region.material_id);
+            }
+        }
+
+        for (const int tracked_material : tracked_materials) {
+            std::vector<std::pair<double, double>> intervals;
+            for (const auto& region : cfg.regions) {
+                if (region.material_id == tracked_material) {
+                    intervals.emplace_back(region.lower[0], region.upper[0]);
+                }
+            }
+            intervals = initial_level_set_detail::merge_planar_intervals(intervals);
+
+            std::vector<double> phi(total_cells, 0.0);
+
+            for (int id = 0; id < total_cells; ++id) {
+                const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
+                const auto x =
+                    initial_level_set_detail::cell_center<DIM>(
+                        idx,
+                        cfg.domain_min,
+                        dx
+                    );
+                const double s =
+                    initial_level_set_detail::planar_coordinate<DIM>(x, normal);
+
+                phi[id] =
+                    initial_level_set_detail::signed_distance_to_merged_planar_intervals(
+                        s,
+                        intervals
+                    );
+            }
+
+            out.phi_list.push_back(phi);
+            out.tracked_interfaces.push_back(
+                TrackedInterface{tracked_material, static_cast<int>(out.tracked_interfaces.size())}
+            );
+        }
+
+        return out;
+    }
 
     if (cfg.initial_condition == "explosion" ||
         cfg.initial_condition == "double_explosion" ||
@@ -489,7 +651,8 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
             continue;
         }
 
-        /* Store the signed-distance field and the data needed later by
+        /* 
+        Store the signed-distance field and the data needed later by
         material reassignment and mixed-material face selection
         */
         out.phi_list.push_back(
@@ -509,4 +672,5 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
 
     return out;
 }
+
 

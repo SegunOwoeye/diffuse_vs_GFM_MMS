@@ -144,19 +144,161 @@ def extract_centerline_x_slice(x, y, values, requested_y=None):
     return x[mask][order], values[mask][order], float(slice_y)
 
 
+def build_structured_grid(x, y, values):
+    df = pd.DataFrame({"x": x, "y": y, "value": values})
+    grid = (
+        df.pivot(index="y", columns="x", values="value")
+        .sort_index()
+        .sort_index(axis=1)
+    )
+
+    return (
+        grid.columns.to_numpy(dtype=float),
+        grid.index.to_numpy(dtype=float),
+        grid.to_numpy(dtype=float),
+    )
+
+
+def bilinear_sample(x_unique, y_unique, grid, sample_x, sample_y):
+    sample_x = np.asarray(sample_x, dtype=float)
+    sample_y = np.asarray(sample_y, dtype=float)
+
+    if len(x_unique) < 2 or len(y_unique) < 2:
+        raise ValueError("bilinear_sample requires at least two grid points in each direction")
+
+    if (
+        np.any(sample_x < x_unique[0]) or
+        np.any(sample_x > x_unique[-1]) or
+        np.any(sample_y < y_unique[0]) or
+        np.any(sample_y > y_unique[-1])
+    ):
+        raise ValueError("Requested oblique slice lies outside the 2D grid")
+
+    ix = np.searchsorted(x_unique, sample_x, side="right") - 1
+    iy = np.searchsorted(y_unique, sample_y, side="right") - 1
+    ix = np.clip(ix, 0, len(x_unique) - 2)
+    iy = np.clip(iy, 0, len(y_unique) - 2)
+
+    x0 = x_unique[ix]
+    x1 = x_unique[ix + 1]
+    y0 = y_unique[iy]
+    y1 = y_unique[iy + 1]
+
+    tx = np.divide(sample_x - x0, x1 - x0, out=np.zeros_like(sample_x), where=(x1 != x0))
+    ty = np.divide(sample_y - y0, y1 - y0, out=np.zeros_like(sample_y), where=(y1 != y0))
+
+    q00 = grid[iy, ix]
+    q10 = grid[iy, ix + 1]
+    q01 = grid[iy + 1, ix]
+    q11 = grid[iy + 1, ix + 1]
+
+    return (
+        (1.0 - tx) * (1.0 - ty) * q00 +
+        tx * (1.0 - ty) * q10 +
+        (1.0 - tx) * ty * q01 +
+        tx * ty * q11
+    )
+
+
+def nearest_sample(x_unique, y_unique, grid, sample_x, sample_y):
+    sample_x = np.asarray(sample_x, dtype=float)
+    sample_y = np.asarray(sample_y, dtype=float)
+
+    if (
+        np.any(sample_x < x_unique[0]) or
+        np.any(sample_x > x_unique[-1]) or
+        np.any(sample_y < y_unique[0]) or
+        np.any(sample_y > y_unique[-1])
+    ):
+        raise ValueError("Requested oblique slice lies outside the 2D grid")
+
+    ix = np.searchsorted(x_unique, sample_x)
+    iy = np.searchsorted(y_unique, sample_y)
+    ix = np.clip(ix, 1, len(x_unique) - 1)
+    iy = np.clip(iy, 1, len(y_unique) - 1)
+
+    left_x = x_unique[ix - 1]
+    right_x = x_unique[ix]
+    down_y = y_unique[iy - 1]
+    up_y = y_unique[iy]
+
+    ix = np.where(np.abs(sample_x - left_x) <= np.abs(sample_x - right_x), ix - 1, ix)
+    iy = np.where(np.abs(sample_y - down_y) <= np.abs(sample_y - up_y), iy - 1, iy)
+
+    return grid[iy, ix]
+
+
+def extract_diagonal_45_slice(x, y, values, num_samples=None):
+    x_unique, y_unique, grid = build_structured_grid(x, y, values)
+    start = max(float(x_unique[0]), float(y_unique[0]))
+    stop = min(float(x_unique[-1]), float(y_unique[-1]))
+
+    if stop <= start:
+        raise ValueError("Cannot extract y=x diagonal slice from this 2D grid")
+
+    if num_samples is None:
+        num_samples = min(len(x_unique), len(y_unique))
+
+    line_coord = np.linspace(start, stop, num_samples)
+    sampled_values = bilinear_sample(
+        x_unique,
+        y_unique,
+        grid,
+        line_coord,
+        line_coord,
+    )
+
+    return line_coord, sampled_values, "y=x"
+
+
+def extract_oblique45_normal_slice(x, y, values, num_samples=None):
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    values = np.asarray(values, dtype=float)
+
+    x_unique = np.sort(np.unique(x))
+    y_unique = np.sort(np.unique(y))
+    if len(x_unique) < 2 or len(y_unique) < 2:
+        raise ValueError("extract_oblique45_normal_slice requires a 2D grid")
+
+    dx = float(np.min(np.diff(x_unique)))
+    dy = float(np.min(np.diff(y_unique)))
+    half_strip_width = 0.5 * min(dx, dy) / np.sqrt(2.0)
+
+    normal_coord = (x + y) / np.sqrt(2.0)
+    tangent_coord = (-x + y) / np.sqrt(2.0)
+    mask = (
+        (normal_coord >= 0.0) &
+        (normal_coord <= 1.0) &
+        (np.abs(tangent_coord) <= half_strip_width + 1e-14)
+    )
+
+    if not np.any(mask):
+        raise ValueError("No cell centres found in the 45-degree diagnostic strip")
+
+    order = np.argsort(normal_coord[mask])
+    return normal_coord[mask][order], values[mask][order], "s=(x+y)/sqrt(2)"
+
+
 # [3] Build Paths
 def fedkiw_name(test_name):
     return TEST_FOLDERS[test_name]
 
 
-def solution_folder(data_root, method, dimension, test_name):
+def solution_folder(data_root, method, dimension, test_name, name_suffix=""):
     name = fedkiw_name(test_name)
+    if dimension == 2:
+        name = f"{name}{name_suffix}"
+
     return data_root / method / f"MM_{dimension}D_validation" / f"{method}_{name}"
 
 
-def solution_path(data_root, method, dimension, test_name, resolution):
+def solution_path(data_root, method, dimension, test_name, resolution, name_suffix=""):
     name = fedkiw_name(test_name)
-    folder = solution_folder(data_root, method, dimension, test_name)
+    if dimension == 2:
+        name = f"{name}{name_suffix}"
+
+    folder = solution_folder(data_root, method, dimension, test_name, name_suffix)
 
     if dimension == 1:
         return folder / f"{method}_{name}_N{resolution}.csv"
@@ -177,8 +319,8 @@ def extract_resolution(csv_path, dimension):
     return int(match.group(1))
 
 
-def available_resolutions(data_root, method, dimension, test_name):
-    folder = solution_folder(data_root, method, dimension, test_name)
+def available_resolutions(data_root, method, dimension, test_name, name_suffix=""):
+    folder = solution_folder(data_root, method, dimension, test_name, name_suffix)
 
     if not folder.exists():
         return []
@@ -194,9 +336,15 @@ def available_resolutions(data_root, method, dimension, test_name):
     return sorted(set(resolutions))
 
 
-def choose_resolution(data_root, method, test_name, requested_resolution):
+def choose_resolution(data_root, method, test_name, requested_resolution, two_d_name_suffix=""):
     one_d = set(available_resolutions(data_root, method, 1, test_name))
-    two_d = set(available_resolutions(data_root, method, 2, test_name))
+    two_d = set(available_resolutions(
+        data_root,
+        method,
+        2,
+        test_name,
+        two_d_name_suffix,
+    ))
     resolutions = sorted(one_d.intersection(two_d))
 
     if not resolutions:
@@ -228,17 +376,27 @@ def remove_obsolete_plot_outputs(output_dir):
             path.unlink()
 
 
-def make_validation_figure():
-    fig, axes = plt.subplots(2, 3, figsize=(10.8, 5.8))
+def make_validation_figure(
+    primary_velocity_label=r"X-velocity, $u_x$",
+    transverse_velocity_label=r"Y-velocity, $u_y$",
+    include_transverse=True,
+):
+    if include_transverse:
+        fig, axes = plt.subplots(2, 3, figsize=(10.8, 5.8))
+    else:
+        fig, axes = plt.subplots(2, 2, figsize=(8.8, 6.2))
+
     axes = axes.flatten()
 
     for ax, (field_key, _) in zip(axes[:4], FIELD_NAMES):
         configure_profile_axis(ax, field_key, show_legend=False, show_title=False)
 
-    configure_profile_axis(axes[4], "u1", show_legend=False, show_title=False)
-    axes[1].set_ylabel(r"X-velocity, $u_x$")
-    axes[4].set_ylabel(r"Y-velocity, $u_y$")
-    axes[5].axis("off")
+    axes[1].set_ylabel(primary_velocity_label)
+
+    if include_transverse:
+        configure_profile_axis(axes[4], "u1", show_legend=False, show_title=False)
+        axes[4].set_ylabel(transverse_velocity_label)
+        axes[5].axis("off")
 
     return fig, axes
 
@@ -284,23 +442,80 @@ def plot_numeric_points(
     )
 
 
-def plot_1d_vs_2d(data_root, output_dir, method, test_name, requested_resolution, exact_root):
-    resolution = choose_resolution(data_root, method, test_name, requested_resolution)
+def oblique45_velocity_fields(fields):
+    transformed = dict(fields)
+    inv_sqrt2 = 1.0 / np.sqrt(2.0)
+    u0 = fields["u0"]
+    u1 = fields["u1"]
+    transformed["u0"] = (u0 + u1) * inv_sqrt2
+    transformed["u1"] = (-u0 + u1) * inv_sqrt2
+    return transformed
+
+
+def plot_1d_vs_2d(
+    data_root,
+    output_dir,
+    method,
+    test_name,
+    requested_resolution,
+    exact_root,
+    slice_kind="centerline",
+    two_d_name_suffix="",
+):
+    resolution = choose_resolution(
+        data_root,
+        method,
+        test_name,
+        requested_resolution,
+        two_d_name_suffix,
+    )
     x_1d, fields_1d = load_1d_solution(
         solution_path(data_root, method, 1, test_name, resolution),
         test_name,
     )
     x_2d, y_2d, fields_2d = load_2d_solution(
-        solution_path(data_root, method, 2, test_name, resolution),
+        solution_path(data_root, method, 2, test_name, resolution, two_d_name_suffix),
         test_name,
     )
 
-    fig, axes = make_validation_figure()
+    if slice_kind == "centerline":
+        slice_extractor = extract_centerline_x_slice
+        slice_label = "2D centerline"
+        output_slice_slug = "xslice"
+        context_slice_label = "2D centerline"
+        primary_velocity_label = r"X-velocity, $u_x$"
+        transverse_velocity_label = r"Y-velocity, $u_y$"
+        x_axis_label = r"$x$"
+    elif slice_kind == "diagonal45":
+        slice_extractor = extract_diagonal_45_slice
+        slice_label = r"2D 45$^\circ$ slice"
+        output_slice_slug = "diagonal45"
+        context_slice_label = "2D 45-degree slice"
+        primary_velocity_label = r"X-velocity, $u_x$"
+        transverse_velocity_label = r"Y-velocity, $u_y$"
+        x_axis_label = r"$x$"
+    elif slice_kind == "oblique45":
+        slice_extractor = extract_oblique45_normal_slice
+        slice_label = r"2D oblique 45$^\circ$"
+        output_slice_slug = "oblique45"
+        context_slice_label = "2D oblique 45-degree normal slice"
+        primary_velocity_label = r"Normal velocity, $u_n$"
+        transverse_velocity_label = r"Tangential velocity, $u_t$"
+        x_axis_label = r"$s=(x+y)/\sqrt{2}$"
+        fields_2d = oblique45_velocity_fields(fields_2d)
+    else:
+        raise ValueError("slice_kind must be 'centerline', 'diagonal45', or 'oblique45'")
+
+    fig, axes = make_validation_figure(
+        primary_velocity_label=primary_velocity_label,
+        transverse_velocity_label=transverse_velocity_label,
+        include_transverse=(slice_kind != "oblique45"),
+    )
     selected_y = None
     exact_fields = load_optional_exact_reference(
         exact_root,
         test_name,
-        context=f"{test_name} {METHOD_STYLES[method]['label']} 2D centerline",
+        context=f"{test_name} {METHOD_STYLES[method]['label']} {context_slice_label}",
     )
 
     for ax, (field_key, _) in zip(axes[:4], FIELD_NAMES):
@@ -316,7 +531,7 @@ def plot_1d_vs_2d(data_root, output_dir, method, test_name, requested_resolution
                 zorder=4,
             )
 
-        x_slice, values_slice, selected_y = extract_centerline_x_slice(
+        x_slice, values_slice, selected_y = slice_extractor(
             x_2d,
             y_2d,
             fields_2d[field_key],
@@ -336,44 +551,50 @@ def plot_1d_vs_2d(data_root, output_dir, method, test_name, requested_resolution
             ax,
             x_slice,
             values_slice,
-            label="2D centerline",
+            label=slice_label,
             color="tab:red",
             marker="o",
             zorder=3,
         )
         ax.legend(frameon=False)
 
-    x_slice, uy_slice, selected_y = extract_centerline_x_slice(
-        x_2d,
-        y_2d,
-        fields_2d["u1"],
-    )
-    _, ux_slice, _ = extract_centerline_x_slice(
-        x_2d,
-        y_2d,
-        fields_2d["u0"],
-    )
-    uy_floor = transverse_velocity_plot_floor(ux_slice)
-    uy_plot = zero_negligible_transverse_velocity(uy_slice, uy_floor)
+    if slice_kind != "oblique45":
+        x_slice, uy_slice, selected_y = slice_extractor(
+            x_2d,
+            y_2d,
+            fields_2d["u1"],
+        )
+        _, ux_slice, _ = slice_extractor(
+            x_2d,
+            y_2d,
+            fields_2d["u0"],
+        )
+        uy_floor = transverse_velocity_plot_floor(ux_slice)
+        uy_plot = zero_negligible_transverse_velocity(uy_slice, uy_floor)
 
-    axes[4].axhline(0.0, color="black", linewidth=0.9, label="zero")
-    plot_numeric_points(
-        axes[4],
-        x_slice,
-        uy_plot,
-        label="2D centerline",
-        color="tab:red",
-        marker="o",
-        zorder=3,
-    )
+        axes[4].axhline(0.0, color="black", linewidth=0.9, label="zero")
+        plot_numeric_points(
+            axes[4],
+            x_slice,
+            uy_plot,
+            label=slice_label,
+            color="tab:red",
+            marker="o",
+            zorder=3,
+        )
 
-    axes[4].legend(frameon=False)
+        axes[4].legend(frameon=False)
+
+    x_label_axes = axes[:4] if slice_kind == "oblique45" else axes[:5]
+    for ax in x_label_axes:
+        ax.set_xlabel(x_axis_label)
 
     label = METHOD_STYLES[method]["label"]
     slug = METHOD_STYLES[method]["slug"]
     plt.tight_layout()
 
-    output_path = output_dir / f"{test_name}_2d_validation_{slug}_1d_vs_2d_xslice_N{resolution}.png"
+    suffix = f"_{two_d_name_suffix}" if two_d_name_suffix else ""
+    output_path = output_dir / f"{test_name}{suffix}_2d_validation_{slug}_1d_vs_2d_{output_slice_slug}_N{resolution}.png"
     save_figure(fig, output_path)
     return output_path
 
@@ -425,6 +646,18 @@ def main():
         default=sorted(METHOD_STYLES.keys()),
         help="Methods to validate separately.",
     )
+    parser.add_argument(
+        "--slices",
+        nargs="+",
+        choices=("centerline", "diagonal45", "oblique45"),
+        default=("centerline", "diagonal45"),
+        help="2D slice reductions to plot.",
+    )
+    parser.add_argument(
+        "--two-d-name-suffix",
+        default="",
+        help="Suffix appended to the 2D Fedkiw output folder names, e.g. 45 for gfm_FedkiwA45.",
+    )
 
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -434,14 +667,17 @@ def main():
 
     for test_name in selected_tests:
         for method in args.methods:
-            plot_1d_vs_2d(
-                args.data_root,
-                args.output_dir,
-                method,
-                test_name,
-                args.overlay_n,
-                args.exact_root,
-            )
+            for slice_kind in args.slices:
+                plot_1d_vs_2d(
+                    args.data_root,
+                    args.output_dir,
+                    method,
+                    test_name,
+                    args.overlay_n,
+                    args.exact_root,
+                    slice_kind=slice_kind,
+                    two_d_name_suffix=args.two_d_name_suffix,
+                )
 
 
 if __name__ == "__main__":

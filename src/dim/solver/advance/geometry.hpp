@@ -38,7 +38,7 @@ inline std::array<int, DIM> compute_strides(
 }
 
 
-// [1] Flatten multi-index → linear index
+// [1] Flatten multi-index -> linear index
 template<int DIM>
 inline int flatten_index(
     const std::array<int, DIM>& idx,
@@ -88,3 +88,5 @@ inline std::array<double, DIM> compute_cell_center(
 }
 
 } 
+
+

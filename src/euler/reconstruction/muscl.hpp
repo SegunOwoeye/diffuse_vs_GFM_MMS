@@ -135,8 +135,6 @@ inline Conserved<DIM> hancock_predict(
     U_line has N cell-centred conservative states.
     cell_params has N EOS parameter objects, one per cell.
     UL_face and UR_face are returned with size N-1, one state per interface.
-
-    This is a pure MUSCL-Hancock reconstruction.
 */
 template<int DIM, int DIR, typename EOS>
 inline void reconstruct_line_interfaces(

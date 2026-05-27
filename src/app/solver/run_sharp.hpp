@@ -149,8 +149,7 @@ inline void run_sharp_interface_case(
         time += result.dt;
         ++step;
 
-        phi_output =
-            (cfg.interface_method == "GFM" && !ctx.phi_list.empty())
+        phi_output = (cfg.interface_method == "GFM" && !ctx.phi_list.empty())
                 ? &ctx.phi_list
                 : nullptr;
 

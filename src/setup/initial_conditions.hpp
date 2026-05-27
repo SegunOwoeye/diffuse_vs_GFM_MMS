@@ -40,6 +40,55 @@ inline bool point_in_region(
     return true;
 }
 
+template<int DIM>
+inline std::array<double, DIM> normalised_planar_normal(
+    const Config<DIM>& cfg
+)
+{
+    double norm_sq = 0.0;
+    for (int d = 0; d < DIM; ++d) {
+        norm_sq += cfg.planar_normal[d] * cfg.planar_normal[d];
+    }
+
+    if (norm_sq <= 0.0) {
+        throw std::runtime_error("normalised_planar_normal: zero planar normal");
+    }
+
+    const double inv_norm = 1.0 / std::sqrt(norm_sq);
+    std::array<double, DIM> normal{};
+
+    for (int d = 0; d < DIM; ++d) {
+        normal[d] = cfg.planar_normal[d] * inv_norm;
+    }
+
+    return normal;
+}
+
+template<int DIM>
+inline double planar_coordinate(
+    const std::array<double, DIM>& x,
+    const std::array<double, DIM>& normal
+)
+{
+    double s = 0.0;
+    for (int d = 0; d < DIM; ++d) {
+        s += normal[d] * x[d];
+    }
+
+    return s;
+}
+
+template<int DIM>
+inline bool point_in_planar_region(
+    const std::array<double, DIM>& x,
+    const Region<DIM>& region,
+    const std::array<double, DIM>& normal
+)
+{
+    const double s = planar_coordinate<DIM>(x, normal);
+    return s >= region.lower[0] && s < region.upper[0];
+}
+
 
 // [2] Compute cell centre
 template<int DIM>
@@ -152,11 +201,17 @@ inline void initialise_from_config(
 
     
     // [5.1] Region Initialisation    
-    if (cfg.initial_condition == "regions") {
+    if (cfg.initial_condition == "regions" ||
+        cfg.initial_condition == "planar_regions") {
 
         if (cfg.regions.empty()) {
             throw std::runtime_error("No regions defined");
         }
+
+        const bool use_planar_regions = (cfg.initial_condition == "planar_regions");
+        const auto planar_normal = use_planar_regions
+            ? normalised_planar_normal<DIM>(cfg)
+            : std::array<double, DIM>{};
 
         for (int linear = 0; linear < total_cells; ++linear) {
 
@@ -172,7 +227,11 @@ inline void initialise_from_config(
                     throw std::runtime_error("Region has invalid material_id");
                 }
 
-                if (point_in_region<DIM>(x, region)) {
+                const bool inside_region = use_planar_regions
+                    ? point_in_planar_region<DIM>(x, region, planar_normal)
+                    : point_in_region<DIM>(x, region);
+
+                if (inside_region) {
 
                     Primitive<DIM> P{};
                     P.rho = region.rho;

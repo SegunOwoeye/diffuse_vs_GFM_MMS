@@ -13,6 +13,7 @@ source .venv/bin/activate
 RUN_DIMS="${VALIDATION_DIMS:-all}"
 tests_1d=("test1" "test2" "test3" "test4" "test5")
 tests_2d=("test1" "test2" "test3" "test4" "test5" "test6")
+tests_2d_oblique=("test1_oblique45" "test2_oblique45" "test3_oblique45" "test4_oblique45" "test5_oblique45")
 
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -87,6 +88,21 @@ if dimension_enabled 2; then
         fi
     done
 
+    for t in "${tests_2d_oblique[@]}"; do
+        echo "[GFM 2D oblique45] Postprocessing $t"
+
+        case $t in
+            test1_oblique45) out="gfm_FedkiwA45" ;;
+            test2_oblique45) out="gfm_FedkiwB45" ;;
+            test3_oblique45) out="gfm_FedkiwC45" ;;
+            test4_oblique45) out="gfm_FedkiwD145" ;;
+            test5_oblique45) out="gfm_FedkiwD245" ;;
+            *) echo "Unknown oblique test: $t"; continue ;;
+        esac
+
+        python src/graphing/plot_multid.py gfm/MM_2D_validation/$out || { echo "Plot failed"; continue; }
+    done
+
     if compgen -G "data/csv/gfm/MM_1D_validation/gfm_FedkiwA/*.csv" > /dev/null; then
         echo "[GFM 2D] Writing 1D vs 2D centerline validation figures"
         python src/graphing/plot_gfm_dim_2d.py \
@@ -94,6 +110,16 @@ if dimension_enabled 2; then
             --overlay-n 400 \
             --output-dir data/plots/2d_rGFM_Allaire5eq_validation || {
                 echo "2D reduction validation plotting failed"
+            }
+
+        echo "[GFM 2D] Writing oblique45 1D vs 2D validation figures"
+        python src/graphing/plot_gfm_dim_2d.py \
+            --methods gfm \
+            --overlay-n 200 \
+            --two-d-name-suffix 45 \
+            --slices oblique45 \
+            --output-dir data/plots/2d_rGFM_Allaire5eq_oblique45_validation || {
+                echo "Oblique45 validation plotting failed"
             }
     else
         echo "[GFM 2D] Skipping 1D vs 2D centerline validation; GFM 1D CSVs are missing"
