@@ -133,21 +133,99 @@ inline EOSParams build_eos_params_from_material(
 
     EOSParams params{};
 
-    if (mat.type == "ideal_gas" || mat.type == "stiffened_gas") {
-        if (mat.params.count("gamma") == 0) {
-            throw std::runtime_error("Missing gamma in material id=" + std::to_string(mat_id));
-        }
-        params.gamma = mat.params.at("gamma");
+    params.kind = eos_kind_from_string(mat.type);
 
-        if (mat.type == "stiffened_gas") {
-            if (mat.params.count("p_inf") == 0) {
-                throw std::runtime_error("Missing p_inf in material id=" + std::to_string(mat_id));
-            }
-            params.p_inf = mat.params.at("p_inf");
+    if (mat.params.count("gamma") == 0) {
+        throw std::runtime_error("Missing gamma in material id=" + std::to_string(mat_id));
+    }
+    params.gamma = mat.params.at("gamma");
+
+    if (params.kind == EOSKind::stiffened_gas) {
+        if (mat.params.count("p_inf") == 0) {
+            throw std::runtime_error("Missing p_inf in material id=" + std::to_string(mat_id));
+        }
+        params.p_inf = mat.params.at("p_inf");
+    }
+
+    if (params.kind == EOSKind::noble_abel) {
+        if (mat.params.count("b")) {
+            params.covolume = mat.params.at("b");
+        }
+        else if (mat.params.count("covolume")) {
+            params.covolume = mat.params.at("covolume");
         }
     }
-    else {
-        throw std::runtime_error("Unsupported EOS type: " + mat.type);
+
+    if (params.kind == EOSKind::peng_robinson) {
+        if (mat.params.count("R")) {
+            params.gas_constant = mat.params.at("R");
+        }
+        if (mat.params.count("cv")) {
+            params.cv = mat.params.at("cv");
+        }
+        if (mat.params.count("Tc")) {
+            params.critical_temperature = mat.params.at("Tc");
+        }
+        else if (mat.params.count("critical_temperature")) {
+            params.critical_temperature = mat.params.at("critical_temperature");
+        }
+        if (mat.params.count("pc")) {
+            params.critical_pressure = mat.params.at("pc");
+        }
+        else if (mat.params.count("critical_pressure")) {
+            params.critical_pressure = mat.params.at("critical_pressure");
+        }
+        if (mat.params.count("omega")) {
+            params.acentric_factor = mat.params.at("omega");
+        }
+        else if (mat.params.count("acentric_factor")) {
+            params.acentric_factor = mat.params.at("acentric_factor");
+        }
+        if (mat.params.count("T_ref")) {
+            params.reference_temperature = mat.params.at("T_ref");
+        }
+        else if (mat.params.count("reference_temperature")) {
+            params.reference_temperature = mat.params.at("reference_temperature");
+        }
+        if (mat.params.count("a")) {
+            params.pr_a = mat.params.at("a");
+        }
+        if (mat.params.count("b")) {
+            params.pr_b = mat.params.at("b");
+        }
+        if (params.critical_temperature > 0.0 && params.critical_pressure > 0.0) {
+            const double R = params.gas_constant;
+            const double Tc = params.critical_temperature;
+            const double pc = params.critical_pressure;
+
+            if (!mat.params.count("a")) {
+                params.pr_a = 0.457236 * R * R * Tc * Tc / pc;
+            }
+            if (!mat.params.count("b")) {
+                params.pr_b = 0.077796 * R * Tc / pc;
+            }
+        }
+        if (params.pr_a <= 0.0 || params.pr_b <= 0.0 ||
+            params.critical_temperature <= 0.0) {
+            throw std::runtime_error(
+                "Peng-Robinson material requires Tc and either pc or explicit a,b"
+            );
+        }
+    }
+
+    if (params.kind == EOSKind::tait) {
+        if (!mat.params.count("B") && !mat.params.count("tait_B")) {
+            throw std::runtime_error("Missing B/tait_B in material id=" + std::to_string(mat_id));
+        }
+        if (!mat.params.count("rho0")) {
+            throw std::runtime_error("Missing rho0 in material id=" + std::to_string(mat_id));
+        }
+
+        params.tait_B = mat.params.count("B") ? mat.params.at("B") : mat.params.at("tait_B");
+        params.rho0 = mat.params.at("rho0");
+        if (mat.params.count("p0")) {
+            params.p0 = mat.params.at("p0");
+        }
     }
 
     return params;

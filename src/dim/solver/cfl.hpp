@@ -42,7 +42,13 @@ namespace dim {
         #pragma omp parallel for reduction(min:dt)
         for (int i = 0; i < static_cast<int>(U.size()); ++i) {
             const Primitive<DIM> P = cons_to_prim<DIM>(U[i], params);
-            const double c = IdealGasEOS::mixture_sound_speed(total_density(U[i]), P.p, P.alpha, params);
+            const double c = IdealGasEOS::mixture_sound_speed(
+                total_density(U[i]),
+                P.p,
+                P.alpha,
+                P.rho,
+                params
+            );
 
             for (int d = 0; d < DIM; ++d) {
                 const double wave_speed = std::abs(P.vel[d]) + c;

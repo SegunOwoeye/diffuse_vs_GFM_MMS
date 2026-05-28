@@ -90,8 +90,8 @@ namespace dim {
         const double unL = dot<DIM>(PL.vel, n);
         const double unR = dot<DIM>(PR.vel, n);
 
-        const double cL = IdealGasEOS::mixture_sound_speed(rhoL, pL, PL.alpha, params);
-        const double cR = IdealGasEOS::mixture_sound_speed(rhoR, pR, PR.alpha, params);
+        const double cL = IdealGasEOS::mixture_sound_speed(rhoL, pL, PL.alpha, PL.rho, params);
+        const double cR = IdealGasEOS::mixture_sound_speed(rhoR, pR, PR.alpha, PR.rho, params);
 
         const double sL = std::min(unL - cL, unR - cR);
         const double sR = std::max(unL + cL, unR + cR);
@@ -126,7 +126,7 @@ namespace dim {
             const double rhoL_star = compute_star_density(rhoL, sL, unL, s_star, tol);
             const double EL_star = compute_star_energy(rhoL_star, UL.E, rhoL, pL, sL, unL, s_star, tol);
 
-            if (rhoL_star <= 0.0 || EL_star <= 0.0 || !std::isfinite(rhoL_star) || !std::isfinite(EL_star)) {
+            if (rhoL_star <= 0.0 || !std::isfinite(rhoL_star) || !std::isfinite(EL_star)) {
                 return {hll_flux(UL, UR, FL, FR, sL, sR), s_star};
             }
 
@@ -151,7 +151,7 @@ namespace dim {
         const double rhoR_star = compute_star_density(rhoR, sR, unR, s_star, tol);
         const double ER_star = compute_star_energy(rhoR_star, UR.E, rhoR, pR, sR, unR, s_star, tol);
 
-        if (rhoR_star <= 0.0 || ER_star <= 0.0 || !std::isfinite(rhoR_star) || !std::isfinite(ER_star)) {
+        if (rhoR_star <= 0.0 || !std::isfinite(rhoR_star) || !std::isfinite(ER_star)) {
             return {hll_flux(UL, UR, FL, FR, sL, sR), s_star};
         }
 
@@ -172,6 +172,4 @@ namespace dim {
     }
 
 } 
-
-
 

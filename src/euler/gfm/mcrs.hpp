@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "src/euler/primitives.hpp"
+#include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
 #include "src/math/numerical_safety.hpp"
 
@@ -55,6 +56,11 @@ public:
     // [1.2] Solve mixed-material Riemann problem
     inline MCRSResult1D solve() const
     {
+        if (!eos_has_stiffened_gas_wave_curve(paramsL_S) ||
+            !eos_has_stiffened_gas_wave_curve(paramsR_S)) {
+            return acoustic_solve();
+        }
+
         check_vacuum();
 
         const double p_floor = tol_S;
@@ -148,8 +154,49 @@ private:
 
     inline double compute_c(double rho, double p, const EOSParams& params) const
     {
-        const double val = params.gamma * safe_div(shifted_pressure(p, params), rho, tol_S);
-        return require_positive(std::sqrt(val), "MCRS: sound speed invalid", tol_S);
+        Conserved<1> U{};
+        U.rho = clamp_min(rho);
+        U.mom[0] = 0.0;
+        U.E = U.rho * MaterialEOS::internal_energy(U.rho, p, params);
+        return require_positive(
+            MaterialEOS::sound_speed<1>(U, params),
+            "MCRS: sound speed invalid",
+            tol_S
+        );
+    }
+
+    inline MCRSResult1D acoustic_solve() const
+    {
+        const double ZL = require_positive(rhoL_S * cL_S, "MCRS: left impedance invalid", tol_S);
+        const double ZR = require_positive(rhoR_S * cR_S, "MCRS: right impedance invalid", tol_S);
+        const double denom = safe_denom(ZL + ZR, tol_S);
+
+        const double p_star = require_positive(
+            (ZR * pL_S + ZL * pR_S + ZL * ZR * (uL_S - uR_S)) / denom,
+            "MCRS: acoustic p_star invalid",
+            tol_S
+        );
+
+        const double u_star = require_finite(
+            (ZL * uL_S + ZR * uR_S + pL_S - pR_S) / denom,
+            "MCRS: acoustic u_star invalid"
+        );
+
+        const double KL = MaterialEOS::entropy_invariant(rhoL_S, pL_S, paramsL_S);
+        const double KR = MaterialEOS::entropy_invariant(rhoR_S, pR_S, paramsR_S);
+
+        const double rhoL_star = require_positive(
+            MaterialEOS::density_from_p_invariant(p_star, KL, paramsL_S),
+            "MCRS: acoustic rhoL* invalid",
+            tol_S
+        );
+        const double rhoR_star = require_positive(
+            MaterialEOS::density_from_p_invariant(p_star, KR, paramsR_S),
+            "MCRS: acoustic rhoR* invalid",
+            tol_S
+        );
+
+        return {p_star, u_star, rhoL_star, rhoR_star};
     }
 
 
@@ -328,5 +375,4 @@ private:
         );
     }
 };
-
 

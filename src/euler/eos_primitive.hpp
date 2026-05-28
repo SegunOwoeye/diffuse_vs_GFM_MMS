@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <stdexcept>
+#include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
 #include "src/math/numerical_safety.hpp"
 
@@ -16,14 +17,9 @@ inline double sound_speed_primitive(
     rho = std::max(rho, tol);
     p = std::max(p, tol);
 
-    if (params.type == "ideal_gas") {
-        return std::sqrt(params.gamma * safe_div(p, rho));
-    }
-    else if (params.type == "stiffened_gas") {
-        return std::sqrt(params.gamma * safe_div((p + params.p_inf), rho));
-    }
-    else {
-        throw std::runtime_error("Unknown EOS type in sound_speed_primitive");
-    }
+    Conserved<1> U{};
+    U.rho = rho;
+    U.mom[0] = 0.0;
+    U.E = rho * MaterialEOS::internal_energy(rho, p, params);
+    return MaterialEOS::sound_speed<1>(U, params);
 }
-

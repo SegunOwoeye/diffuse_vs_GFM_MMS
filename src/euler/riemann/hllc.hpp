@@ -81,7 +81,7 @@ inline Conserved<DIM> hllc_flux_normal(
 
     // To Delete
     if (!std::isfinite(rhoL_star) || !std::isfinite(EL_star) ||
-        rhoL_star <= 0.0 || EL_star <= 0.0) {
+        rhoL_star <= 0.0) {
         throw std::runtime_error(
             "hllc left star invalid: "
             "rhoL=" + std::to_string(rhoL) +
@@ -98,7 +98,7 @@ inline Conserved<DIM> hllc_flux_normal(
     }
 
     if (!std::isfinite(rhoR_star) || !std::isfinite(ER_star) ||
-        rhoR_star <= 0.0 || ER_star <= 0.0) {
+        rhoR_star <= 0.0) {
         throw std::runtime_error("hllc_flux_normal: invalid right star state");
     }
 

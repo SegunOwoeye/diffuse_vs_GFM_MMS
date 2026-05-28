@@ -10,8 +10,8 @@
 #include "src/io/config.hpp"
 #include "src/io/config_loader.hpp"
 
-// StiffenedGasEOS reduces to ideal gas when p_inf = 0, so one EOS path covers
-using EOS = StiffenedGasEOS;
+// Runtime-dispatched EOS; each material selects its own EOS from the config.
+using EOS = MaterialEOS;
 
 // [0] Main
 int main(int argc, char** argv)

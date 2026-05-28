@@ -1,15 +1,120 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <vector>
 
 #include "src/dim/eos_params.hpp"
+#include "src/euler/eos.hpp"
 #include "src/math/numerical_safety.hpp"
 
 namespace dim {
 
 struct IdealGasEOS {
+    static double material_pressure_from_density_energy(
+        double rho,
+        double e,
+        const ::EOSParams& params
+    )
+    {
+        Conserved<1> U{};
+        U.rho = clamp_min(rho);
+        U.mom[0] = 0.0;
+        U.E = U.rho * std::max(e, 0.0);
+        return MaterialEOS::pressure<1>(U, params);
+    }
+
+    static double material_sound_speed(
+        double rho,
+        double p,
+        const ::EOSParams& params
+    )
+    {
+        Conserved<1> U{};
+        U.rho = clamp_min(rho);
+        U.mom[0] = 0.0;
+        U.E = U.rho * MaterialEOS::internal_energy(U.rho, p, params);
+        return MaterialEOS::sound_speed<1>(U, params);
+    }
+
+    static double mixture_internal_energy_density(
+        double p,
+        const std::vector<double>& alpha,
+        const std::vector<double>& rho,
+        const EOSParams& params
+    )
+    {
+        double energy_density = 0.0;
+        for (int k = 0; k < params.nmat(); ++k) {
+            energy_density += alpha[k] * rho[k] *
+                MaterialEOS::internal_energy(rho[k], p, params.material[k]);
+        }
+        return energy_density;
+    }
+
+    static double pressure_from_internal_energy(
+        double rho_total,
+        double e,
+        const std::vector<double>& alpha,
+        const std::vector<double>& rho,
+        const EOSParams& params
+    )
+    {
+        params.validate();
+
+        if (static_cast<int>(alpha.size()) != params.nmat() ||
+            static_cast<int>(rho.size()) != params.nmat()) {
+            throw std::runtime_error("dim::IdealGasEOS::pressure_from_internal_energy: mixture size mismatch");
+        }
+
+        rho_total = clamp_min(rho_total);
+        const double target = rho_total * e;
+        double fallback_pressure = 0.0;
+        for (int k = 0; k < params.nmat(); ++k) {
+            const double ek = target / rho_total;
+            fallback_pressure += alpha[k] *
+                material_pressure_from_density_energy(rho[k], ek, params.material[k]);
+        }
+
+        double lo = 1e-12;
+        double hi = std::max(1.0, fallback_pressure);
+
+        auto residual = [&](double p) {
+            return mixture_internal_energy_density(p, alpha, rho, params) - target;
+        };
+
+        double flo = residual(lo);
+        double fhi = residual(hi);
+
+        for (int n = 0; n < 80 && fhi < 0.0; ++n) {
+            hi *= 2.0;
+            fhi = residual(hi);
+        }
+
+        if (!(flo <= 0.0 && fhi >= 0.0)) {
+            return clamp_min(fallback_pressure);
+        }
+
+        for (int n = 0; n < 80; ++n) {
+            const double mid = 0.5 * (lo + hi);
+            const double fmid = residual(mid);
+
+            if (std::abs(fmid) <= 1e-10 * std::max(1.0, target)) {
+                return clamp_min(mid);
+            }
+
+            if (fmid > 0.0) {
+                hi = mid;
+            }
+            else {
+                lo = mid;
+            }
+        }
+
+        return clamp_min(0.5 * (lo + hi));
+    }
+
     static double pressure_from_internal_energy(
         double rho,
         double e,
@@ -24,14 +129,29 @@ struct IdealGasEOS {
         }
 
         rho = clamp_min(rho);
-        e = std::max(e, 0.0);
+        std::vector<double> rho_k(params.nmat(), clamp_min(rho));
+        return pressure_from_internal_energy(rho, e, alpha, rho_k, params);
+    }
 
-        double denom = 0.0;
-        for (int k = 0; k < params.nmat(); ++k) {
-            denom += alpha[k] / (params.gamma[k] - 1.0);
+    static double internal_energy_from_pressure(
+        double rho_total,
+        double p,
+        const std::vector<double>& alpha,
+        const std::vector<double>& rho,
+        const EOSParams& params
+    )
+    {
+        params.validate();
+
+        if (static_cast<int>(alpha.size()) != params.nmat() ||
+            static_cast<int>(rho.size()) != params.nmat()) {
+            throw std::runtime_error("dim::IdealGasEOS::internal_energy_from_pressure: mixture size mismatch");
         }
 
-        return clamp_min(rho * e / safe_denom(denom));
+        rho_total = clamp_min(rho_total);
+        p = clamp_min(p);
+
+        return mixture_internal_energy_density(p, alpha, rho, params) / rho_total;
     }
 
     static double internal_energy_from_pressure(
@@ -41,34 +161,23 @@ struct IdealGasEOS {
         const EOSParams& params
     )
     {
-        params.validate();
-
-        if (static_cast<int>(alpha.size()) != params.nmat()) {
-            throw std::runtime_error("dim::IdealGasEOS::internal_energy_from_pressure: alpha size mismatch");
-        }
-
-        rho = clamp_min(rho);
-        p = clamp_min(p);
-
-        double factor = 0.0;
-        for (int k = 0; k < params.nmat(); ++k) {
-            factor += alpha[k] / (params.gamma[k] - 1.0);
-        }
-
-        return p * factor / rho;
+        std::vector<double> rho_k(params.nmat(), clamp_min(rho));
+        return internal_energy_from_pressure(rho, p, alpha, rho_k, params);
     }
 
     static double mixture_sound_speed(
         double rho_total,
         double p,
         const std::vector<double>& alpha,
+        const std::vector<double>& rho,
         const EOSParams& params
     )
     {
         params.validate();
 
-        if (static_cast<int>(alpha.size()) != params.nmat()) {
-            throw std::runtime_error("dim::IdealGasEOS::mixture_sound_speed: alpha size mismatch");
+        if (static_cast<int>(alpha.size()) != params.nmat() ||
+            static_cast<int>(rho.size()) != params.nmat()) {
+            throw std::runtime_error("dim::IdealGasEOS::mixture_sound_speed: mixture size mismatch");
         }
 
         rho_total = clamp_min(rho_total);
@@ -76,21 +185,22 @@ struct IdealGasEOS {
 
         double beta_mix = 0.0;
         for (int k = 0; k < params.nmat(); ++k) {
-            beta_mix += alpha[k] / params.gamma[k];
+            const double c = material_sound_speed(rho[k], p, params.material[k]);
+            beta_mix += alpha[k] / safe_denom(rho[k] * c * c, 1e-14);
         }
 
-        return std::sqrt(p / (rho_total * safe_denom(beta_mix)));
+        return std::sqrt(1.0 / (rho_total * safe_denom(beta_mix, 1e-14)));
     }
 
-    static double material_sound_speed(
-        double rho_k,
+    static double mixture_sound_speed(
+        double rho,
         double p,
-        double gamma_k
+        const std::vector<double>& alpha,
+        const EOSParams& params
     )
     {
-        rho_k = clamp_min(rho_k);
-        p = clamp_min(p);
-        return std::sqrt(gamma_k * p / rho_k);
+        std::vector<double> rho_k(params.nmat(), clamp_min(rho));
+        return mixture_sound_speed(rho, p, alpha, rho_k, params);
     }
 };
 

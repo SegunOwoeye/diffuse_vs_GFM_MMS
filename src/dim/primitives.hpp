@@ -137,17 +137,24 @@ namespace dim {
             velocity_squared += P.vel[d] * P.vel[d];
         }
 
-        // Energy calc
-        const double kinetic = 0.5 * rho_total * velocity_squared;
-        const double internal_energy = std::max(safe_div(U.E - kinetic, rho_total), 0.0);
-        P.p = std::max(
-            IdealGasEOS::pressure_from_internal_energy(rho_total, internal_energy, P.alpha, params), p_floor
-        );
-
         for (int k = 0; k < params.nmat(); ++k) {
             const double alpha_k = std::max(P.alpha[k], alpha_floor);
             P.rho[k] = std::max(safe_div(U.partial_mass[k], alpha_k), rho_floor);
         }
+
+        // Energy calc
+        const double kinetic = 0.5 * rho_total * velocity_squared;
+        const double internal_energy = safe_div(U.E - kinetic, rho_total);
+        P.p = std::max(
+            IdealGasEOS::pressure_from_internal_energy(
+                rho_total,
+                internal_energy,
+                P.alpha,
+                P.rho,
+                params
+            ),
+            p_floor
+        );
 
         return P;
     }
@@ -194,7 +201,7 @@ namespace dim {
         }
 
         const double internal_energy = IdealGasEOS::internal_energy_from_pressure(
-            rho_total, P.p, P.alpha, params);
+            rho_total, P.p, P.alpha, P.rho, params);
 
         U.E = rho_total * internal_energy + 0.5 * rho_total * velocity_squared;
         U.alpha = independent_alpha(P.alpha);
@@ -222,13 +229,23 @@ namespace dim {
         double beta_mix = 0.0;
 
         for (int k = 0; k < params.nmat(); ++k) {
-            beta_mix += P.alpha[k] / (params.gamma[k] * p);
+            const double c = IdealGasEOS::material_sound_speed(
+                P.rho[k],
+                p,
+                params.material[k]
+            );
+            beta_mix += P.alpha[k] / safe_denom(P.rho[k] * c * c, 1e-14);
         }
 
         beta_mix = safe_denom(beta_mix);
 
         for (int k = 0; k < params.nmat(); ++k) {
-            const double beta_k = 1.0 / (params.gamma[k] * p);
+            const double c = IdealGasEOS::material_sound_speed(
+                P.rho[k],
+                p,
+                params.material[k]
+            );
+            const double beta_k = 1.0 / safe_denom(P.rho[k] * c * c, 1e-14);
             rhs[k] = P.alpha[k] * beta_k / beta_mix;
         }
 
@@ -258,15 +275,24 @@ namespace dim {
 
         std::vector<double> alpha_before = full_alpha(U, params.nmat());
         sanitise_alpha(alpha_before, 0.0);
+        std::vector<double> rho_material_before(params.nmat(), mass_floor);
+        for (int k = 0; k < params.nmat(); ++k) {
+            const double alpha_k = std::max(alpha_before[k], inactive_alpha_floor);
+            rho_material_before[k] = std::max(
+                safe_div(std::max(U.partial_mass[k], 0.0), alpha_k),
+                mass_floor
+            );
+        }
 
         const double kinetic_before = 0.5 * rho_before * velocity_squared_before;
         const double internal_before =
-            std::max(safe_div(U.E - kinetic_before, rho_before), 0.0);
+            safe_div(U.E - kinetic_before, rho_before);
         const double pressure_before = std::max(
             IdealGasEOS::pressure_from_internal_energy(
                 rho_before,
                 internal_before,
                 alpha_before,
+                rho_material_before,
                 params
             ),
             p_floor
@@ -309,11 +335,18 @@ namespace dim {
                 U.mom[d] = rho_total * velocity_before[d];
             }
 
+            std::vector<double> rho_material(params.nmat(), mass_floor);
+            for (int k = 0; k < params.nmat(); ++k) {
+                const double alpha_k = std::max(alpha_full[k], inactive_alpha_floor);
+                rho_material[k] = std::max(safe_div(U.partial_mass[k], alpha_k), mass_floor);
+            }
+
             const double internal_energy =
                 IdealGasEOS::internal_energy_from_pressure(
                     rho_total,
                     pressure_before,
                     alpha_full,
+                    rho_material,
                     params
                 );
             U.E = rho_total * internal_energy +
@@ -326,13 +359,20 @@ namespace dim {
             velocity_squared += std::pow(safe_div(U.mom[d], rho_total), 2);
         }
 
-        double energy_factor = 0.0;
+        std::vector<double> rho_material(params.nmat(), mass_floor);
         for (int k = 0; k < params.nmat(); ++k) {
-            energy_factor += alpha_full[k] / (params.gamma[k] - 1.0);
+            const double alpha_k = std::max(alpha_full[k], inactive_alpha_floor);
+            rho_material[k] = std::max(safe_div(U.partial_mass[k], alpha_k), mass_floor);
         }
 
         const double kinetic = 0.5 * rho_total * velocity_squared;
-        const double minimum_internal = p_floor * energy_factor;
+        const double minimum_internal =
+            IdealGasEOS::mixture_internal_energy_density(
+                p_floor,
+                alpha_full,
+                rho_material,
+                params
+            );
         U.E = std::max(U.E, kinetic + minimum_internal);
     }
 

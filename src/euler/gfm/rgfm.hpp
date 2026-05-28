@@ -295,7 +295,7 @@ inline Primitive<DIM> rgfm_cons_to_primitive_for_material(
     const EOSParams& params
 )
 {
-    Primitive<DIM> P = cons_to_prim<DIM, IdealGasEOS>(U, params);
+    Primitive<DIM> P = cons_to_prim<DIM, MaterialEOS>(U, params);
     P.rho = require_positive(P.rho, "rgfm: primitive rho", 1e-12);
     P.p = require_positive(P.p, "rgfm: primitive p", 1e-12);
     return P;
@@ -934,7 +934,6 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
 
     return data;
 }
-
 
 
 
