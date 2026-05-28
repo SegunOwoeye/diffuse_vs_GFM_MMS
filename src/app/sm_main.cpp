@@ -118,6 +118,7 @@ int main(int argc, char** argv)
             }
 
             ctx.cfl = cfg.cfl;
+            ctx.time_update = cfg.time_update;
 
             ctx.material_id = material_id;
             ctx.material_params = material_params;

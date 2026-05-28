@@ -6,8 +6,8 @@ dimension = 2
 # ========================
 # Domain
 # ========================
-domain_min = [-0.25, -0.25]
-domain_max = [1.25, 1.25]
+domain_min = [-1.0, -1.0]
+domain_max = [2.0, 2.0]
 
 N = [200, 200]
 
@@ -22,7 +22,7 @@ cfl = 0.3
 # ========================
 interface_method = DIM
 use_level_set = false
-interface_thickness = 0.02
+interface_thickness = 0.04
 
 # ========================
 # Materials (different EOS)
@@ -36,8 +36,8 @@ material = 1, ideal_gas, gamma=1.2
 initial_condition = planar_regions
 planar_normal = [1.0, 1.0]
 
-region = [-1.0, -1.0], [0.5, 2.0], rho=1.0, vel=[0.0, 0.0], p=100000.0, material=0
-region = [0.5, -1.0], [2.0, 2.0], rho=0.125, vel=[0.0, 0.0], p=10000.0, material=1
+region = [-2.0, -1.0], [0.5, 4.0], rho=1.0, vel=[0.0, 0.0], p=100000.0, material=0
+region = [0.5, -1.0], [4.0, 4.0], rho=0.125, vel=[0.0, 0.0], p=10000.0, material=1
 
 # ========================
 # Output

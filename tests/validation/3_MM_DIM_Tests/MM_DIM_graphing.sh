@@ -107,7 +107,7 @@ if dimension_enabled 2; then
         echo "[DIM 2D] Writing 1D vs 2D centerline validation figures"
         python src/graphing/plot_gfm_dim_2d.py \
             --methods dim \
-            --overlay-n 400 \
+            --overlay-n 200 \
             --output-dir data/plots/2d_rGFM_Allaire5eq_validation || {
                 echo "2D reduction validation plotting failed"
             }

@@ -69,6 +69,7 @@ inline SolverContext<DIM> build_solver_context(
     ctx.advect_level_set = (cfg.interface_method == "GFM" && cfg.use_level_set && !ctx.phi_list.empty());
     ctx.reassign_material_from_phi = ctx.advect_level_set;
     ctx.level_set_advection = cfg.level_set_advection;
+    ctx.time_update = cfg.time_update;
 
     ctx.reinit_enabled = (
         cfg.interface_method == "GFM" &&

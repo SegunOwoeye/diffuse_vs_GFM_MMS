@@ -96,6 +96,7 @@ struct Config {
 
     // [3.4] Interface method
     std::string interface_method = "SM"; // SM, GFM, DIM
+    std::string time_update = "split"; // split, unsplit
 
     // [3.5] Level set (required for GFM)
     bool use_level_set = false;

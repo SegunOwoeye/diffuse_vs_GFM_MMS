@@ -249,6 +249,7 @@ tfinal             Final simulation time
 output_times       Optional intermediate output times
 cfl                CFL number
 interface_method   SM, GFM, or DIM
+time_update        split or unsplit; defaults to split
 use_level_set      Required for GFM, disabled for DIM
 bc_lo, bc_hi       Boundary conditions
 material           Material id, EOS type, and EOS parameters

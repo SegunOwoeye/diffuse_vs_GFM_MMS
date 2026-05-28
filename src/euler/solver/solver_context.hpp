@@ -45,6 +45,7 @@ struct SolverContext {
     bool reassign_material_from_phi = true;
     bool use_axis_normals_in_1d = true;
     std::string level_set_advection = "normal_speed";
+    std::string time_update = "split";
 
     // [1.5] Physical boundary conditions
     std::array<BoundaryConditionType, DIM> bc_lo{};
@@ -120,6 +121,11 @@ struct SolverContext {
             throw std::runtime_error("SolverContext: invalid level_set_advection");
         }
 
+        if (time_update != "split" &&
+            time_update != "unsplit") {
+            throw std::runtime_error("SolverContext: invalid time_update");
+        }
+
         if (reinit_iterations < 0) {
             throw std::runtime_error("SolverContext: reinit_iterations must be non-negative");
         }
@@ -169,5 +175,4 @@ struct SolverContext {
         }
     }
 };
-
 

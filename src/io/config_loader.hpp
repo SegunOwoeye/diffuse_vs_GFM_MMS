@@ -283,6 +283,11 @@ inline void validate_config(const Config<DIM>& cfg)
         throw std::runtime_error("Invalid interface_method");
     }
 
+    if (cfg.time_update != "split" &&
+        cfg.time_update != "unsplit") {
+        throw std::runtime_error("time_update must be split or unsplit");
+    }
+
     if (cfg.interface_method == "GFM" && !cfg.use_level_set) {
         throw std::runtime_error("GFM requires level set");
     }
@@ -444,6 +449,7 @@ inline Config<DIM> load_config(const std::string& filename)
         else if (key == "material_bubble") cfg.material_bubble = std::stoi(value);
 
         else if (key == "interface_method") cfg.interface_method = value;
+        else if (key == "time_update") cfg.time_update = to_lower(value);
         else if (key == "use_level_set") cfg.use_level_set = parse_bool(value);
         else if (key == "reinit_interval") cfg.reinit_interval = std::stoi(value);
         else if (key == "level_set_advection") cfg.level_set_advection = to_lower(value);
@@ -459,4 +465,3 @@ inline Config<DIM> load_config(const std::string& filename)
     validate_config(cfg);
     return cfg;
 }
-

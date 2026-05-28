@@ -505,14 +505,23 @@ inline StepResult<DIM> advance_one_step(
 
 
     // [2.2] CFL timestep
-    const double dt = compute_dt_cfl_materials<DIM, EOS>(
-        U,
-        material_id_current,
-        ctx.material_params,
-        ctx.dx,
-        ctx.cfl,
-        ctx.dt_max
-    );
+    const double dt = (ctx.time_update == "unsplit")
+        ? compute_dt_cfl_materials_unsplit<DIM, EOS>(
+            U,
+            material_id_current,
+            ctx.material_params,
+            ctx.dx,
+            ctx.cfl,
+            ctx.dt_max
+        )
+        : compute_dt_cfl_materials<DIM, EOS>(
+            U,
+            material_id_current,
+            ctx.material_params,
+            ctx.dx,
+            ctx.cfl,
+            ctx.dt_max
+        );
 
 
     // [2.3] Working level sets
@@ -554,10 +563,11 @@ inline StepResult<DIM> advance_one_step(
 
 
     /*
-        [2.5] Directional splitting on the current interface.
-    
-        Wang's rGFM imposes interface states and advances the fluid before
-        moving the level set to the next intermediate time. 
+        [2.5] Fluid update on the current interface.
+
+        Split sweeps advance directions sequentially. Unsplit updates compute
+        each directional delta from the same beginning-of-step state and then
+        accumulate those deltas in one conservative update.
     */
     std::vector<Conserved<DIM>> U_stage = rgfm_current.U_real;
     zero_roundoff_planar_transverse_momentum<DIM>(
@@ -565,39 +575,84 @@ inline StepResult<DIM> advance_one_step(
         planar_flow_axis
     );
 
-    for (int dir = 0; dir < DIM; ++dir) {
+    if (ctx.time_update == "unsplit") {
+        const std::vector<Conserved<DIM>> U_base = U_stage;
+        std::vector<Conserved<DIM>> U_accum = U_base;
 
-        std::vector<Conserved<DIM>> U_next = U_stage;
-        const RGFMInterfaceData<DIM> rgfm_stage =
-            build_rgfm_interface_data<DIM, EOS>(
+        for (int dir = 0; dir < DIM; ++dir) {
+            std::vector<Conserved<DIM>> U_dir = U_base;
+
+            sweep_direction_dispatch<DIM, EOS>(
+                dir,
+                U_base,
+                material_id_current,
+                ctx.phi_list,
+                ctx.tracked_interfaces,
+                normals_current,
+                ctx,
+                dt,
+                U_dir,
+                &rgfm_current.material_states
+            );
+
+            #pragma omp parallel for if(Ntot > 512)
+            for (int id = 0; id < Ntot; ++id) {
+                U_accum[id] = U_accum[id] + (U_dir[id] - U_base[id]);
+            }
+        }
+
+        #pragma omp parallel for if(Ntot > 512)
+        for (int id = 0; id < Ntot; ++id) {
+            const int mat = material_id_current[id];
+            enforce_positive_conserved<DIM, EOS>(
+                U_accum[id],
+                ctx.material_params[mat]
+            );
+        }
+
+        apply_boundary_conditions<DIM>(U_accum, ctx);
+        zero_roundoff_planar_transverse_momentum<DIM>(
+            U_accum,
+            planar_flow_axis
+        );
+
+        U_stage.swap(U_accum);
+    }
+    else {
+        for (int dir = 0; dir < DIM; ++dir) {
+
+            std::vector<Conserved<DIM>> U_next = U_stage;
+            const RGFMInterfaceData<DIM> rgfm_stage =
+                build_rgfm_interface_data<DIM, EOS>(
+                    U_stage,
+                    material_id_current,
+                    ctx.phi_list,
+                    ctx.tracked_interfaces,
+                    normals_current,
+                    ctx
+                );
+
+            sweep_direction_dispatch<DIM, EOS>(
+                dir,
                 U_stage,
                 material_id_current,
                 ctx.phi_list,
                 ctx.tracked_interfaces,
                 normals_current,
-                ctx
+                ctx,
+                dt,
+                U_next,
+                &rgfm_stage.material_states
             );
 
-        sweep_direction_dispatch<DIM, EOS>(
-            dir,
-            U_stage,
-            material_id_current,
-            ctx.phi_list,
-            ctx.tracked_interfaces,
-            normals_current,
-            ctx,
-            dt,
-            U_next,
-            &rgfm_stage.material_states
-        );
+            apply_boundary_conditions<DIM>(U_next, ctx);
+            zero_roundoff_planar_transverse_momentum<DIM>(
+                U_next,
+                planar_flow_axis
+            );
 
-        apply_boundary_conditions<DIM>(U_next, ctx);
-        zero_roundoff_planar_transverse_momentum<DIM>(
-            U_next,
-            planar_flow_axis
-        );
-
-        U_stage.swap(U_next);
+            U_stage.swap(U_next);
+        }
     }
 
     // [2.6] Level-set advection using the current-interface extension speed

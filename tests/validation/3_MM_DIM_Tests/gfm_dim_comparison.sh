@@ -18,7 +18,7 @@ if compgen -G "data/csv/gfm/MM_1D_validation/gfm_FedkiwA/*.csv" > /dev/null &&
     echo "[COMPARE] Writing 1D Fedkiw comparison figures"
     python src/graphing/plot_gfm_dim_1d.py \
         --convergence-test test2 \
-        --overlay-n 400 \
+        --overlay-n 200 \
         --include-convergence-overlay \
         --output-dir data/plots/1d_rGFM_Allaire5eq_validation
 else
