@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "src/app/levelset/initial_levelset.hpp"
-#include "src/euler/solver/solver_context.hpp"
+#include "src/sim/solver/solver_context.hpp"
 #include "src/euler/eos_params.hpp"
 #include "src/io/config.hpp"
 

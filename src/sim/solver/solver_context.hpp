@@ -6,8 +6,8 @@
 #include <vector>
 
 #include "src/euler/eos_params.hpp"
-#include "src/euler/gfm/tracked_interface.hpp"
-#include "src/euler/level_set/level_set_core.hpp"
+#include "src/sim/gfm/tracked_interface.hpp"
+#include "src/sim/level_set/level_set_core.hpp"
 
 
 // [0] Boundary Condition Type

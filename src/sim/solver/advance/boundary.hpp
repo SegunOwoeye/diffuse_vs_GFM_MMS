@@ -3,8 +3,8 @@
 #include <vector>
 
 #include "src/euler/state.hpp"
-#include "src/euler/solver/solver_context.hpp"
-#include "src/euler/grid/grid_utils.hpp"
+#include "src/sim/solver/solver_context.hpp"
+#include "src/sim/grid/grid_utils.hpp"
 
 template<int DIM>
 inline void apply_boundary_conditions(

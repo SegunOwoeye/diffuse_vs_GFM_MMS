@@ -14,19 +14,20 @@
 #include "src/euler/state.hpp"
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
-#include "src/euler/solver/cfl.hpp"
-#include "src/euler/solver/solver_context.hpp"
+#include "src/sim/solver/cfl.hpp"
+#include "src/sim/solver/solver_context.hpp"
 #include "src/euler/thermo_compute.hpp"
-#include "src/euler/level_set/level_set.hpp"
+#include "src/sim/level_set/level_set.hpp"
 
 // Split modules
-#include "src/euler/solver/advance/geometry.hpp"
-#include "src/euler/solver/advance/line_ops.hpp"
-#include "src/euler/solver/advance/interface_speed.hpp"
-#include "src/euler/solver/advance/sweep_core.hpp"
-#include "src/euler/solver/advance/boundary.hpp"
-#include "src/euler/solver/advance/material_transfer.hpp"
-#include "src/euler/gfm/rgfm.hpp"
+#include "src/sim/solver/advance/geometry.hpp"
+#include "src/sim/solver/advance/line_ops.hpp"
+#include "src/sim/solver/advance/interface_speed.hpp"
+#include "src/sim/solver/advance/sweep_core.hpp"
+#include "src/sim/solver/advance/boundary.hpp"
+#include "src/sim/solver/advance/material_transfer.hpp"
+#include "src/sim/gfm/rgfm.hpp"
+#include "src/fv/solver/directional_update.hpp"
 #include "src/math/numerical_safety.hpp"
 
 
@@ -577,54 +578,69 @@ inline StepResult<DIM> advance_one_step(
 
     if (ctx.time_update == "unsplit") {
         const std::vector<Conserved<DIM>> U_base = U_stage;
-        std::vector<Conserved<DIM>> U_accum = U_base;
-
-        for (int dir = 0; dir < DIM; ++dir) {
-            std::vector<Conserved<DIM>> U_dir = U_base;
-
+        auto sweep = [&](int dir,
+                         const std::vector<Conserved<DIM>>& U_in,
+                         std::vector<Conserved<DIM>>& U_out)
+        {
             sweep_direction_dispatch<DIM, EOS>(
                 dir,
-                U_base,
+                U_in,
                 material_id_current,
                 ctx.phi_list,
                 ctx.tracked_interfaces,
                 normals_current,
                 ctx,
                 dt,
-                U_dir,
+                U_out,
                 &rgfm_current.material_states
             );
+        };
 
+        auto accumulate_delta = [&](int,
+                                    std::vector<Conserved<DIM>>& U_accum,
+                                    const std::vector<Conserved<DIM>>& U_dir,
+                                    const std::vector<Conserved<DIM>>& U_base)
+        {
             #pragma omp parallel for if(Ntot > 512)
             for (int id = 0; id < Ntot; ++id) {
                 U_accum[id] = U_accum[id] + (U_dir[id] - U_base[id]);
             }
-        }
+        };
 
-        #pragma omp parallel for if(Ntot > 512)
-        for (int id = 0; id < Ntot; ++id) {
-            const int mat = material_id_current[id];
-            enforce_positive_conserved<DIM, EOS>(
-                U_accum[id],
-                ctx.material_params[mat]
+        auto after_accumulation = [&](std::vector<Conserved<DIM>>& U_accum)
+        {
+            #pragma omp parallel for if(Ntot > 512)
+            for (int id = 0; id < Ntot; ++id) {
+                const int mat = material_id_current[id];
+                enforce_positive_conserved<DIM, EOS>(
+                    U_accum[id],
+                    ctx.material_params[mat]
+                );
+            }
+
+            apply_boundary_conditions<DIM>(U_accum, ctx);
+            zero_roundoff_planar_transverse_momentum<DIM>(
+                U_accum,
+                planar_flow_axis
             );
-        }
+        };
 
-        apply_boundary_conditions<DIM>(U_accum, ctx);
-        zero_roundoff_planar_transverse_momentum<DIM>(
-            U_accum,
-            planar_flow_axis
+        fv::advance_unsplit_directions<DIM>(
+            U_base,
+            U_stage,
+            sweep,
+            accumulate_delta,
+            after_accumulation
         );
-
-        U_stage.swap(U_accum);
     }
     else {
-        for (int dir = 0; dir < DIM; ++dir) {
-
-            std::vector<Conserved<DIM>> U_next = U_stage;
+        auto sweep = [&](int dir,
+                         const std::vector<Conserved<DIM>>& U_in,
+                         std::vector<Conserved<DIM>>& U_out)
+        {
             const RGFMInterfaceData<DIM> rgfm_stage =
                 build_rgfm_interface_data<DIM, EOS>(
-                    U_stage,
+                    U_in,
                     material_id_current,
                     ctx.phi_list,
                     ctx.tracked_interfaces,
@@ -634,25 +650,32 @@ inline StepResult<DIM> advance_one_step(
 
             sweep_direction_dispatch<DIM, EOS>(
                 dir,
-                U_stage,
+                U_in,
                 material_id_current,
                 ctx.phi_list,
                 ctx.tracked_interfaces,
                 normals_current,
                 ctx,
                 dt,
-                U_next,
+                U_out,
                 &rgfm_stage.material_states
             );
+        };
 
+        auto after_direction = [&](int, std::vector<Conserved<DIM>>& U_next)
+        {
             apply_boundary_conditions<DIM>(U_next, ctx);
             zero_roundoff_planar_transverse_momentum<DIM>(
                 U_next,
                 planar_flow_axis
             );
+        };
 
-            U_stage.swap(U_next);
-        }
+        fv::advance_split_directions<DIM>(
+            U_stage,
+            sweep,
+            after_direction
+        );
     }
 
     // [2.6] Level-set advection using the current-interface extension speed

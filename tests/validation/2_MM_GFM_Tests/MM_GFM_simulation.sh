@@ -1,6 +1,7 @@
 #!/bin/bash
 
-cores=6
+cores_1d="${CORES_1D:-${OMP_NUM_THREADS:-1}}"
+cores_2d="${CORES_2D:-${CORES:-${OMP_NUM_THREADS:-6}}}"
 RUN_DIMS="${VALIDATION_DIMS:-all}"
 tests_1d=("test1" "test2" "test3" "test4" "test5")
 tests_2d=("test1" "test2" "test3" "test4" "test5" "test6")
@@ -38,7 +39,7 @@ if dimension_enabled 1; then
 
     for t in "${tests_1d[@]}"; do
         echo "[GFM 1D] Running $t"
-        OMP_NUM_THREADS=$cores OMP_SCHEDULE=dynamic \
+        OMP_NUM_THREADS=$cores_1d OMP_SCHEDULE=dynamic \
         ./mm_main_1d configs/GFM/MM_1D_validation/$t.txt || { echo "Solver failed"; continue; }
     done
 
@@ -56,13 +57,13 @@ if dimension_enabled 2; then
 
     for t in "${tests_2d[@]}"; do
         echo "[GFM 2D] Running $t"
-        OMP_NUM_THREADS=$cores OMP_SCHEDULE=dynamic \
+        OMP_NUM_THREADS=$cores_2d OMP_SCHEDULE=dynamic \
         ./mm_main_2d configs/GFM/MM_2D_validation/$t.txt || { echo "Solver failed"; continue; }
     done
 
     for t in "${tests_2d_oblique[@]}"; do
         echo "[GFM 2D oblique45] Running $t"
-        OMP_NUM_THREADS=$cores OMP_SCHEDULE=dynamic \
+        OMP_NUM_THREADS=$cores_2d OMP_SCHEDULE=dynamic \
         ./mm_main_2d configs/GFM/MM_2D_validation/$t.txt || { echo "Solver failed"; continue; }
     done
 

@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
-#include "src/euler/gfm/tracked_interface.hpp"
-#include "src/euler/level_set/level_set_core.hpp"
+#include "src/sim/gfm/tracked_interface.hpp"
+#include "src/sim/level_set/level_set_core.hpp"
 #include "src/math/numerical_safety.hpp"
 
 // [1] Flatten index from raw N array (solver-side helper)

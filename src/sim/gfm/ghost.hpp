@@ -9,7 +9,7 @@
 #include "src/euler/conservative.hpp"
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
-#include "src/euler/gfm/mcrs.hpp"
+#include "src/sim/gfm/mcrs.hpp"
 #include "src/math/numerical_safety.hpp"
 #include "src/math/vector_ops.hpp"
 

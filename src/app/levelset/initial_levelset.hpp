@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
-#include "src/euler/gfm/tracked_interface.hpp"
-#include "src/euler/grid/grid_utils.hpp"
+#include "src/sim/gfm/tracked_interface.hpp"
+#include "src/sim/grid/grid_utils.hpp"
 #include "src/io/config.hpp"
 
 

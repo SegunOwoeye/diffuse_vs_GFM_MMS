@@ -21,8 +21,10 @@ Main source folders:
 
 ```text
 src/app/       Program entry points and solver drivers
-src/euler/     Single-material Euler and rGFM sharp-interface code
+src/euler/     Shared Euler state, flux, thermodynamics, EoS, and Euler Riemann/reconstruction code
+src/sim/       Sharp-interface method (SIM): GFM/rGFM, level sets, and sharp-interface advancement
 src/dim/       Diffuse-interface Allaire-model code
+src/fv/        Shared finite-volume utilities used by more than one method
 src/io/        Config parsing and CSV output
 src/setup/     Initial conditions
 src/graphing/  Plotting and error analysis

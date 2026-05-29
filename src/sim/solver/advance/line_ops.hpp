@@ -6,7 +6,7 @@
 
 #include "src/euler/state.hpp"
 #include "src/euler/eos_params.hpp"
-#include "src/euler/grid/grid_utils.hpp"
+#include "src/sim/grid/grid_utils.hpp"
 #include "src/euler/reconstruction/muscl.hpp"
 
 template<int DIM, int DIR>

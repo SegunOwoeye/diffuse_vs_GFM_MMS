@@ -9,13 +9,13 @@
 #include <limits>
 #include <stdexcept>
 
-#include "src/euler/solver/advance/line_ops.hpp"
-#include "src/euler/solver/advance/geometry.hpp"
+#include "src/sim/solver/advance/line_ops.hpp"
+#include "src/sim/solver/advance/geometry.hpp"
 
-#include "src/euler/gfm/tracked_interface.hpp"
-#include "src/euler/solver/solver_context.hpp"
-#include "src/euler/gfm/interface_utils.hpp"
-#include "src/euler/gfm/ghost.hpp"
+#include "src/sim/gfm/tracked_interface.hpp"
+#include "src/sim/solver/solver_context.hpp"
+#include "src/sim/gfm/interface_utils.hpp"
+#include "src/sim/gfm/ghost.hpp"
 #include "src/euler/eos.hpp"
 #include "src/math/numerical_safety.hpp"
 #include "src/math/vector_ops.hpp"

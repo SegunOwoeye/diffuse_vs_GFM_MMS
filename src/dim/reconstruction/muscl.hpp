@@ -8,7 +8,7 @@
 #include "src/dim/conservative.hpp"
 #include "src/dim/flux.hpp"
 #include "src/dim/primitives.hpp"
-#include "src/euler/reconstruction/limiter.hpp"
+#include "src/fv/reconstruction/limiter.hpp"
 
 namespace dim {
 
