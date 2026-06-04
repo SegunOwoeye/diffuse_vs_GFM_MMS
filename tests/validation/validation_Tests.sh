@@ -26,7 +26,7 @@ Options:
   --no-plot             Skip postprocessing
   --archive             Move existing data/ into results/archive/
   --clean               Delete existing data/
-  --method VALUE        all, gfm, dim, both, or sm (default: all)
+  --method VALUE        all, gfm, dim, both, sm, or solid (default: all)
   --methods VALUE       Alias for --method
   --dims VALUE          all, 1, 2, or 1,2 for GFM/DIM (default: all)
   --dim VALUE           Alias for --dims
@@ -52,6 +52,7 @@ method_enabled() {
     case "$RUN_METHODS" in
         all) return 0 ;;
         sm) [[ "$method" == "sm" ]] ;;
+        solid) [[ "$method" == "solid" ]] ;;
         gfm) [[ "$method" == "gfm" ]] ;;
         dim) [[ "$method" == "dim" ]] ;;
         both|gfm-dim|dim-gfm) [[ "$method" == "gfm" || "$method" == "dim" ]] ;;
@@ -169,6 +170,8 @@ chmod +x tests/validation/2_MM_GFM_Tests/MM_GFM_graphing.sh
 chmod +x tests/validation/3_MM_DIM_Tests/MM_DIM_simulation.sh
 chmod +x tests/validation/3_MM_DIM_Tests/MM_DIM_graphing.sh
 chmod +x tests/validation/3_MM_DIM_Tests/gfm_dim_comparison.sh
+chmod +x tests/validation/5_Elastoplastic_Tests/EP_simulation.sh
+chmod +x tests/validation/5_Elastoplastic_Tests/EP_graphing.sh
 chmod +x tests/bubble_collapse_tests.sh
 
 if [ "$RUN_CASES" = "bubble" ]; then
@@ -194,6 +197,13 @@ if method_enabled sm; then
         "SM all dimensions" \
         "./tests/validation/1_SM_Euler_Tests/SM_simulation.sh" \
         "./tests/validation/1_SM_Euler_Tests/SM_graphing.sh"
+fi
+
+if method_enabled solid; then
+    run_validation_stage \
+        "Solid elastoplastic" \
+        "./tests/validation/5_Elastoplastic_Tests/EP_simulation.sh" \
+        "./tests/validation/5_Elastoplastic_Tests/EP_graphing.sh"
 fi
 
 if method_enabled dim && dim_enabled 1; then

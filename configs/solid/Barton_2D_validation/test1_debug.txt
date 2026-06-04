@@ -1,0 +1,20 @@
+model_type = elastoplastic_solid
+model = barton
+formulation = tensor
+dimension = 2
+test_case = radial_pressure
+domain_min = [0.0], [0.0]
+domain_max = [0.10], [0.10]
+N = [50], [50]
+radial_cells = 100
+tfinal = 10.0e-6
+cfl = 0.60
+hot_radius = 0.02
+hot_pressure = 10.0e9
+cold_temperature = 300.0
+hot_temperature = 600.0
+material = eos=eq51_copper
+bc_lo = symmetric, symmetric
+bc_hi = transmissive, transmissive
+output_prefix = barton_test1_tensor_radial_pressure_2d_debug
+output_dir = data/csv/solid

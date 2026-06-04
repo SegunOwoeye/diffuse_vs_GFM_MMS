@@ -283,6 +283,10 @@ inline void validate_config(const Config<DIM>& cfg)
         throw std::runtime_error("Invalid interface_method");
     }
 
+    if (!core::model_type_matches_interface_method(cfg.model_type, cfg.interface_method)) {
+        throw std::runtime_error("model_type does not match interface_method");
+    }
+
     if (cfg.time_update != "split" &&
         cfg.time_update != "unsplit") {
         throw std::runtime_error("time_update must be split or unsplit");
@@ -400,6 +404,7 @@ inline Config<DIM> load_config(const std::string& filename)
                 throw std::runtime_error("Dimension mismatch");
             }
         }
+        else if (key == "model_type") cfg.model_type = core::parse_model_type(value);
         else if (key == "domain_min") cfg.domain_min = parse_array<DIM>(value);
         else if (key == "domain_max") cfg.domain_max = parse_array<DIM>(value);
         else if (key == "N") cfg.N_list.push_back(parse_int_array<DIM>(value));
@@ -462,6 +467,9 @@ inline Config<DIM> load_config(const std::string& filename)
         }
     }
 
+    if (cfg.model_type == core::ModelType::Auto) {
+        cfg.model_type = core::model_type_from_interface_method(cfg.interface_method);
+    }
     validate_config(cfg);
     return cfg;
 }

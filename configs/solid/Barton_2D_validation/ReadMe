@@ -1,0 +1,4 @@
+Barton tensor 2D validation cases
+
+test1.txt        Radial-pressure benchmark, paper grid 250x250
+test1_debug.txt  Same radial-pressure benchmark at 50x50 for fast development checks

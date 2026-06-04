@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "src/core/model_type.hpp"
 #include "src/euler/primitives.hpp"
 
 // [1] Material
@@ -33,6 +34,7 @@ struct Region {
 template<int DIM>
 struct Config {
     int dimension = DIM;
+    core::ModelType model_type = core::ModelType::Auto;
 
     std::array<double, DIM> domain_min{};
     std::array<double, DIM> domain_max{};

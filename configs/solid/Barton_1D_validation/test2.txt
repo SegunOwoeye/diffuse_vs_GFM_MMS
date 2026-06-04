@@ -1,0 +1,24 @@
+# Barton-Drikakis-Romenski Section 6.1, aluminium flyer plate impact.
+# Paper setup: 0.5 cm aluminium flyer impacting stationary aluminium target.
+# Eq. 49-50 isentropic aluminium EOS, Eq. 53 relaxation law.
+model_type = elastoplastic_solid
+model = barton
+dimension = 1
+domain_min = [0.0]
+domain_max = [0.05]
+N = [500]
+tfinal = 5.0e-6
+cfl = 0.60
+moving_free_surface = true
+free_surface_position = [0.0]
+output_times = [0.5e-6], [1.0e-6], [2.0e-6], [3.0e-6], [4.0e-6], [5.0e-6]
+
+material = eos=eq49, rho0=2700.0, G=24.8e9, sigma0=0.2976e9, tau0=1.0e-5, n=100.0, p01=72.0e9, p02=172.0e9, p03=40.0e9
+
+region = [0.0], [0.005], rho=2700.0, u=2000.0
+region = [0.005], [0.05], rho=2700.0, u=0.0
+
+bc_lo = free_surface
+bc_hi = transmissive
+output_prefix = barton_test2_wilkins_flying_plate_2p0_1d
+output_dir = data/csv/solid

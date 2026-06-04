@@ -305,6 +305,61 @@ For rGFM, set `interface_method = GFM` and `use_level_set = true`. For DIM, set
 `interface_method = DIM`, `use_level_set = false`, and specify
 `interface_thickness`.
 
+### Elastoplastic Solid Impact
+
+The repository also includes a 1D elastoplastic solid-impact driver. The solid
+state follows the Miller-Colella direction more closely than a gas-Euler EOS
+extension: mass, momentum, and energy remain conservative, while the solid
+module carries an inverse deformation component `gxx`, a volume-preserving
+plastic deformation tensor reduction `Fp_xx`, `Fp_yy`, `Fp_zz`, and an
+elastic-perfectly-plastic von-Mises return step. The stress flux uses
+`sigma_xx = -p + sxx`.
+
+A symmetric Mie-Gruneisen aluminium sanity case is provided as:
+
+```text
+configs/solid/EP_1D_validation/test1.txt
+```
+
+Wilkins flying-plate cases based on Miller and Colella's Section 8.4 are also
+provided:
+
+```text
+configs/solid/EP_1D_validation/test2.txt  # 0.8 km/s, Fig. 7 style
+configs/solid/EP_1D_validation/test3.txt  # 2.0 km/s, Fig. 9 style
+```
+
+Build and run it with:
+
+```bash
+g++ -std=c++17 -O2 -I. src/app/solid_main.cpp -o solid_main_1d
+./solid_main_1d configs/solid/EP_1D_validation/test1.txt
+python src/graphing/plot_solid_1d.py \
+  data/csv/solid/aluminium_plate_impact_1d/aluminium_plate_impact_1d_N800.csv \
+  --out data/csv/solid/aluminium_plate_impact_1d/aluminium_plate_impact_1d.png
+```
+
+The Wilkins cases write time snapshots for paper-style stress/density overlays:
+
+```bash
+./solid_main_1d configs/solid/EP_1D_validation/test2.txt
+python src/graphing/plot_solid_1d.py \
+  data/csv/solid/wilkins_flying_plate_0p8_1d/wilkins_flying_plate_0p8_1d_t0p200us_N500.csv \
+  data/csv/solid/wilkins_flying_plate_0p8_1d/wilkins_flying_plate_0p8_1d_t0p400us_N500.csv \
+  data/csv/solid/wilkins_flying_plate_0p8_1d/wilkins_flying_plate_0p8_1d_t0p600us_N500.csv \
+  data/csv/solid/wilkins_flying_plate_0p8_1d/wilkins_flying_plate_0p8_1d_t0p800us_N500.csv \
+  data/csv/solid/wilkins_flying_plate_0p8_1d/wilkins_flying_plate_0p8_1d_N500.csv \
+  --paper-wilkins \
+  --out data/csv/solid/wilkins_flying_plate_0p8_1d/wilkins_flying_plate_0p8_1d_overlay.png
+```
+
+Or run the validation wrappers:
+
+```bash
+python tests/validation/5_Elastoplastic_Tests/solid_plate_impact_validation.py
+python tests/validation/5_Elastoplastic_Tests/wilkins_flying_plate_validation.py
+```
+
 ---
 
 ## Output and Plotting
