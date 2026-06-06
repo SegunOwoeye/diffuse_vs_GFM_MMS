@@ -301,6 +301,14 @@ inline void validate_config(const Config<DIM>& cfg)
         throw std::runtime_error("level_set_advection must be normal_speed or flow");
     }
 
+    if (cfg.reinit_interval < 0) {
+        throw std::runtime_error("reinit_interval must be non-negative");
+    }
+
+    if (cfg.reinit_iterations < 0) {
+        throw std::runtime_error("reinit_iterations must be non-negative");
+    }
+
     if (cfg.interface_method == "DIM" && cfg.use_level_set) {
         throw std::runtime_error("DIM should not use level set");
     }
@@ -457,6 +465,7 @@ inline Config<DIM> load_config(const std::string& filename)
         else if (key == "time_update") cfg.time_update = to_lower(value);
         else if (key == "use_level_set") cfg.use_level_set = parse_bool(value);
         else if (key == "reinit_interval") cfg.reinit_interval = std::stoi(value);
+        else if (key == "reinit_iterations") cfg.reinit_iterations = std::stoi(value);
         else if (key == "level_set_advection") cfg.level_set_advection = to_lower(value);
         else if (key == "interface_thickness") cfg.interface_thickness = std::stod(value);
         else if (key == "bc_lo") cfg.bc_lo = parse_string_array<DIM>(value);

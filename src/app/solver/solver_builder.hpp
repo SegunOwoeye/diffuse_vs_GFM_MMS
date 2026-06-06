@@ -78,7 +78,7 @@ inline SolverContext<DIM> build_solver_context(
         cfg.reinit_interval > 0
     );
     ctx.reinit_frequency = ctx.reinit_enabled ? cfg.reinit_interval : 0;
-    ctx.reinit_iterations = 5;
+    ctx.reinit_iterations = cfg.reinit_iterations;
     ctx.completed_steps = 0;
 
     return ctx;

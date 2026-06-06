@@ -634,6 +634,55 @@ inline std::vector<double> advect_phi_normal_speed(
     Rebuilds a signed-distance field while preserving the zero-level-set location.
 */
 template<int DIM>
+inline std::vector<double> level_set_reinit_rhs(
+    const std::vector<double>& phi,
+    const std::vector<double>& phi0,
+    const LevelSetGrid<DIM>& grid
+)
+{
+    validate_level_set_field_size<DIM>(phi, grid, "level_set_reinit_rhs");
+    validate_level_set_field_size<DIM>(phi0, grid, "level_set_reinit_rhs");
+
+    const int Ntot = static_cast<int>(total_cells(grid));
+    const double h = *std::min_element(grid.dx.begin(), grid.dx.end());
+    std::vector<double> rhs(Ntot, 0.0);
+
+    #pragma omp parallel for
+    for (int id = 0; id < Ntot; ++id) {
+        std::array<int, DIM> idx{};
+        level_set_detail::decode_index<DIM>(id, grid, idx);
+
+        if (!level_set_detail::is_interior_from_coords<DIM>(idx, grid)) {
+            continue;
+        }
+
+        const double S = sussman_sign(phi0[id], h);
+        double grad_sq = 0.0;
+
+        for (int d = 0; d < DIM; ++d) {
+            const double dm = level_set_detail::dminus_flat<DIM>(phi, grid, id, idx[d], d);
+            const double dp = level_set_detail::dplus_flat<DIM>(phi, grid, id, idx[d], d);
+
+            if (S >= 0.0) {
+                grad_sq +=
+                    std::max(dm, 0.0) * std::max(dm, 0.0) +
+                    std::min(dp, 0.0) * std::min(dp, 0.0);
+            }
+            else {
+                grad_sq +=
+                    std::min(dm, 0.0) * std::min(dm, 0.0) +
+                    std::max(dp, 0.0) * std::max(dp, 0.0);
+            }
+        }
+
+        rhs[id] = -S * (std::sqrt(grad_sq) - 1.0);
+    }
+
+    return rhs;
+}
+
+
+template<int DIM>
 inline std::vector<double> reinitialise_phi(
     const std::vector<double>& phi0,
     const LevelSetGrid<DIM>& grid,
@@ -646,11 +695,55 @@ inline std::vector<double> reinitialise_phi(
         throw std::runtime_error("reinitialise_phi: iterations must be non-negative");
     }
 
-    return redistance_preserving_zero_level_set<DIM>(
-        phi0,
-        grid,
-        std::max(1, iterations)
-    );
+    if (iterations == 0) {
+        return phi0;
+    }
+
+    const int Ntot = static_cast<int>(total_cells(grid));
+    const double min_dx = *std::min_element(grid.dx.begin(), grid.dx.end());
+    const double dtau = 0.3 * min_dx;
+
+    std::vector<double> phi = phi0;
+    apply_neumann_bc<DIM>(phi, grid);
+
+    for (int iter = 0; iter < iterations; ++iter) {
+        const std::vector<double> rhs0 =
+            level_set_reinit_rhs<DIM>(phi, phi0, grid);
+
+        std::vector<double> phi1(Ntot, 0.0);
+
+        #pragma omp parallel for
+        for (int id = 0; id < Ntot; ++id) {
+            phi1[id] = phi[id] + dtau * rhs0[id];
+        }
+
+        apply_neumann_bc<DIM>(phi1, grid);
+
+        const std::vector<double> rhs1 =
+            level_set_reinit_rhs<DIM>(phi1, phi0, grid);
+
+        std::vector<double> phi2(Ntot, 0.0);
+
+        #pragma omp parallel for
+        for (int id = 0; id < Ntot; ++id) {
+            phi2[id] = 0.75 * phi[id] + 0.25 * (phi1[id] + dtau * rhs1[id]);
+        }
+
+        apply_neumann_bc<DIM>(phi2, grid);
+
+        const std::vector<double> rhs2 =
+            level_set_reinit_rhs<DIM>(phi2, phi0, grid);
+
+        #pragma omp parallel for
+        for (int id = 0; id < Ntot; ++id) {
+            phi[id] = (1.0 / 3.0) * phi[id] +
+                (2.0 / 3.0) * (phi2[id] + dtau * rhs2[id]);
+        }
+
+        apply_neumann_bc<DIM>(phi, grid);
+    }
+
+    return phi;
 }
 
 

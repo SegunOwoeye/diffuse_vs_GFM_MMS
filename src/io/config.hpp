@@ -103,6 +103,7 @@ struct Config {
     // [3.5] Level set (required for GFM)
     bool use_level_set = false;
     int reinit_interval = 0;
+    int reinit_iterations = 10;
     std::string level_set_advection = "normal_speed";
 
     // [3.6] Diffuse interface (DIM only)
