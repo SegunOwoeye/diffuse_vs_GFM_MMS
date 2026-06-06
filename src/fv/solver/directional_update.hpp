@@ -1,6 +1,6 @@
 #pragma once
 
-#include <vector>
+#include "src/core/fv/directional_update.hpp"
 
 namespace fv {
 
@@ -11,14 +11,10 @@ inline void advance_split_directions(
     AfterDirectionFn&& after_direction
 )
 {
-    for (int dir = 0; dir < DIM; ++dir) {
-        std::vector<State> U_next = U_stage;
-
-        sweep_direction(dir, U_stage, U_next);
-        after_direction(dir, U_next);
-
-        U_stage.swap(U_next);
-    }
+    core::fv::advance_split_directions<DIM>(
+        U_stage,
+        std::forward<SweepFn>(sweep_direction),
+        std::forward<AfterDirectionFn>(after_direction));
 }
 
 
@@ -37,17 +33,12 @@ inline void advance_unsplit_directions(
     AfterAccumulationFn&& after_accumulation
 )
 {
-    std::vector<State> U_accum = U_base;
-
-    for (int dir = 0; dir < DIM; ++dir) {
-        std::vector<State> U_dir = U_base;
-
-        sweep_direction(dir, U_base, U_dir);
-        accumulate_delta(dir, U_accum, U_dir, U_base);
-    }
-
-    after_accumulation(U_accum);
-    U_stage.swap(U_accum);
+    core::fv::advance_unsplit_directions<DIM>(
+        U_base,
+        U_stage,
+        std::forward<SweepFn>(sweep_direction),
+        std::forward<AccumulateDeltaFn>(accumulate_delta),
+        std::forward<AfterAccumulationFn>(after_accumulation));
 }
 
 } 

@@ -162,16 +162,15 @@ inline double dplus_second_order_flat(
 }
 
 
-// [10] WENO5 left-biased derivative from stencil
-inline double weno5_left_from_stencil(
+// [10] WENO5 reconstruction from five consecutive derivative samples
+inline double weno5_from_derivative_samples(
     double v0, double v1, double v2,
-    double v3, double v4,
-    double dx
+    double v3, double v4
 )
 {
-    const double q0 = (1.0/3.0*v0 - 7.0/6.0*v1 + 11.0/6.0*v2) / dx;
-    const double q1 = (-1.0/6.0*v1 + 5.0/6.0*v2 + 1.0/3.0*v3) / dx;
-    const double q2 = (1.0/3.0*v2 + 5.0/6.0*v3 - 1.0/6.0*v4) / dx;
+    const double q0 = 1.0/3.0*v0 - 7.0/6.0*v1 + 11.0/6.0*v2;
+    const double q1 = -1.0/6.0*v1 + 5.0/6.0*v2 + 1.0/3.0*v3;
+    const double q2 = 1.0/3.0*v2 + 5.0/6.0*v3 - 1.0/6.0*v4;
 
     const double b0 =
         13.0/12.0 * (v0 - 2*v1 + v2)*(v0 - 2*v1 + v2) +
@@ -197,18 +196,7 @@ inline double weno5_left_from_stencil(
 }
 
 
-// [11] WENO5 right-biased derivative
-inline double weno5_right_from_stencil(
-    double v0, double v1, double v2,
-    double v3, double v4,
-    double dx
-)
-{
-    return -weno5_left_from_stencil(v4, v3, v2, v1, v0, dx);
-}
-
-
-// [12] WENO5 left (flat)
+// [11] Hamilton-Jacobi WENO5 left derivative (flat)
 inline double weno5_left_flat(
     const std::vector<double>& phi,
     int id,
@@ -216,18 +204,17 @@ inline double weno5_left_flat(
     double dx
 )
 {
-    return weno5_left_from_stencil(
-        phi[id - 2*stride],
-        phi[id - stride],
-        phi[id],
-        phi[id + stride],
-        phi[id + 2*stride],
-        dx
+    return weno5_from_derivative_samples(
+        (phi[id - 2*stride] - phi[id - 3*stride]) / dx,
+        (phi[id - stride] - phi[id - 2*stride]) / dx,
+        (phi[id] - phi[id - stride]) / dx,
+        (phi[id + stride] - phi[id]) / dx,
+        (phi[id + 2*stride] - phi[id + stride]) / dx
     );
 }
 
 
-// [13] WENO5 right (flat)
+// [12] Hamilton-Jacobi WENO5 right derivative (flat)
 inline double weno5_right_flat(
     const std::vector<double>& phi,
     int id,
@@ -235,13 +222,12 @@ inline double weno5_right_flat(
     double dx
 )
 {
-    return weno5_right_from_stencil(
-        phi[id - 2*stride],
-        phi[id - stride],
-        phi[id],
-        phi[id + stride],
-        phi[id + 2*stride],
-        dx
+    return weno5_from_derivative_samples(
+        (phi[id + 3*stride] - phi[id + 2*stride]) / dx,
+        (phi[id + 2*stride] - phi[id + stride]) / dx,
+        (phi[id + stride] - phi[id]) / dx,
+        (phi[id] - phi[id - stride]) / dx,
+        (phi[id - stride] - phi[id - 2*stride]) / dx
     );
 }
 
@@ -250,8 +236,8 @@ inline double weno5_right_flat(
 /*
     [14] Public one-sided minus derivative (flat)
 
-    The WENO helpers above reconstruct point values, not phi_x directly, so
-    they do not preserve the derivative of a linear signed-distance field.
+    Uses the Jiang-Peng Hamilton-Jacobi WENO construction on first differences.
+    Falls back to second-/first-order one-sided differences near boundaries.
 */
 template<int DIM>
 inline double dminus_flat(
@@ -264,6 +250,10 @@ inline double dminus_flat(
 {
     const int stride = grid.stride[dir];
     const double dx = grid.dx[dir];
+
+    if (coord >= 3 && coord <= grid.N[dir] - 3) {
+        return weno5_left_flat(phi, id, stride, dx);
+    }
 
     if (coord >= 2) {
         return dminus_second_order_flat(phi, id, stride, dx);
@@ -285,6 +275,10 @@ inline double dplus_flat(
 {
     const int stride = grid.stride[dir];
     const double dx = grid.dx[dir];
+
+    if (coord >= 2 && coord <= grid.N[dir] - 4) {
+        return weno5_right_flat(phi, id, stride, dx);
+    }
 
     if (coord <= grid.N[dir] - 3) {
         return dplus_second_order_flat(phi, id, stride, dx);

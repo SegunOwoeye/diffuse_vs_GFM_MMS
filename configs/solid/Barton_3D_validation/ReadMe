@@ -1,0 +1,14 @@
+Barton Section 6.3 three-dimensional spherical pressure benchmark.
+
+The Cartesian calculation uses the octant [0:10, 0:10, 0:10] cm with symmetry
+planes at x=0, y=0, and z=0. The inner sphere r <= 2 cm starts at ambient
+conditions with F = I and T = 300 K. The outer region r > 2 cm starts at
+p = 10 GPa and T = 600 K. Copper material constants follow Barton et al.
+
+test1_debug.txt uses a reduced grid for fast regression checks.
+test1.txt uses the paper grid spacing dx = dy = dz = 1/10 cm.
+
+Both configs can export Sulsky-style material-point tracers as ParaView .vtp
+point clouds. These particles are passive: they visualise the material motion
+implied by the Eulerian Barton velocity field without feeding back into the
+finite-volume update.

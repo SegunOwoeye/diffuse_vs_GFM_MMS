@@ -353,9 +353,9 @@ def same_material_density_gradient(field_grid, material_grid, dx, dy):
     return gx, gy
 
 
-def fedkiw_mock_schlieren(rho_grid, grad_mag):
+def fedkiw_mock_schlieren(rho_grid, grad_mag, coefficient=20.0):
     rho_safe = np.maximum(rho_grid, 1.0e-30)
-    exponent = -20.0 * grad_mag / (1000.0 * np.sqrt(rho_safe))
+    exponent = -coefficient * grad_mag / (1000.0 * np.sqrt(rho_safe))
     return np.exp(np.clip(exponent, -745.0, 0.0))
 
 
@@ -372,6 +372,14 @@ def enhance_dim_schlieren_contrast(schlieren, save_path):
         return schlieren
 
     return np.clip(schlieren, 0.0, 1.0) ** 3.0
+
+
+def is_gfm_plot_path(save_path):
+    if save_path is None:
+        return False
+
+    path_text = str(save_path).lower()
+    return "/gfm/" in path_text or "\\gfm\\" in path_text or "gfm_" in path_text
 
 
 def rotate_bubble_display(field):
@@ -1162,10 +1170,15 @@ def plot_2d_schlieren(
     is_bubble_collapse = should_mirror_bubble_half_domain(save_path)
 
     material_grid = material_grid_from_extras(x, y, extras) if is_bubble_collapse else None
+    interface_grid = None
+    if is_bubble_collapse:
+        interface_grid, _, _ = bubble_interface_grid_from_extras(x, y, extras)
 
     if is_bubble_collapse:
         if material_grid is not None:
             _, _, material_grid = mirror_grid_across_y0(X, Y, material_grid)
+        if interface_grid is not None:
+            _, _, interface_grid = mirror_grid_across_y0(X, Y, interface_grid)
         X, Y, rho_grid = mirror_grid_across_y0(X, Y, rho_grid)
 
     x_unique = X[0, :]
@@ -1187,8 +1200,19 @@ def plot_2d_schlieren(
     grad_mag = np.sqrt(grad_x * grad_x + grad_y * grad_y)
 
     if is_bubble_collapse:
-        schlieren = fedkiw_mock_schlieren(rho_grid, grad_mag)
+        if is_gfm_plot_path(save_path):
+            schlieren = fedkiw_mock_schlieren(rho_grid, grad_mag, coefficient=13.0)
+        else:
+            schlieren = fedkiw_mock_schlieren(rho_grid, grad_mag)
         schlieren = enhance_dim_schlieren_contrast(schlieren, save_path)
+        if not is_gfm_plot_path(save_path):
+            schlieren = suppress_current_interface_band(
+                schlieren,
+                interface_grid,
+                dx,
+                dy,
+                band_cells=1.25
+            )
     else:
         scale = max(float(np.nanmax(grad_mag)), 1.0e-30)
         schlieren = np.exp(-10.0 * grad_mag / scale)

@@ -412,26 +412,19 @@ inline void apply_neumann_bc(
 }
 
 
-/*
-    [11] Advect Level Set with vector velocity
-
-    Solves:
-        phi_t + u · grad(phi) = 0
-        - using WENO one-sided derivatives from level_set_derivatives.hpp.
-*/
+// [11] RHS for phi_t + u dot grad(phi) = 0 with HJ-WENO upwinding
 template<int DIM>
-inline std::vector<double> advect_phi(
+inline std::vector<double> level_set_flow_rhs(
     const std::vector<double>& phi,
     const std::vector<std::array<double, DIM>>& vel,
-    const LevelSetGrid<DIM>& grid,
-    double dt
+    const LevelSetGrid<DIM>& grid
 )
 {
-    validate_level_set_field_size<DIM>(phi, grid, "advect_phi");
-    validate_level_set_velocity_size<DIM>(vel, grid, "advect_phi");
+    validate_level_set_field_size<DIM>(phi, grid, "level_set_flow_rhs");
+    validate_level_set_velocity_size<DIM>(vel, grid, "level_set_flow_rhs");
 
     const int Ntot = static_cast<int>(total_cells(grid));
-    std::vector<double> phi_new = phi;
+    std::vector<double> rhs(Ntot, 0.0);
 
     #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
@@ -452,38 +445,26 @@ inline std::vector<double> advect_phi(
             adv_term += vel[id][d] * grad;
         }
 
-        phi_new[id] = phi[id] - dt * adv_term;
+        rhs[id] = -adv_term;
     }
 
-    apply_neumann_bc<DIM>(phi_new, grid);
-
-    return phi_new;
+    return rhs;
 }
 
 
-/*
-    [12] Advect Level Set with normal speed
-
-    Solves:
-        phi_t + V_n |grad(phi)| = 0
-
-        using Godunov selection of one-sided derivatives. This is the form you
-        actually want for sharp-interface transport once V_n is supplied from the
-        interface physics layer.
-*/
+// [12] RHS for phi_t + V_n |grad(phi)| = 0 with Godunov HJ-WENO derivatives
 template<int DIM>
-inline std::vector<double> advect_phi_normal_speed(
+inline std::vector<double> level_set_normal_speed_rhs(
     const std::vector<double>& phi,
     const std::vector<double>& normal_speed,
-    const LevelSetGrid<DIM>& grid,
-    double dt
+    const LevelSetGrid<DIM>& grid
 )
 {
-    validate_level_set_field_size<DIM>(phi, grid, "advect_phi_normal_speed");
-    validate_level_set_speed_size<DIM>(normal_speed, grid, "advect_phi_normal_speed");
+    validate_level_set_field_size<DIM>(phi, grid, "level_set_normal_speed_rhs");
+    validate_level_set_speed_size<DIM>(normal_speed, grid, "level_set_normal_speed_rhs");
 
     const int Ntot = static_cast<int>(total_cells(grid));
-    std::vector<double> phi_new = phi;
+    std::vector<double> rhs(Ntot, 0.0);
 
     #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
@@ -517,7 +498,63 @@ inline std::vector<double> advect_phi_normal_speed(
             grad_sq += term;
         }
 
-        phi_new[id] = phi[id] - dt * Vn * std::sqrt(grad_sq);
+        rhs[id] = -Vn * std::sqrt(grad_sq);
+    }
+
+    return rhs;
+}
+
+
+/*
+    [13] Advect Level Set with vector velocity
+
+    Solves:
+        phi_t + u dot grad(phi) = 0
+
+        using HJ-WENO5 spatial derivatives and TVD-RK3 time stepping.
+*/
+template<int DIM>
+inline std::vector<double> advect_phi(
+    const std::vector<double>& phi,
+    const std::vector<std::array<double, DIM>>& vel,
+    const LevelSetGrid<DIM>& grid,
+    double dt
+)
+{
+    validate_level_set_field_size<DIM>(phi, grid, "advect_phi");
+    validate_level_set_velocity_size<DIM>(vel, grid, "advect_phi");
+
+    const int Ntot = static_cast<int>(total_cells(grid));
+    const std::vector<double> rhs0 = level_set_flow_rhs<DIM>(phi, vel, grid);
+
+    std::vector<double> phi1(Ntot, 0.0);
+
+    #pragma omp parallel for
+    for (int id = 0; id < Ntot; ++id) {
+        phi1[id] = phi[id] + dt * rhs0[id];
+    }
+
+    apply_neumann_bc<DIM>(phi1, grid);
+
+    const std::vector<double> rhs1 = level_set_flow_rhs<DIM>(phi1, vel, grid);
+
+    std::vector<double> phi2(Ntot, 0.0);
+
+    #pragma omp parallel for
+    for (int id = 0; id < Ntot; ++id) {
+        phi2[id] = 0.75 * phi[id] + 0.25 * (phi1[id] + dt * rhs1[id]);
+    }
+
+    apply_neumann_bc<DIM>(phi2, grid);
+
+    const std::vector<double> rhs2 = level_set_flow_rhs<DIM>(phi2, vel, grid);
+
+    std::vector<double> phi_new(Ntot, 0.0);
+
+    #pragma omp parallel for
+    for (int id = 0; id < Ntot; ++id) {
+        phi_new[id] = (1.0 / 3.0) * phi[id] +
+            (2.0 / 3.0) * (phi2[id] + dt * rhs2[id]);
     }
 
     apply_neumann_bc<DIM>(phi_new, grid);
@@ -527,12 +564,74 @@ inline std::vector<double> advect_phi_normal_speed(
 
 
 /*
- [13] Reinitialisation (Godunov / Sussman)
+    [14] Advect Level Set with normal speed
+
+    Solves:
+        phi_t + V_n |grad(phi)| = 0
+
+        using Godunov HJ-WENO5 spatial derivatives and TVD-RK3 time stepping.
+        This is the sharp-interface transport path when V_n is supplied by rGFM.
+*/
+template<int DIM>
+inline std::vector<double> advect_phi_normal_speed(
+    const std::vector<double>& phi,
+    const std::vector<double>& normal_speed,
+    const LevelSetGrid<DIM>& grid,
+    double dt
+)
+{
+    validate_level_set_field_size<DIM>(phi, grid, "advect_phi_normal_speed");
+    validate_level_set_speed_size<DIM>(normal_speed, grid, "advect_phi_normal_speed");
+
+    const int Ntot = static_cast<int>(total_cells(grid));
+    const std::vector<double> rhs0 =
+        level_set_normal_speed_rhs<DIM>(phi, normal_speed, grid);
+
+    std::vector<double> phi1(Ntot, 0.0);
+
+    #pragma omp parallel for
+    for (int id = 0; id < Ntot; ++id) {
+        phi1[id] = phi[id] + dt * rhs0[id];
+    }
+
+    apply_neumann_bc<DIM>(phi1, grid);
+
+    const std::vector<double> rhs1 =
+        level_set_normal_speed_rhs<DIM>(phi1, normal_speed, grid);
+
+    std::vector<double> phi2(Ntot, 0.0);
+
+    #pragma omp parallel for
+    for (int id = 0; id < Ntot; ++id) {
+        phi2[id] = 0.75 * phi[id] + 0.25 * (phi1[id] + dt * rhs1[id]);
+    }
+
+    apply_neumann_bc<DIM>(phi2, grid);
+
+    const std::vector<double> rhs2 =
+        level_set_normal_speed_rhs<DIM>(phi2, normal_speed, grid);
+
+    std::vector<double> phi_new(Ntot, 0.0);
+
+    #pragma omp parallel for
+    for (int id = 0; id < Ntot; ++id) {
+        phi_new[id] = (1.0 / 3.0) * phi[id] +
+            (2.0 / 3.0) * (phi2[id] + dt * rhs2[id]);
+    }
+
+    apply_neumann_bc<DIM>(phi_new, grid);
+
+    return phi_new;
+}
+
+
+/*
+ [15] Reinitialisation (Godunov / Sussman)
 
     Solves:
         phi_tau + s(phi0) ( |grad(phi)| - 1 ) = 0
 
-    using Godunov selection of WENO-backed one-sided derivatives.
+    Rebuilds a signed-distance field while preserving the zero-level-set location.
 */
 template<int DIM>
 inline std::vector<double> reinitialise_phi(

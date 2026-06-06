@@ -8,7 +8,7 @@
 #include "src/dim/conservative.hpp"
 #include "src/dim/flux.hpp"
 #include "src/dim/primitives.hpp"
-#include "src/fv/reconstruction/limiter.hpp"
+#include "src/core/fv/limiters.hpp"
 
 namespace dim {
 
@@ -56,18 +56,18 @@ namespace dim {
         slope.alpha.assign(PC.alpha.size(), 0.0);
 
         for (int k = 0; k < static_cast<int>(PC.rho.size()); ++k) {
-            slope.rho[k] = minmod(PC.rho[k] - PL.rho[k], PR.rho[k] - PC.rho[k]);
+            slope.rho[k] = core::fv::minmod(PC.rho[k] - PL.rho[k], PR.rho[k] - PC.rho[k]);
         }
 
         for (int k = 0; k < static_cast<int>(PC.alpha.size()); ++k) {
-            slope.alpha[k] = minmod(PC.alpha[k] - PL.alpha[k], PR.alpha[k] - PC.alpha[k]);
+            slope.alpha[k] = core::fv::minmod(PC.alpha[k] - PL.alpha[k], PR.alpha[k] - PC.alpha[k]);
         }
 
         for (int d = 0; d < DIM; ++d) {
-            slope.vel[d] = minmod(PC.vel[d] - PL.vel[d], PR.vel[d] - PC.vel[d]);
+            slope.vel[d] = core::fv::minmod(PC.vel[d] - PL.vel[d], PR.vel[d] - PC.vel[d]);
         }
 
-        slope.p = minmod(PC.p - PL.p, PR.p - PC.p);
+        slope.p = core::fv::minmod(PC.p - PL.p, PR.p - PC.p);
         return slope;
     }
 

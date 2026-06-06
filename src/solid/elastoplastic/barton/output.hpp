@@ -148,7 +148,7 @@ inline void write_tensor_cartesian_2d(
     const int ny = cfg.cells[1];
     const double dx = (cfg.domain_max[0] - cfg.domain_min[0]) / nx;
     const double dy = (cfg.domain_max[1] - cfg.domain_min[1]) / ny;
-    out << "x,y,r,rho,ur,srr,T,p,ux,uy\n";
+    out << "x,y,r,rho,ur,srr,T,p,ux,uy,eqps,damage,failed\n";
     for (int j = 0; j < ny; ++j) {
         for (int i = 0; i < nx; ++i) {
             const double x = cfg.domain_min[0] + (i + 0.5) * dx;
@@ -164,7 +164,8 @@ inline void write_tensor_cartesian_2d(
             out << x * 100.0 << "," << y * 100.0 << "," << r * 100.0 << ","
                 << P.rho / 1000.0 << "," << ur / 1000.0 << ","
                 << srr / 1.0e9 << "," << P.T << "," << P.p << ","
-                << P.vel[0] / 1000.0 << "," << P.vel[1] / 1000.0 << "\n";
+                << P.vel[0] / 1000.0 << "," << P.vel[1] / 1000.0 << ","
+                << P.eqps << "," << P.damage << "," << (P.failed ? 1 : 0) << "\n";
         }
     }
 }
@@ -178,13 +179,79 @@ inline void write_tensor_cylindrical_reference(
     std::ofstream out(filename);
     if (!out) throw std::runtime_error("Cannot write Barton tensor radial pressure reference CSV: " + filename);
     const double dr = (cfg.domain_max[0] - cfg.domain_min[0]) / cfg.radial_cells;
-    out << "r,rho,ur,srr,T,p,stt\n";
+    out << "r,rho,ur,srr,T,p,stt,eqps,damage,failed\n";
     for (int i = 0; i < cfg.radial_cells; ++i) {
         const double r = cfg.domain_min[0] + (i + 0.5) * dr;
         const TensorPrim2D P = tensor_prim(U[i], mat);
         out << r * 100.0 << "," << P.rho / 1000.0 << "," << P.vel[0] / 1000.0 << ","
             << P.sigma[0] / 1.0e9 << "," << P.T << "," << P.p << ","
-            << P.sigma[4] / 1.0e9 << "\n";
+            << P.sigma[4] / 1.0e9 << ","
+            << P.eqps << "," << P.damage << "," << (P.failed ? 1 : 0) << "\n";
+    }
+}
+
+inline void write_tensor_cartesian_3d(
+    const std::string& filename,
+    const std::vector<TensorState3D>& U,
+    const TensorSolverConfig& cfg,
+    const TensorMaterial& mat)
+{
+    std::ofstream out(filename);
+    if (!out) throw std::runtime_error("Cannot write Barton tensor spherical pressure CSV: " + filename);
+    const int nx = cfg.cells[0];
+    const int ny = cfg.cells[1];
+    const int nz = cfg.cells[2];
+    const double dx = (cfg.domain_max[0] - cfg.domain_min[0]) / nx;
+    const double dy = (cfg.domain_max[1] - cfg.domain_min[1]) / ny;
+    const double dz = (cfg.domain_max[2] - cfg.domain_min[2]) / nz;
+    out << "x,y,z,r,rho,ur,srr,T,p,ux,uy,uz,eqps,damage,failed\n";
+    for (int k = 0; k < nz; ++k) {
+        for (int j = 0; j < ny; ++j) {
+            for (int i = 0; i < nx; ++i) {
+                const double x = cfg.domain_min[0] + (i + 0.5) * dx;
+                const double y = cfg.domain_min[1] + (j + 0.5) * dy;
+                const double z = cfg.domain_min[2] + (k + 0.5) * dz;
+                const double r = std::sqrt(x * x + y * y + z * z);
+                const TensorPrim3D P = tensor_prim(U[hidx3(i, j, k, nx, ny)], mat);
+                const double nxr = r > 1.0e-14 ? x / r : 1.0;
+                const double nyr = r > 1.0e-14 ? y / r : 0.0;
+                const double nzr = r > 1.0e-14 ? z / r : 0.0;
+                const double ur = P.vel[0] * nxr + P.vel[1] * nyr + P.vel[2] * nzr;
+                const double srr =
+                    nxr * nxr * P.sigma[0] +
+                    nyr * nyr * P.sigma[4] +
+                    nzr * nzr * P.sigma[8] +
+                    2.0 * nxr * nyr * P.sigma[1] +
+                    2.0 * nxr * nzr * P.sigma[2] +
+                    2.0 * nyr * nzr * P.sigma[5];
+                out << x * 100.0 << "," << y * 100.0 << "," << z * 100.0 << ","
+                    << r * 100.0 << "," << P.rho / 1000.0 << "," << ur / 1000.0 << ","
+                    << srr / 1.0e9 << "," << P.T << "," << P.p << ","
+                    << P.vel[0] / 1000.0 << "," << P.vel[1] / 1000.0 << ","
+                    << P.vel[2] / 1000.0 << ","
+                    << P.eqps << "," << P.damage << "," << (P.failed ? 1 : 0) << "\n";
+            }
+        }
+    }
+}
+
+inline void write_tensor_spherical_reference(
+    const std::string& filename,
+    const std::vector<TensorState3D>& U,
+    const TensorSolverConfig& cfg,
+    const TensorMaterial& mat)
+{
+    std::ofstream out(filename);
+    if (!out) throw std::runtime_error("Cannot write Barton tensor spherical reference CSV: " + filename);
+    const double dr = (cfg.domain_max[0] - cfg.domain_min[0]) / cfg.radial_cells;
+    out << "r,rho,ur,srr,T,p,stt,spp,eqps,damage,failed\n";
+    for (int i = 0; i < cfg.radial_cells; ++i) {
+        const double r = cfg.domain_min[0] + (i + 0.5) * dr;
+        const TensorPrim3D P = tensor_prim(U[i], mat);
+        out << r * 100.0 << "," << P.rho / 1000.0 << "," << P.vel[0] / 1000.0 << ","
+            << P.sigma[0] / 1.0e9 << "," << P.T << "," << P.p << ","
+            << P.sigma[4] / 1.0e9 << "," << P.sigma[8] / 1.0e9 << ","
+            << P.eqps << "," << P.damage << "," << (P.failed ? 1 : 0) << "\n";
     }
 }
 

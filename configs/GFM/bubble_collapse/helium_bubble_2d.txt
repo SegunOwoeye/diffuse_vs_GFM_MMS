@@ -34,7 +34,7 @@ bc_hi = [transmissive, reflective]
 interface_method = GFM
 use_level_set = true
 reinit_interval = 0
-level_set_advection = flow
+level_set_advection = normal_speed
 
 # ========================
 # Materials

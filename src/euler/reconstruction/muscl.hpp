@@ -11,7 +11,7 @@
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
 #include "src/euler/flux.hpp"
-#include "src/fv/reconstruction/limiter.hpp"
+#include "src/core/fv/limiters.hpp"
 
 // [0] Primitive slope container
 template<int DIM>
@@ -57,11 +57,11 @@ inline PrimitiveSlope<DIM> compute_limited_slope(
 {
     PrimitiveSlope<DIM> slope;
 
-    slope.rho = minmod(PC.rho - PL.rho, PR.rho - PC.rho);
-    slope.p = minmod(PC.p - PL.p, PR.p - PC.p);
+    slope.rho = core::fv::minmod(PC.rho - PL.rho, PR.rho - PC.rho);
+    slope.p = core::fv::minmod(PC.p - PL.p, PR.p - PC.p);
 
     for (int d = 0; d < DIM; ++d) {
-        slope.vel[d] = minmod(
+        slope.vel[d] = core::fv::minmod(
             PC.vel[d] - PL.vel[d],
             PR.vel[d] - PC.vel[d]
         );

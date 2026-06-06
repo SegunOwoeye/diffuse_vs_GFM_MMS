@@ -23,6 +23,7 @@
 #endif
 
 #include "src/core/model_type.hpp"
+#include "src/core/fv/limiters.hpp"
 #include "src/solid/common/config_text.hpp"
 
 namespace solid::barton {
@@ -113,10 +114,7 @@ inline double clamp_min(double value, double floor)
 
 inline double limited_component_slope(double a, double b)
 {
-    if (a * b <= 0.0) {
-        return 0.0;
-    }
-    return std::abs(a) < std::abs(b) ? a : b;
+    return core::fv::minmod(a, b);
 }
 
 } // namespace solid::barton
@@ -128,6 +126,7 @@ inline double limited_component_slope(double a, double b)
 namespace solid::barton {
 
 inline int hidx(int i, int j, int nx) { return j * nx + i; }
+inline int hidx3(int i, int j, int k, int nx, int ny) { return (k * ny + j) * nx + i; }
 
 struct TensorMaterial {
     std::string eos = "eq51";
@@ -142,6 +141,16 @@ struct TensorMaterial {
     double sigma0 = 0.045e9;
     double tau0 = 0.92;
     double relaxation_n = 10.1;
+    bool damage_enabled = false;
+    double jc_D1 = 0.54;
+    double jc_D2 = 4.89;
+    double jc_D3 = -3.03;
+    double jc_D4 = 0.014;
+    double jc_D5 = 1.12;
+    double reference_plastic_strain_rate = 1.0;
+    double melt_temperature = 1356.0;
+    double failed_damage = 1.0;
+    double residual_strength_fraction = 0.0;
 
     double K0() const { return c0 * c0 - (4.0 / 3.0) * b0 * b0; }
 };
@@ -210,6 +219,8 @@ struct TensorState {
     std::array<double, DIM> mom{};
     double E = 0.0;
     std::array<double, 9> rhoF{};
+    double rhoEqps = 0.0;
+    double rhoDamage = 0.0;
 };
 
 template<int DIM>
@@ -222,6 +233,9 @@ struct TensorPrim {
     std::array<double, 9> sigma{};
     double p = 0.0;
     double wave_speed = 1.0;
+    double eqps = 0.0;
+    double damage = 0.0;
+    bool failed = false;
 };
 
 template<int DIM>
@@ -230,11 +244,16 @@ struct TensorSlope {
     std::array<double, DIM> mom{};
     double E = 0.0;
     std::array<double, 9> rhoF{};
+    double rhoEqps = 0.0;
+    double rhoDamage = 0.0;
 };
 
 using TensorState2D = TensorState<2>;
 using TensorPrim2D = TensorPrim<2>;
 using TensorSlope2D = TensorSlope<2>;
+using TensorState3D = TensorState<3>;
+using TensorPrim3D = TensorPrim<3>;
+using TensorSlope3D = TensorSlope<3>;
 
 inline double det3(const std::array<double, 9>& A)
 {
@@ -357,19 +376,25 @@ inline std::array<double, 9> tensor_stress_from_F_T(
     return sigma;
 }
 
-inline TensorPrim2D tensor_prim(const TensorState2D& U, const TensorMaterial& mat)
+template<int DIM>
+inline TensorPrim<DIM> tensor_prim(const TensorState<DIM>& U, const TensorMaterial& mat)
 {
-    TensorPrim2D P{};
+    TensorPrim<DIM> P{};
     P.rho = clamp_min(U.rho, 1.0e-12);
-    P.vel[0] = U.mom[0] / P.rho;
-    P.vel[1] = U.mom[1] / P.rho;
+    for (int d = 0; d < DIM; ++d) {
+        P.vel[d] = U.mom[d] / P.rho;
+    }
     for (int q = 0; q < 9; ++q) {
         P.F[q] = U.rhoF[q] / P.rho;
     }
     P.F[0] = clamp_min(P.F[0], 1.0e-10);
     P.F[4] = clamp_min(P.F[4], 1.0e-10);
     P.F[8] = clamp_min(P.F[8], 1.0e-10);
-    P.e = U.E / P.rho - 0.5 * (P.vel[0] * P.vel[0] + P.vel[1] * P.vel[1]);
+    double kinetic = 0.0;
+    for (int d = 0; d < DIM; ++d) {
+        kinetic += P.vel[d] * P.vel[d];
+    }
+    P.e = U.E / P.rho - 0.5 * kinetic;
 
     const auto Finv = inv3(P.F);
     const auto G = matmul3(transpose3(Finv), Finv);
@@ -379,6 +404,23 @@ inline TensorPrim2D tensor_prim(const TensorState2D& U, const TensorMaterial& ma
     P.T = entropy_reference + (P.e - no_thermal) / mat.cv;
     P.T = std::clamp(finite_or(P.T, mat.T0), 50.0, 5000.0);
     P.sigma = tensor_stress_from_F_T(P.F, P.rho, P.T, mat);
+    P.eqps = std::max(finite_or(U.rhoEqps / P.rho, 0.0), 0.0);
+    P.damage = std::clamp(finite_or(U.rhoDamage / P.rho, 0.0), 0.0, mat.failed_damage);
+    P.failed = mat.damage_enabled && P.damage >= mat.failed_damage;
+    if (mat.damage_enabled && P.damage > 0.0) {
+        const double mean = (P.sigma[0] + P.sigma[4] + P.sigma[8]) / 3.0;
+        const double d = std::clamp(P.damage / std::max(mat.failed_damage, 1.0e-12), 0.0, 1.0);
+        const double strength = std::max(mat.residual_strength_fraction, 1.0 - d);
+        P.sigma[0] = mean + strength * (P.sigma[0] - mean);
+        P.sigma[4] = mean + strength * (P.sigma[4] - mean);
+        P.sigma[8] = mean + strength * (P.sigma[8] - mean);
+        P.sigma[1] *= strength;
+        P.sigma[2] *= strength;
+        P.sigma[3] *= strength;
+        P.sigma[5] *= strength;
+        P.sigma[6] *= strength;
+        P.sigma[7] *= strength;
+    }
     P.p = -(P.sigma[0] + P.sigma[4] + P.sigma[8]) / 3.0;
     const double K = material_bulk_modulus(P.rho, P.T, mat);
     P.wave_speed = std::sqrt(std::max((K + 4.0 * mat.b0 * mat.b0 * P.rho / 3.0) / P.rho, 1.0));
@@ -402,7 +444,72 @@ inline TensorState2D tensor_cons_from_F(
     }
     const double e = tensor_energy_from_F_T(F, T, mat);
     U.E = rho * (e + 0.5 * (ux * ux + uy * uy));
+    U.rhoEqps = 0.0;
+    U.rhoDamage = 0.0;
     return U;
+}
+
+inline TensorState3D tensor_cons_from_F(
+    double rho,
+    double ux,
+    double uy,
+    double uz,
+    double T,
+    const std::array<double, 9>& F,
+    const TensorMaterial& mat)
+{
+    TensorState3D U{};
+    U.rho = rho;
+    U.mom[0] = rho * ux;
+    U.mom[1] = rho * uy;
+    U.mom[2] = rho * uz;
+    for (int q = 0; q < 9; ++q) {
+        U.rhoF[q] = rho * F[q];
+    }
+    const double e = tensor_energy_from_F_T(F, T, mat);
+    U.E = rho * (e + 0.5 * (ux * ux + uy * uy + uz * uz));
+    U.rhoEqps = 0.0;
+    U.rhoDamage = 0.0;
+    return U;
+}
+
+template<int DIM>
+inline TensorState<DIM> operator+(const TensorState<DIM>& a, const TensorState<DIM>& b)
+{
+    TensorState<DIM> c{};
+    c.rho = a.rho + b.rho;
+    for (int d = 0; d < DIM; ++d) c.mom[d] = a.mom[d] + b.mom[d];
+    c.E = a.E + b.E;
+    for (int q = 0; q < 9; ++q) c.rhoF[q] = a.rhoF[q] + b.rhoF[q];
+    c.rhoEqps = a.rhoEqps + b.rhoEqps;
+    c.rhoDamage = a.rhoDamage + b.rhoDamage;
+    return c;
+}
+
+template<int DIM>
+inline TensorState<DIM> operator-(const TensorState<DIM>& a, const TensorState<DIM>& b)
+{
+    TensorState<DIM> c{};
+    c.rho = a.rho - b.rho;
+    for (int d = 0; d < DIM; ++d) c.mom[d] = a.mom[d] - b.mom[d];
+    c.E = a.E - b.E;
+    for (int q = 0; q < 9; ++q) c.rhoF[q] = a.rhoF[q] - b.rhoF[q];
+    c.rhoEqps = a.rhoEqps - b.rhoEqps;
+    c.rhoDamage = a.rhoDamage - b.rhoDamage;
+    return c;
+}
+
+template<int DIM>
+inline TensorState<DIM> operator*(double a, const TensorState<DIM>& u)
+{
+    TensorState<DIM> c{};
+    c.rho = a * u.rho;
+    for (int d = 0; d < DIM; ++d) c.mom[d] = a * u.mom[d];
+    c.E = a * u.E;
+    for (int q = 0; q < 9; ++q) c.rhoF[q] = a * u.rhoF[q];
+    c.rhoEqps = a * u.rhoEqps;
+    c.rhoDamage = a * u.rhoDamage;
+    return c;
 }
 
 inline TensorState2D operator+(const TensorState2D& a, const TensorState2D& b)
@@ -413,6 +520,8 @@ inline TensorState2D operator+(const TensorState2D& a, const TensorState2D& b)
     c.mom[1] = a.mom[1] + b.mom[1];
     c.E = a.E + b.E;
     for (int q = 0; q < 9; ++q) c.rhoF[q] = a.rhoF[q] + b.rhoF[q];
+    c.rhoEqps = a.rhoEqps + b.rhoEqps;
+    c.rhoDamage = a.rhoDamage + b.rhoDamage;
     return c;
 }
 
@@ -424,6 +533,8 @@ inline TensorState2D operator-(const TensorState2D& a, const TensorState2D& b)
     c.mom[1] = a.mom[1] - b.mom[1];
     c.E = a.E - b.E;
     for (int q = 0; q < 9; ++q) c.rhoF[q] = a.rhoF[q] - b.rhoF[q];
+    c.rhoEqps = a.rhoEqps - b.rhoEqps;
+    c.rhoDamage = a.rhoDamage - b.rhoDamage;
     return c;
 }
 
@@ -435,7 +546,29 @@ inline TensorState2D operator*(double a, const TensorState2D& u)
     c.mom[1] = a * u.mom[1];
     c.E = a * u.E;
     for (int q = 0; q < 9; ++q) c.rhoF[q] = a * u.rhoF[q];
+    c.rhoEqps = a * u.rhoEqps;
+    c.rhoDamage = a * u.rhoDamage;
     return c;
+}
+
+template<int DIM>
+inline TensorSlope<DIM> limited_tensor_slope_dim(
+    const TensorState<DIM>& left,
+    const TensorState<DIM>& centre,
+    const TensorState<DIM>& right)
+{
+    TensorSlope<DIM> s{};
+    s.rho = limited_component_slope(centre.rho - left.rho, right.rho - centre.rho);
+    for (int d = 0; d < DIM; ++d) {
+        s.mom[d] = limited_component_slope(centre.mom[d] - left.mom[d], right.mom[d] - centre.mom[d]);
+    }
+    s.E = limited_component_slope(centre.E - left.E, right.E - centre.E);
+    for (int q = 0; q < 9; ++q) {
+        s.rhoF[q] = limited_component_slope(centre.rhoF[q] - left.rhoF[q], right.rhoF[q] - centre.rhoF[q]);
+    }
+    s.rhoEqps = limited_component_slope(centre.rhoEqps - left.rhoEqps, right.rhoEqps - centre.rhoEqps);
+    s.rhoDamage = limited_component_slope(centre.rhoDamage - left.rhoDamage, right.rhoDamage - centre.rhoDamage);
+    return s;
 }
 
 inline TensorSlope2D limited_tensor_slope(
@@ -451,7 +584,32 @@ inline TensorSlope2D limited_tensor_slope(
     for (int q = 0; q < 9; ++q) {
         s.rhoF[q] = limited_component_slope(centre.rhoF[q] - left.rhoF[q], right.rhoF[q] - centre.rhoF[q]);
     }
+    s.rhoEqps = limited_component_slope(centre.rhoEqps - left.rhoEqps, right.rhoEqps - centre.rhoEqps);
+    s.rhoDamage = limited_component_slope(centre.rhoDamage - left.rhoDamage, right.rhoDamage - centre.rhoDamage);
     return s;
+}
+
+inline TensorSlope3D limited_tensor_slope(
+    const TensorState3D& left,
+    const TensorState3D& centre,
+    const TensorState3D& right)
+{
+    return limited_tensor_slope_dim(left, centre, right);
+}
+
+template<int DIM>
+inline TensorState<DIM> add_tensor_slope_dim(const TensorState<DIM>& u, const TensorSlope<DIM>& s, double scale)
+{
+    TensorState<DIM> out = u;
+    out.rho += scale * s.rho;
+    for (int d = 0; d < DIM; ++d) out.mom[d] += scale * s.mom[d];
+    out.E += scale * s.E;
+    for (int q = 0; q < 9; ++q) {
+        out.rhoF[q] += scale * s.rhoF[q];
+    }
+    out.rhoEqps += scale * s.rhoEqps;
+    out.rhoDamage += scale * s.rhoDamage;
+    return out;
 }
 
 inline TensorState2D add_tensor_slope(const TensorState2D& u, const TensorSlope2D& s, double scale)
@@ -464,6 +622,28 @@ inline TensorState2D add_tensor_slope(const TensorState2D& u, const TensorSlope2
     for (int q = 0; q < 9; ++q) {
         out.rhoF[q] += scale * s.rhoF[q];
     }
+    out.rhoEqps += scale * s.rhoEqps;
+    out.rhoDamage += scale * s.rhoDamage;
+    return out;
+}
+
+inline TensorState3D add_tensor_slope(const TensorState3D& u, const TensorSlope3D& s, double scale)
+{
+    return add_tensor_slope_dim(u, s, scale);
+}
+
+template<int DIM>
+inline TensorSlope<DIM> scale_tensor_slope_dim(const TensorSlope<DIM>& s, double scale)
+{
+    TensorSlope<DIM> out{};
+    out.rho = scale * s.rho;
+    for (int d = 0; d < DIM; ++d) out.mom[d] = scale * s.mom[d];
+    out.E = scale * s.E;
+    for (int q = 0; q < 9; ++q) {
+        out.rhoF[q] = scale * s.rhoF[q];
+    }
+    out.rhoEqps = scale * s.rhoEqps;
+    out.rhoDamage = scale * s.rhoDamage;
     return out;
 }
 
@@ -477,7 +657,14 @@ inline TensorSlope2D scale_tensor_slope(const TensorSlope2D& s, double scale)
     for (int q = 0; q < 9; ++q) {
         out.rhoF[q] = scale * s.rhoF[q];
     }
+    out.rhoEqps = scale * s.rhoEqps;
+    out.rhoDamage = scale * s.rhoDamage;
     return out;
+}
+
+inline TensorSlope3D scale_tensor_slope(const TensorSlope3D& s, double scale)
+{
+    return scale_tensor_slope_dim(s, scale);
 }
 
 } // namespace solid::barton

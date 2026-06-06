@@ -201,6 +201,22 @@ inline TensorState2D hancock_predict_tensor_cell(
     return predicted;
 }
 
+inline TensorState3D hancock_predict_tensor_cell(
+    const TensorState3D& centre,
+    const TensorState3D& left_face,
+    const TensorState3D& right_face,
+    const TensorMaterial& mat,
+    double dt,
+    double dx,
+    int dir)
+{
+    const TensorState3D FL = tensor_flux(left_face, mat, dir);
+    const TensorState3D FR = tensor_flux(right_face, mat, dir);
+    TensorState3D predicted = centre - (0.5 * dt / dx) * (FR - FL);
+    enforce_tensor(predicted, mat);
+    return predicted;
+}
+
 inline double tensor_split_dt(const std::vector<TensorState2D>& U, const TensorMaterial& mat,
                               double dx, double dy, double cfl, double max_dt)
 {
@@ -249,6 +265,40 @@ inline TensorState2D tensor_sweep_ghost(const TensorState2D& U, int dir, bool lo
 {
     (void)lo;
     return dir == 0 ? tensor_reflect_x(U) : tensor_reflect_y(U);
+}
+
+inline double tensor_flattening_scale(
+    const TensorState3D& left,
+    const TensorState3D& centre,
+    const TensorState3D& right,
+    const TensorMaterial& mat)
+{
+    const TensorPrim3D PL = tensor_prim(left, mat);
+    const TensorPrim3D PC = tensor_prim(centre, mat);
+    const TensorPrim3D PR = tensor_prim(right, mat);
+    double jump = std::abs(PR.p - PL.p);
+    for (int q = 0; q < 9; ++q) {
+        jump = std::max(jump, std::abs(PR.sigma[q] - PL.sigma[q]));
+    }
+    const double modulus = std::max(
+        material_bulk_modulus(PC.rho, PC.T, mat) + 4.0 * PC.rho * mat.b0 * mat.b0 / 3.0,
+        1.0e6);
+    const double z = jump / modulus;
+    constexpr double z0 = 0.05;
+    constexpr double z1 = 0.20;
+    if (z <= z0) return 1.0;
+    if (z >= z1) return 0.0;
+    return 1.0 - (z - z0) / (z1 - z0);
+}
+
+inline TensorState3D tensor_sweep_ghost(const TensorState3D& U, int dir, bool lo)
+{
+    if (!lo) {
+        return U;
+    }
+    if (dir == 0) return tensor_reflect_x(U);
+    if (dir == 1) return tensor_reflect_y(U);
+    return tensor_reflect_z(U);
 }
 
 inline void advance_tensor_sweep(
@@ -356,6 +406,144 @@ inline double advance_tensor_2d(std::vector<TensorState2D>& U, const TensorMater
     return dt;
 }
 
+inline double tensor_split_dt(const std::vector<TensorState3D>& U, const TensorMaterial& mat,
+                              double dx, double dy, double dz, double cfl, double max_dt)
+{
+    double sx = 1.0;
+    double sy = 1.0;
+    double sz = 1.0;
+    const int count = static_cast<int>(U.size());
+#pragma omp parallel for reduction(max:sx,sy,sz) schedule(static) if(count > 4096)
+    for (int i = 0; i < count; ++i) {
+        const TensorPrim3D P = tensor_prim(U[i], mat);
+        sx = std::max(sx, std::abs(P.vel[0]) + P.wave_speed);
+        sy = std::max(sy, std::abs(P.vel[1]) + P.wave_speed);
+        sz = std::max(sz, std::abs(P.vel[2]) + P.wave_speed);
+    }
+    const double denom = sx / dx + sy / dy + sz / dz;
+    return std::min(max_dt, cfl / std::max(denom, 1.0e-30));
+}
+
+inline void advance_tensor_sweep(
+    std::vector<TensorState3D>& U,
+    const TensorMaterial& mat,
+    int nx,
+    int ny,
+    int nz,
+    double h,
+    double dt,
+    int dir)
+{
+    const int n = dir == 0 ? nx : (dir == 1 ? ny : nz);
+    const int lines = dir == 0 ? ny * nz : (dir == 1 ? nx * nz : nx * ny);
+    auto index = [&](int a, int line) {
+        if (dir == 0) {
+            const int j = line % ny;
+            const int k = line / ny;
+            return hidx3(a, j, k, nx, ny);
+        }
+        if (dir == 1) {
+            const int i = line % nx;
+            const int k = line / nx;
+            return hidx3(i, a, k, nx, ny);
+        }
+        const int i = line % nx;
+        const int j = line / nx;
+        return hidx3(i, j, a, nx, ny);
+    };
+
+#pragma omp parallel for schedule(dynamic, 1) if(lines * n > 4096)
+    for (int line = 0; line < lines; ++line) {
+        std::vector<TensorState3D> ext(n + 2);
+        for (int a = 0; a < n; ++a) {
+            ext[a + 1] = U[index(a, line)];
+        }
+        ext[0] = tensor_sweep_ghost(ext[1], dir, true);
+        ext[n + 1] = tensor_sweep_ghost(ext[n], dir, false);
+
+        std::vector<TensorState3D> left_cell(n + 2);
+        std::vector<TensorState3D> right_cell(n + 2);
+        std::vector<TensorState3D> half_cell(n + 2);
+        half_cell[0] = ext[0];
+        half_cell[n + 1] = ext[n + 1];
+        for (int a = 1; a <= n; ++a) {
+            const TensorSlope3D slope = scale_tensor_slope(
+                limited_tensor_slope(ext[a - 1], ext[a], ext[a + 1]),
+                tensor_flattening_scale(ext[a - 1], ext[a], ext[a + 1], mat));
+            left_cell[a] = add_tensor_slope(ext[a], slope, -0.5);
+            right_cell[a] = add_tensor_slope(ext[a], slope, 0.5);
+            enforce_tensor(left_cell[a], mat);
+            enforce_tensor(right_cell[a], mat);
+            half_cell[a] = hancock_predict_tensor_cell(ext[a], left_cell[a], right_cell[a], mat, dt, h, dir);
+        }
+        half_cell[0] = tensor_sweep_ghost(half_cell[1], dir, true);
+        half_cell[n + 1] = tensor_sweep_ghost(half_cell[n], dir, false);
+
+        std::vector<TensorState3D> left_half(n + 2);
+        std::vector<TensorState3D> right_half(n + 2);
+        for (int a = 1; a <= n; ++a) {
+            const TensorSlope3D slope = scale_tensor_slope(
+                limited_tensor_slope(half_cell[a - 1], half_cell[a], half_cell[a + 1]),
+                tensor_flattening_scale(half_cell[a - 1], half_cell[a], half_cell[a + 1], mat));
+            left_half[a] = add_tensor_slope(half_cell[a], slope, -0.5);
+            right_half[a] = add_tensor_slope(half_cell[a], slope, 0.5);
+            enforce_tensor(left_half[a], mat);
+            enforce_tensor(right_half[a], mat);
+        }
+
+        std::vector<TensorState3D> flux(n + 1);
+        std::vector<std::array<double, 3>> faceF(n + 1);
+        flux[0] = tensor_rusanov(tensor_sweep_ghost(left_half[1], dir, true), left_half[1], mat, dir);
+        for (int col = 0; col < 3; ++col) {
+            faceF[0][col] = 0.5 * (
+                tensor_sweep_ghost(left_half[1], dir, true).rhoF[3 * dir + col] +
+                left_half[1].rhoF[3 * dir + col]);
+        }
+        for (int a = 1; a < n; ++a) {
+            flux[a] = tensor_rusanov(right_half[a], left_half[a + 1], mat, dir);
+            for (int col = 0; col < 3; ++col) {
+                faceF[a][col] = 0.5 * (
+                    right_half[a].rhoF[3 * dir + col] +
+                    left_half[a + 1].rhoF[3 * dir + col]);
+            }
+        }
+        flux[n] = tensor_rusanov(right_half[n], tensor_sweep_ghost(right_half[n], dir, false), mat, dir);
+        for (int col = 0; col < 3; ++col) {
+            faceF[n][col] = right_half[n].rhoF[3 * dir + col];
+        }
+
+        std::vector<TensorState3D> old_line(n);
+        for (int a = 0; a < n; ++a) {
+            old_line[a] = U[index(a, line)];
+        }
+        for (int a = 0; a < n; ++a) {
+            TensorState3D next = old_line[a] - (dt / h) * (flux[a + 1] - flux[a]);
+            const TensorPrim3D Pold = tensor_prim(old_line[a], mat);
+            const std::array<double, 3> vel{Pold.vel[0], Pold.vel[1], Pold.vel[2]};
+            for (int col = 0; col < 3; ++col) {
+                const double beta = (faceF[a + 1][col] - faceF[a][col]) / h;
+                for (int row = 0; row < 3; ++row) {
+                    next.rhoF[3 * row + col] -= dt * vel[row] * beta;
+                }
+            }
+            enforce_tensor(next, mat);
+            U[index(a, line)] = next;
+        }
+    }
+}
+
+inline double advance_tensor_3d(std::vector<TensorState3D>& U, const TensorMaterial& mat,
+                                int nx, int ny, int nz, double dx, double dy, double dz,
+                                double cfl, double max_dt)
+{
+    const double dt = tensor_split_dt(U, mat, dx, dy, dz, cfl, max_dt);
+    advance_tensor_sweep(U, mat, nx, ny, nz, dx, dt, 0);
+    advance_tensor_sweep(U, mat, nx, ny, nz, dy, dt, 1);
+    advance_tensor_sweep(U, mat, nx, ny, nz, dz, dt, 2);
+    apply_tensor_plastic_relaxation(U, mat, dt);
+    return dt;
+}
+
 } // namespace solid::barton
 
 // Cylindrical tensor reference update.
@@ -455,20 +643,140 @@ inline double advance_tensor_cyl(
         const double r = std::max(r_min + (i + 0.5) * dr, 0.5 * dr);
         const double r_lo = std::max(r_min + i * dr, 0.0);
         const double r_hi = r_min + (i + 1.0) * dr;
-        next[i] = U[i] - (dt / (r * dr)) * (r_hi * flux[i + 1] - r_lo * flux[i]);
+        const double shell_volume = std::max(0.5 * (r_hi * r_hi - r_lo * r_lo), 1.0e-30);
+        next[i] = U[i] - (dt / shell_volume) * (r_hi * flux[i + 1] - r_lo * flux[i]);
 
         const TensorPrim2D Pold = tensor_prim(U[i], mat);
-        next[i].mom[0] += dt * (-Pold.sigma[4]) / r;
+        const double source_weight = (r_hi - r_lo) / shell_volume;
+        next[i].mom[0] += dt * (-Pold.sigma[4]) * source_weight;
 
         const std::array<double, 3> vel{Pold.vel[0], 0.0, 0.0};
         for (int col = 0; col < 3; ++col) {
-            const double beta = (r_hi * faceF[i + 1][col] - r_lo * faceF[i][col]) / (r * dr);
+            const double beta = (r_hi * faceF[i + 1][col] - r_lo * faceF[i][col]) / shell_volume;
             for (int row = 0; row < 3; ++row) {
                 next[i].rhoF[3 * row + col] -= dt * vel[row] * beta;
             }
         }
 
-        next[i].rhoF[4] += dt * U[i].rhoF[4] * Pold.vel[0] / r;
+        next[i].rhoF[4] += dt * U[i].rhoF[4] * Pold.vel[0] * source_weight;
+        enforce_tensor(next[i], mat);
+        apply_tensor_plastic_relaxation(next[i], mat, dt);
+    }
+
+    U.swap(next);
+    return dt;
+}
+
+inline double tensor_spherical_dt(
+    const std::vector<TensorState3D>& U,
+    const TensorMaterial& mat,
+    double dr,
+    double cfl,
+    double max_dt)
+{
+    double speed = 1.0;
+    const int count = static_cast<int>(U.size());
+#pragma omp parallel for reduction(max:speed) schedule(static) if(count > 1024)
+    for (int i = 0; i < count; ++i) {
+        const TensorPrim3D P = tensor_prim(U[i], mat);
+        speed = std::max(speed, std::abs(P.vel[0]) + P.wave_speed);
+    }
+    return std::min(max_dt, cfl * dr / speed);
+}
+
+inline double advance_tensor_spherical(
+    std::vector<TensorState3D>& U,
+    const TensorMaterial& mat,
+    double r_min,
+    double dr,
+    double cfl,
+    double max_dt)
+{
+    const int n = static_cast<int>(U.size());
+    const double dt = tensor_spherical_dt(U, mat, dr, cfl, max_dt);
+
+    std::vector<TensorState3D> ext(n + 2);
+    for (int i = 0; i < n; ++i) {
+        ext[i + 1] = U[i];
+    }
+    ext[0] = tensor_reflect_x(U.front());
+    ext[n + 1] = U.back();
+
+    std::vector<TensorState3D> left_cell(n + 2);
+    std::vector<TensorState3D> right_cell(n + 2);
+    std::vector<TensorState3D> half_cell(n + 2);
+    half_cell[0] = ext[0];
+    half_cell[n + 1] = ext[n + 1];
+    for (int i = 1; i <= n; ++i) {
+        const TensorSlope3D slope = scale_tensor_slope(
+            limited_tensor_slope(ext[i - 1], ext[i], ext[i + 1]),
+            tensor_flattening_scale(ext[i - 1], ext[i], ext[i + 1], mat));
+        left_cell[i] = add_tensor_slope(ext[i], slope, -0.5);
+        right_cell[i] = add_tensor_slope(ext[i], slope, 0.5);
+        enforce_tensor(left_cell[i], mat);
+        enforce_tensor(right_cell[i], mat);
+        half_cell[i] = hancock_predict_tensor_cell(ext[i], left_cell[i], right_cell[i], mat, dt, dr, 0);
+    }
+    half_cell[0] = tensor_reflect_x(half_cell[1]);
+    half_cell[n + 1] = half_cell[n];
+
+    std::vector<TensorState3D> left_half(n + 2);
+    std::vector<TensorState3D> right_half(n + 2);
+    for (int i = 1; i <= n; ++i) {
+        const TensorSlope3D slope = scale_tensor_slope(
+            limited_tensor_slope(half_cell[i - 1], half_cell[i], half_cell[i + 1]),
+            tensor_flattening_scale(half_cell[i - 1], half_cell[i], half_cell[i + 1], mat));
+        left_half[i] = add_tensor_slope(half_cell[i], slope, -0.5);
+        right_half[i] = add_tensor_slope(half_cell[i], slope, 0.5);
+        enforce_tensor(left_half[i], mat);
+        enforce_tensor(right_half[i], mat);
+    }
+
+    std::vector<TensorState3D> flux(n + 1);
+    std::vector<std::array<double, 3>> faceF(n + 1);
+    flux[0] = tensor_rusanov(tensor_reflect_x(left_half[1]), left_half[1], mat, 0);
+    for (int col = 0; col < 3; ++col) {
+        faceF[0][col] = 0.5 * (
+            tensor_reflect_x(left_half[1]).rhoF[col] +
+            left_half[1].rhoF[col]);
+    }
+    for (int i = 1; i < n; ++i) {
+        flux[i] = tensor_rusanov(right_half[i], left_half[i + 1], mat, 0);
+        for (int col = 0; col < 3; ++col) {
+            faceF[i][col] = 0.5 * (
+                right_half[i].rhoF[col] +
+                left_half[i + 1].rhoF[col]);
+        }
+    }
+    flux[n] = tensor_rusanov(right_half[n], right_half[n], mat, 0);
+    for (int col = 0; col < 3; ++col) {
+        faceF[n][col] = right_half[n].rhoF[col];
+    }
+
+    std::vector<TensorState3D> next = U;
+    for (int i = 0; i < n; ++i) {
+        const double r = std::max(r_min + (i + 0.5) * dr, 0.5 * dr);
+        const double r_lo = std::max(r_min + i * dr, 0.0);
+        const double r_hi = r_min + (i + 1.0) * dr;
+        const double area_lo = r_lo * r_lo;
+        const double area_hi = r_hi * r_hi;
+        const double shell_volume = std::max((r_hi * r_hi * r_hi - r_lo * r_lo * r_lo) / 3.0, 1.0e-30);
+        next[i] = U[i] - (dt / shell_volume) * (area_hi * flux[i + 1] - area_lo * flux[i]);
+
+        const TensorPrim3D Pold = tensor_prim(U[i], mat);
+        const double source_weight = 0.5 * (r_hi * r_hi - r_lo * r_lo) / shell_volume;
+        next[i].mom[0] += dt * (-(Pold.sigma[4] + Pold.sigma[8])) * source_weight;
+
+        const std::array<double, 3> vel{Pold.vel[0], 0.0, 0.0};
+        for (int col = 0; col < 3; ++col) {
+            const double beta = (area_hi * faceF[i + 1][col] - area_lo * faceF[i][col]) / shell_volume;
+            for (int row = 0; row < 3; ++row) {
+                next[i].rhoF[3 * row + col] -= dt * vel[row] * beta;
+            }
+        }
+
+        next[i].rhoF[4] += dt * U[i].rhoF[4] * Pold.vel[0] * source_weight;
+        next[i].rhoF[8] += dt * U[i].rhoF[8] * Pold.vel[0] * source_weight;
         enforce_tensor(next[i], mat);
         apply_tensor_plastic_relaxation(next[i], mat, dt);
     }

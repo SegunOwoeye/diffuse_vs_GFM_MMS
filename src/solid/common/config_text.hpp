@@ -94,6 +94,32 @@ inline std::array<double, 2> parse_pair2d(const std::string& value)
     throw std::runtime_error("Expected 2D value pair in: " + value);
 }
 
+inline std::vector<double> parse_numeric_list(const std::string& value)
+{
+    std::string s = trim(value);
+    const bool single_bracketed_list =
+        !s.empty() && s.front() == '[' && s.back() == ']' &&
+        s.find("],") == std::string::npos;
+    if (single_bracketed_list) {
+        s = trim(s.substr(1, s.size() - 2));
+    }
+
+    std::vector<double> values;
+    for (const auto& part : split_csv(s)) {
+        std::string token = trim(part);
+        if (!token.empty() && token.front() == '[' && token.back() == ']') {
+            token = trim(token.substr(1, token.size() - 2));
+        }
+        if (!token.empty()) {
+            values.push_back(std::stod(token));
+        }
+    }
+    if (values.empty()) {
+        values.push_back(std::stod(s));
+    }
+    return values;
+}
+
 } // namespace text
 
 } // namespace solid

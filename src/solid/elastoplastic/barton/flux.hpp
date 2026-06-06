@@ -12,10 +12,7 @@ namespace solid::barton {
 
 inline double limit_slope(double a, double b)
 {
-    if (a * b <= 0.0) {
-        return 0.0;
-    }
-    return std::abs(a) < std::abs(b) ? a : b;
+    return core::fv::minmod(a, b);
 }
 
 inline StateSlope limited_slope(const State& left, const State& centre, const State& right)
@@ -186,11 +183,44 @@ namespace solid::barton {
 
 inline TensorState2D tensor_flux_from_prim(const TensorState2D& U, const TensorPrim2D& P, int dir);
 
+template<int DIM>
+inline TensorState<DIM> tensor_flux_from_prim_dim(
+    const TensorState<DIM>& U,
+    const TensorPrim<DIM>& P,
+    int dir)
+{
+    const double uk = P.vel[dir];
+    TensorState<DIM> F{};
+    F.rho = U.rho * uk;
+    double stress_power = 0.0;
+    for (int d = 0; d < DIM; ++d) {
+        F.mom[d] = U.mom[d] * uk - P.sigma[3 * d + dir];
+        stress_power += P.vel[d] * P.sigma[3 * d + dir];
+    }
+    F.E = uk * U.E - stress_power;
+    for (int i = 0; i < 3; ++i) {
+        const double ui = i < DIM ? P.vel[i] : 0.0;
+        for (int j = 0; j < 3; ++j) {
+            F.rhoF[3 * i + j] = U.rhoF[3 * i + j] * uk - U.rhoF[3 * dir + j] * ui;
+        }
+    }
+    F.rhoEqps = U.rhoEqps * uk;
+    F.rhoDamage = U.rhoDamage * uk;
+    return F;
+}
+
 inline TensorState2D tensor_flux(const TensorState2D& U, const TensorMaterial& mat, int dir)
 {
     const TensorPrim2D P = tensor_prim(U, mat);
     (void)mat;
     return tensor_flux_from_prim(U, P, dir);
+}
+
+inline TensorState3D tensor_flux(const TensorState3D& U, const TensorMaterial& mat, int dir)
+{
+    const TensorPrim3D P = tensor_prim(U, mat);
+    (void)mat;
+    return tensor_flux_from_prim_dim(U, P, dir);
 }
 
 inline TensorState2D tensor_flux_from_prim(const TensorState2D& U, const TensorPrim2D& P, int dir)
@@ -207,6 +237,8 @@ inline TensorState2D tensor_flux_from_prim(const TensorState2D& U, const TensorP
             F.rhoF[3 * i + j] = U.rhoF[3 * i + j] * uk - U.rhoF[3 * dir + j] * ui;
         }
     }
+    F.rhoEqps = U.rhoEqps * uk;
+    F.rhoDamage = U.rhoDamage * uk;
     return F;
 }
 
@@ -221,6 +253,15 @@ inline TensorState2D tensor_rusanov(const TensorState2D& L, const TensorState2D&
     return 0.5 * (tensor_flux(L, mat, dir) + tensor_flux(R, mat, dir)) - 0.5 * a * (R - L);
 }
 
+inline TensorState3D tensor_rusanov(const TensorState3D& L, const TensorState3D& R,
+                                    const TensorMaterial& mat, int dir)
+{
+    const TensorPrim3D PL = tensor_prim(L, mat);
+    const TensorPrim3D PR = tensor_prim(R, mat);
+    const double a = std::max(std::abs(PL.vel[dir]) + PL.wave_speed, std::abs(PR.vel[dir]) + PR.wave_speed);
+    return 0.5 * (tensor_flux(L, mat, dir) + tensor_flux(R, mat, dir)) - 0.5 * a * (R - L);
+}
+
 inline void enforce_tensor(TensorState2D& U, const TensorMaterial& mat)
 {
     U.rho = std::clamp(finite_or(U.rho, mat.rho0), 0.2 * mat.rho0, 2.0 * mat.rho0);
@@ -232,6 +273,8 @@ inline void enforce_tensor(TensorState2D& U, const TensorMaterial& mat)
     if (U.rhoF[0] <= 0.0) U.rhoF[0] = U.rho;
     if (U.rhoF[4] <= 0.0) U.rhoF[4] = U.rho;
     if (U.rhoF[8] <= 0.0) U.rhoF[8] = U.rho;
+    U.rhoEqps = std::max(finite_or(U.rhoEqps, 0.0), 0.0);
+    U.rhoDamage = std::clamp(finite_or(U.rhoDamage, 0.0), 0.0, mat.failed_damage * U.rho);
     std::array<double, 9> F{};
     for (int q = 0; q < 9; ++q) {
         F[q] = U.rhoF[q] / U.rho;
@@ -247,6 +290,41 @@ inline void enforce_tensor(TensorState2D& U, const TensorMaterial& mat)
     TensorPrim2D P = tensor_prim(U, mat);
     const double min_e = tensor_energy_from_F_T(P.F, 50.0, mat);
     const double kinetic = 0.5 * U.rho * (P.vel[0] * P.vel[0] + P.vel[1] * P.vel[1]);
+    if (!std::isfinite(U.E) || U.E < U.rho * min_e + kinetic) {
+        U.E = U.rho * min_e + kinetic;
+    }
+}
+
+inline void enforce_tensor(TensorState3D& U, const TensorMaterial& mat)
+{
+    U.rho = std::clamp(finite_or(U.rho, mat.rho0), 0.2 * mat.rho0, 2.0 * mat.rho0);
+    for (double& momentum : U.mom) {
+        if (!std::isfinite(momentum)) momentum = 0.0;
+    }
+    for (int q = 0; q < 9; ++q) {
+        if (!std::isfinite(U.rhoF[q])) U.rhoF[q] = 0.0;
+    }
+    if (U.rhoF[0] <= 0.0) U.rhoF[0] = U.rho;
+    if (U.rhoF[4] <= 0.0) U.rhoF[4] = U.rho;
+    if (U.rhoF[8] <= 0.0) U.rhoF[8] = U.rho;
+    U.rhoEqps = std::max(finite_or(U.rhoEqps, 0.0), 0.0);
+    U.rhoDamage = std::clamp(finite_or(U.rhoDamage, 0.0), 0.0, mat.failed_damage * U.rho);
+    std::array<double, 9> F{};
+    for (int q = 0; q < 9; ++q) {
+        F[q] = U.rhoF[q] / U.rho;
+    }
+    const double detF = det3(F);
+    const double target_det = mat.rho0 / U.rho;
+    if (std::isfinite(detF) && std::abs(detF) > 1.0e-14 && target_det > 0.0) {
+        const double scale = std::cbrt(std::abs(target_det / detF));
+        for (int q = 0; q < 9; ++q) {
+            U.rhoF[q] *= scale;
+        }
+    }
+    TensorPrim3D P = tensor_prim(U, mat);
+    const double min_e = tensor_energy_from_F_T(P.F, 50.0, mat);
+    const double kinetic = 0.5 * U.rho * (
+        P.vel[0] * P.vel[0] + P.vel[1] * P.vel[1] + P.vel[2] * P.vel[2]);
     if (!std::isfinite(U.E) || U.E < U.rho * min_e + kinetic) {
         U.E = U.rho * min_e + kinetic;
     }

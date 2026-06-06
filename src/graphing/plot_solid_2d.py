@@ -116,6 +116,7 @@ def plot_barton_radial_reference(
     csv_path: Path,
     reference_path: Path,
     out_path: Path | None,
+    scatter_label: str,
 ) -> None:
     df = pd.read_csv(csv_path)
     ref = pd.read_csv(reference_path)
@@ -125,11 +126,12 @@ def plot_barton_radial_reference(
 
     fig, axes = plt.subplots(2, 2, figsize=(8.2, 7.2))
     axes = axes.flatten()
+    temperature_ylim = (340.0, 850.0) if scatter_label == "3D" else (340.0, 650.0)
     fields = [
-        ("rho", r"$\rho$ (kg/cm$^3$)", (9.20, 9.62)),
-        ("ur", r"$u_r$", (-0.08, 0.08)),
+        ("rho", r"$\rho$ (g/cm$^3$)", (9.20, 9.62)),
+        ("ur", r"$u_r$ (km/s)", (-0.08, 0.08)),
         ("srr", r"$\sigma_{rr}$ (GPa)", (-15.0, -7.0)),
-        ("T", "T (K)", (340.0, 650.0)),
+        ("T", "T (K)", temperature_ylim),
     ]
     for ax, (field, ylabel, ylim) in zip(axes, fields):
         ax.plot(ref["r"], ref[field], color="black", linewidth=1.0, label="1D")
@@ -141,7 +143,7 @@ def plot_barton_radial_reference(
             color="black",
             markersize=1.0,
             markeredgewidth=0.0,
-            label="2D",
+            label=scatter_label,
         )
         ax.set_xlim(0.0, 10.0)
         ax.set_ylim(*ylim)
@@ -179,13 +181,18 @@ def main() -> None:
     parser.add_argument(
         "--barton-radial-reference",
         action="store_true",
-        help="Plot Barton tensor 2D scatter data against a cylindrical radial-reference solution.",
+        help="Plot Barton tensor radial scatter data against a 1D radial-reference solution.",
+    )
+    parser.add_argument(
+        "--scatter-label",
+        default="2D",
+        help="Legend label for the Cartesian scatter points.",
     )
     args = parser.parse_args()
     if args.barton_radial_reference:
         if args.reference is None:
             raise SystemExit("--barton-radial-reference requires --reference")
-        plot_barton_radial_reference(args.csv, args.reference, args.out)
+        plot_barton_radial_reference(args.csv, args.reference, args.out, args.scatter_label)
         return
     plot_section_8p5(
         args.csv,
