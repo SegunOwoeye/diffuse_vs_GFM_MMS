@@ -47,10 +47,13 @@ struct IdealGasEOS {
     {
         double energy_density = 0.0;
         for (int k = 0; k < params.nmat(); ++k) {
-            energy_density += alpha[k] * rho[k] *
-                MaterialEOS::internal_energy(rho[k], p, params.material[k]);
+            const double alpha_k = std::max(finite_or(alpha[k]), 0.0);
+            const double rho_k = clamp_min(rho[k]);
+            const double p_k = clamp_min(p);
+            energy_density += alpha_k * rho_k *
+                MaterialEOS::internal_energy(rho_k, p_k, params.material[k]);
         }
-        return energy_density;
+        return finite_or(energy_density);
     }
 
     static double pressure_from_internal_energy(
@@ -69,13 +72,15 @@ struct IdealGasEOS {
         }
 
         rho_total = clamp_min(rho_total);
-        const double target = rho_total * e;
+        e = finite_or(e);
+        const double target = finite_or(rho_total * e);
         double fallback_pressure = 0.0;
         for (int k = 0; k < params.nmat(); ++k) {
             const double ek = target / rho_total;
-            fallback_pressure += alpha[k] *
-                material_pressure_from_density_energy(rho[k], ek, params.material[k]);
+            fallback_pressure += std::max(finite_or(alpha[k]), 0.0) *
+                material_pressure_from_density_energy(clamp_min(rho[k]), ek, params.material[k]);
         }
+        fallback_pressure = clamp_min(fallback_pressure);
 
         double lo = 1e-12;
         double hi = std::max(1.0, fallback_pressure);
@@ -87,18 +92,22 @@ struct IdealGasEOS {
         double flo = residual(lo);
         double fhi = residual(hi);
 
-        for (int n = 0; n < 80 && fhi < 0.0; ++n) {
+        for (int n = 0; n < 80 && std::isfinite(fhi) && fhi < 0.0; ++n) {
             hi *= 2.0;
             fhi = residual(hi);
         }
 
-        if (!(flo <= 0.0 && fhi >= 0.0)) {
+        if (!std::isfinite(flo) || !std::isfinite(fhi) || !(flo <= 0.0 && fhi >= 0.0)) {
             return clamp_min(fallback_pressure);
         }
 
         for (int n = 0; n < 80; ++n) {
             const double mid = 0.5 * (lo + hi);
             const double fmid = residual(mid);
+
+            if (!std::isfinite(fmid)) {
+                return clamp_min(fallback_pressure);
+            }
 
             if (std::abs(fmid) <= 1e-10 * std::max(1.0, target)) {
                 return clamp_min(mid);
@@ -185,8 +194,9 @@ struct IdealGasEOS {
 
         double beta_mix = 0.0;
         for (int k = 0; k < params.nmat(); ++k) {
-            const double c = material_sound_speed(rho[k], p, params.material[k]);
-            beta_mix += alpha[k] / safe_denom(rho[k] * c * c, 1e-14);
+            const double rho_k = clamp_min(rho[k]);
+            const double c = material_sound_speed(rho_k, p, params.material[k]);
+            beta_mix += std::max(finite_or(alpha[k]), 0.0) / safe_denom(rho_k * c * c, 1e-14);
         }
 
         return std::sqrt(1.0 / (rho_total * safe_denom(beta_mix, 1e-14)));

@@ -52,11 +52,12 @@ namespace dim {
 
         double sum = 0.0;
         for (double& value : alpha) {
+            value = finite_or(value, alpha_floor);
             value = std::max(value, alpha_floor);
             sum += value;
         }
 
-        if (sum <= 0.0) {
+        if (!std::isfinite(sum) || sum <= 0.0) {
             alpha.assign(alpha.size(), 0.0);
             alpha[0] = 1.0;
             return;
@@ -99,7 +100,7 @@ namespace dim {
     {
         double rho_total = 0.0;
         for (double value : U.partial_mass) {
-            rho_total += value;
+            rho_total += finite_or(value);
         }
 
         return rho_total;
@@ -126,7 +127,7 @@ namespace dim {
         // Density calc
         double rho_total = 0.0;
         for (double value : U.partial_mass) {
-            rho_total += value;
+            rho_total += finite_or(value);
         }
         rho_total = std::max(rho_total, rho_floor);
 
@@ -139,12 +140,12 @@ namespace dim {
 
         for (int k = 0; k < params.nmat(); ++k) {
             const double alpha_k = std::max(P.alpha[k], alpha_floor);
-            P.rho[k] = std::max(safe_div(U.partial_mass[k], alpha_k), rho_floor);
+            P.rho[k] = std::max(safe_div(finite_or(U.partial_mass[k]), alpha_k), rho_floor);
         }
 
         // Energy calc
         const double kinetic = 0.5 * rho_total * velocity_squared;
-        const double internal_energy = safe_div(U.E - kinetic, rho_total);
+        const double internal_energy = safe_div(finite_or(U.E, kinetic) - kinetic, rho_total);
         P.p = std::max(
             IdealGasEOS::pressure_from_internal_energy(
                 rho_total,
@@ -209,12 +210,13 @@ namespace dim {
         return U;
     }
 
-    // [8] Computes the coefficients used in the non-conservative volume-fraction evolution term for the isobaric closure
+    // [8] Coefficients for Allaire's transported volume-fraction equation:
+    //     d(alpha_k)/dt + div(alpha_k u) = alpha_k div(u).
     template<int DIM>
     inline std::vector<double> alpha_rhs_coefficients(
         const Primitive<DIM>& P,
         const EOSParams& params,
-        double p_floor = 1e-12
+        double = 1e-12
     )
     {
         params.validate();
@@ -223,32 +225,8 @@ namespace dim {
             throw std::runtime_error("dim::alpha_rhs_coefficients: alpha size mismatch");
         }
 
-        const double p = std::max(P.p, p_floor);
-
-        std::vector<double> rhs(params.nmat(), 0.0);
-        double beta_mix = 0.0;
-
-        for (int k = 0; k < params.nmat(); ++k) {
-            const double c = IdealGasEOS::material_sound_speed(
-                P.rho[k],
-                p,
-                params.material[k]
-            );
-            beta_mix += P.alpha[k] / safe_denom(P.rho[k] * c * c, 1e-14);
-        }
-
-        beta_mix = safe_denom(beta_mix);
-
-        for (int k = 0; k < params.nmat(); ++k) {
-            const double c = IdealGasEOS::material_sound_speed(
-                P.rho[k],
-                p,
-                params.material[k]
-            );
-            const double beta_k = 1.0 / safe_denom(P.rho[k] * c * c, 1e-14);
-            rhs[k] = P.alpha[k] * beta_k / beta_mix;
-        }
-
+        std::vector<double> rhs = P.alpha;
+        sanitise_alpha(rhs, 0.0);
         return rhs;
     }
 
@@ -264,6 +242,17 @@ namespace dim {
     {
         params.validate();
         require_compatible_state(U, params.nmat(), "dim::repair_state");
+
+        for (double& value : U.partial_mass) {
+            value = std::max(finite_or(value), 0.0);
+        }
+        for (double& value : U.alpha) {
+            value = finite_or(value);
+        }
+        for (double& value : U.mom) {
+            value = finite_or(value);
+        }
+        U.E = finite_or(U.E);
 
         const double rho_before = std::max(total_density(U), mass_floor);
         std::array<double, DIM> velocity_before{};
@@ -286,7 +275,7 @@ namespace dim {
 
         const double kinetic_before = 0.5 * rho_before * velocity_squared_before;
         const double internal_before =
-            safe_div(U.E - kinetic_before, rho_before);
+            safe_div(finite_or(U.E, kinetic_before) - kinetic_before, rho_before);
         const double pressure_before = std::max(
             IdealGasEOS::pressure_from_internal_energy(
                 rho_before,
@@ -300,7 +289,7 @@ namespace dim {
 
         // clamps invalid masses
         for (double& value : U.partial_mass) {
-            value = std::max(value, 0.0);
+            value = std::max(finite_or(value), 0.0);
         }
         
         // re-normalizes alphas
@@ -319,7 +308,7 @@ namespace dim {
         }
 
         double rho_total = total_density(U);
-        if (rho_total <= 0.0) {
+        if (!std::isfinite(rho_total) || rho_total <= 0.0) {
             int dominant_material = 0;
             for (int k = 1; k < params.nmat(); ++k) {
                 if (alpha_full[k] > alpha_full[dominant_material]) {
@@ -373,7 +362,7 @@ namespace dim {
                 rho_material,
                 params
             );
-        U.E = std::max(U.E, kinetic + minimum_internal);
+        U.E = std::max(finite_or(U.E), kinetic + minimum_internal);
     }
 
 

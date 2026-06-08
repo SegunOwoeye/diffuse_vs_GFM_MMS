@@ -149,6 +149,30 @@ inline void run_sharp_interface_case(
         time += result.dt;
         ++step;
 
+        if (conservation_report.has_value()) {
+            const auto boundary_flux =
+                app_io::compute_sharp_boundary_flux<DIM, EOS>(
+                    U,
+                    ctx.material_id,
+                    N,
+                    ctx.dx,
+                    ctx.material_params
+                );
+            const auto interface_flux_mismatch =
+                app_io::compute_sharp_interface_flux_mismatch<DIM, EOS>(
+                    U,
+                    ctx.material_id,
+                    N,
+                    ctx.dx,
+                    ctx.material_params
+                );
+            conservation_report->accumulate_fluxes(
+                result.dt,
+                boundary_flux,
+                &interface_flux_mismatch
+            );
+        }
+
         phi_output = (cfg.interface_method == "GFM" && !ctx.phi_list.empty())
                 ? &ctx.phi_list
                 : nullptr;
@@ -200,5 +224,4 @@ inline void run_sharp_interface_case(
     }
     #endif
 }
-
 

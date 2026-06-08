@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 #include "src/dim/flux.hpp"
 #include "src/math/numerical_safety.hpp"
@@ -108,6 +109,10 @@ namespace dim {
         const Flux<DIM> FL = compute_flux_normal<DIM>(UL, PL, n);
         const Flux<DIM> FR = compute_flux_normal<DIM>(UR, PR, n);
 
+        if (!std::isfinite(sL) || !std::isfinite(sR) || !std::isfinite(s_star)) {
+            return {0.5 * (FL + FR), 0.5 * (unL + unR)};
+        }
+
         if (0.0 <= sL) {
             return {FL, unL};
         }
@@ -122,6 +127,7 @@ namespace dim {
 
         if (sL <= 0.0 && 0.0 <= s_star) {
             State<DIM> UL_star = make_state<DIM>(nmat);
+            UL_star.alpha = UL.alpha;
 
             const double rhoL_star = compute_star_density(rhoL, sL, unL, s_star, tol);
             const double EL_star = compute_star_energy(rhoL_star, UL.E, rhoL, pL, sL, unL, s_star, tol);
@@ -147,6 +153,7 @@ namespace dim {
         }
 
         State<DIM> UR_star = make_state<DIM>(nmat);
+        UR_star.alpha = UR.alpha;
 
         const double rhoR_star = compute_star_density(rhoR, sR, unR, s_star, tol);
         const double ER_star = compute_star_energy(rhoR_star, UR.E, rhoR, pR, sR, unR, s_star, tol);
@@ -172,4 +179,3 @@ namespace dim {
     }
 
 } 
-

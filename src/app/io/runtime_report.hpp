@@ -92,14 +92,14 @@ namespace app_io {
 
         file << "interface_method = " << cfg.interface_method << "\n";
         file << "dimension = " << DIM << "\n";
-        file << "N = [";
+        file << "N = ";
         for (int d = 0; d < DIM; ++d) {
             if (d > 0) {
-                file << ", ";
+                file << "x";
             }
             file << N[d];
         }
-        file << "]\n";
+        file << "\n";
         file << "cells = " << cells << "\n";
         file << "steps = " << steps << "\n";
         file << "final_time = " << final_time << "\n";
@@ -109,7 +109,6 @@ namespace app_io {
     }
 
 }
-
 
 
 

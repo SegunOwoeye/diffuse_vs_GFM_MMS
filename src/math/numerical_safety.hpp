@@ -11,13 +11,26 @@ Program provides safe tooling for numerical computations
 // [1] Creating a double that is bound to a tolerance
 inline double clamp_min(double x, double tol = 1e-10)
 {
+    if (!std::isfinite(x)) {
+        return tol;
+    }
     return std::max(x, tol);
+}
+
+// [1.1] Replaces non-finite values with a caller-provided fallback
+inline double finite_or(double x, double fallback = 0.0)
+{
+    return std::isfinite(x) ? x : fallback;
 }
 
 // [2] Safe division of numerical values to avoid division by 0
 inline double safe_denom(double denom, double tol = 1e-10
 )
 {
+    if (!std::isfinite(denom)) {
+        return (denom < 0.0) ? -tol : tol;
+    }
+
     if (std::abs(denom) < tol) {
         return (denom < 0.0) ? -tol : tol;
     }
@@ -28,7 +41,7 @@ inline double safe_denom(double denom, double tol = 1e-10
 inline double safe_div(double num, double denom, double tol = 1e-10
 )
 {
-    return num / safe_denom(denom, tol);
+    return finite_or(num) / safe_denom(denom, tol);
 }
 
 // [2.1] Roundoff-scale tolerance for geometry/level-set comparisons

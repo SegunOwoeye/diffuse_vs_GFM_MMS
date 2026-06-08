@@ -174,6 +174,21 @@ int main(int argc, char** argv)
                     throw std::runtime_error("Non-positive timestep");
                 }
 
+                if (conservation_report.has_value()) {
+                    const auto boundary_flux =
+                        app_io::compute_sharp_boundary_flux<DIM_, EOS>(
+                            U,
+                            ctx.material_id,
+                            N,
+                            ctx.dx,
+                            ctx.material_params
+                        );
+                    conservation_report->accumulate_fluxes(
+                        result.dt,
+                        boundary_flux
+                    );
+                }
+
                 if (conservation_report.has_value() &&
                     (step % conservation_interval == 0 ||
                      time >= cfg.tfinal - 1e-14))

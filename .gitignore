@@ -12,6 +12,7 @@ __pycache__/
 # [data + outputs]
 data/csv
 data/plots
+results/quantitative/
 !data/
 !data/exact/
 !data/exact/fedkiw/
@@ -30,3 +31,6 @@ sm_main_3d
 /data/bubble_collapse_validation/GFM
 /whitepaper_real_fluid_model_risk
 solid_main
+tools/quant_suite
+/results
+*.Identifier

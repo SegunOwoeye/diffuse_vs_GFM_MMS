@@ -84,6 +84,18 @@ inline void run_dim_case(
         time += result.dt;
         ++step;
 
+        if (conservation_report.has_value()) {
+            conservation_report->accumulate_fluxes(
+                result.dt,
+                app_io::compute_dim_boundary_flux<DIM>(
+                    U,
+                    N,
+                    dx,
+                    material_params
+                )
+            );
+        }
+
         while (next_output_index < cfg.output_times.size() &&
                time >= cfg.output_times[next_output_index] - 1e-14)
         {
