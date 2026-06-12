@@ -1,0 +1,252 @@
+Quantitative test commands for diffuse vs sharp-interface comparison
+====================================================================
+
+Run all commands from the repository root in WSL:
+
+    cd ~/diffuse_vs_GFM_MMS
+    source .venv/bin/activate
+    chmod +x scripts/run_quant_suite.sh
+
+Before report-quality Fedkiw runs, regenerate exact/reference data:
+
+    .venv/bin/python tools/generate_fedkiw_exact_references.py
+
+
+0. Dry-run the report core
+--------------------------
+Purpose:
+    Check which cases will run before spending compute. This exercises the
+    command parser, case aliases, method filtering, and result-root setup
+    without launching solver runs.
+
+Command:
+    scripts/run_quant_suite.sh \
+      --all-core \
+      --dry-run
+
+
+1. Single-material smoke test: Toro 1D
+-------------------------------------
+Purpose:
+    Fast baseline sanity check for the shared finite-volume/MUSCL-Hancock
+    machinery. Use this before expensive multimaterial runs.
+
+Command:
+    scripts/run_quant_suite.sh \
+      --case toro_1d,test1 \
+      --method common \
+      --resolutions 100,200 \
+      --result-root results/quantitative/smoke_toro \
+      --overwrite
+
+
+2. Multimaterial smoke test: FedkiwD2 1D
+---------------------------------------
+Purpose:
+    Fast rGFM/SIM vs DIM sanity check on a known two-material Riemann problem.
+    Good first test after changes to interface handling, EOS coupling, exact
+    references, or quantitative metrics.
+
+Command:
+    scripts/run_quant_suite.sh \
+      --case fedkiw_d2 \
+      --methods sim,dim \
+      --resolutions 100 \
+      --result-root results/quantitative/smoke_fedkiw_d2 \
+      --overwrite
+
+
+3. Core report suite
+--------------------
+Purpose:
+    Small but representative report set:
+    - Toro 1D test 1 for single-material validation.
+    - FedkiwD2 1D for multimaterial Riemann convergence.
+    - FedkiwD2 45-degree oblique 2D for oriented-interface behaviour.
+    - 2D shock-bubble for complex interface dynamics.
+
+Command:
+    scripts/run_quant_suite.sh \
+      --all-core \
+      --result-root results/quantitative/report2_core \
+      --overwrite \
+      --omp-threads 6
+
+
+4. Full 1D multimaterial validation
+-----------------------------------
+Purpose:
+    Run the Fedkiw A-E family for both rGFM/SIM and DIM across a clean
+    resolution ladder. Use for convergence plots, error tables, and broad
+    validation against known/reference Riemann solutions.
+
+Command:
+    scripts/run_quant_suite.sh \
+      --case fedkiw_1d \
+      --methods sim,dim \
+      --resolutions 100,200,400,800 \
+      --result-root results/quantitative/fedkiw_1d_full \
+      --overwrite \
+      --omp-threads 6
+
+
+5. Focused 2D oblique comparison: FedkiwD2
+-----------------------------------------
+Purpose:
+    Compare rGFM/SIM and DIM when the material interface is not grid-aligned.
+    This is useful for discussing interface orientation error, transverse
+    artifacts, and 2D convergence.
+
+Command:
+    scripts/run_quant_suite.sh \
+      --case oblique,test5 \
+      --methods sim,dim \
+      --resolutions 100,200,400 \
+      --result-root results/quantitative/oblique_d2 \
+      --overwrite \
+      --omp-threads 6
+
+
+6. Shock-bubble 2D convergence and interface-feature run
+--------------------------------------------------------
+Purpose:
+    Main complex fluid-fluid comparison. Use this for:
+    - shock-bubble morphology,
+    - transmitted-shock / jet / interface-feature tracking,
+    - conservation drift,
+    - rGFM corrugation discussion,
+    - DIM vs SIM accuracy/performance trade-offs.
+
+Command:
+    scripts/run_quant_suite.sh \
+      --case bubble \
+      --methods sim,dim \
+      --resolutions 325x45,650x89,1300x178 \
+      --result-root results/quantitative/shock_bubble_2d \
+      --overwrite \
+      --omp-threads 6
+
+
+7. Shock-bubble 2D mass-conservation focused run
+------------------------------------------------
+Purpose:
+    Generate a clean result root specifically for the shock-bubble mass
+    conservation story. Use this when you want to inspect whether rGFM/SIM
+    interface corrugations coincide with conservative drift, and compare that
+    drift to the DIM result under the same grid and time integration settings.
+
+Important output files:
+    results/quantitative/shock_bubble_2d_mass/summaries/conservation_summary.csv
+    results/quantitative/shock_bubble_2d_mass/summaries/conservation_balance_compact.csv
+    results/quantitative/shock_bubble_2d_mass/report/conservation_drift_report_summary.csv
+    results/quantitative/shock_bubble_2d_mass/summaries/interface_summary.csv
+    results/quantitative/shock_bubble_2d_mass/summaries/bubble_feature_summary.csv
+
+Command:
+    scripts/run_quant_suite.sh \
+      --case bubble \
+      --methods sim,dim \
+      --resolutions 325x45,650x89,1300x178 \
+      --result-root results/quantitative/shock_bubble_2d_mass \
+      --overwrite \
+      --omp-threads 6 \
+      --conservation-interval 10
+
+
+8. OpenMP performance scaling
+-----------------------------
+Purpose:
+    Report defensible performance data for the expensive shock-bubble case.
+    Warmups reduce first-run noise; repeats give medians for SIM vs DIM.
+
+Command:
+    scripts/run_quant_suite.sh \
+      --scaling openmp_threads \
+      --benchmark-mode clean \
+      --benchmark-warmups 1 \
+      --benchmark-repeats 3 \
+      --result-root results/quantitative/openmp_scaling \
+      --overwrite
+
+
+9. DIM interface-thickness sensitivity
+--------------------------------------
+Purpose:
+    Test how the diffuse-interface thickness affects accuracy, interface
+    feature position, and conservation. Use this when discussing the main DIM
+    modelling knob.
+
+Command:
+    scripts/run_quant_suite.sh \
+      --sensitivity dim_epsilon \
+      --result-root results/quantitative/dim_epsilon_sensitivity \
+      --overwrite \
+      --omp-threads 6
+
+
+10. SIM/rGFM reinitialisation sensitivity
+-----------------------------------------
+Purpose:
+    Test how level-set reinitialisation interval affects rGFM/SIM interface
+    stability, corrugation, and feature tracking. This is especially relevant
+    for the shock-bubble case.
+
+Command:
+    scripts/run_quant_suite.sh \
+      --sensitivity sim_reinit \
+      --result-root results/quantitative/sim_reinit_sensitivity \
+      --overwrite \
+      --omp-threads 6
+
+
+11. Optional 3D shock-bubble extension
+--------------------------------------
+Purpose:
+    Use only if you want to claim the 3D extension from the project brief.
+    It is more expensive and should be treated as extension evidence, not the
+    first validation run.
+
+Command:
+    scripts/run_quant_suite.sh \
+      --case bubble3d \
+      --methods sim,dim \
+      --resolutions 325x45x45 \
+      --result-root results/quantitative/shock_bubble_3d \
+      --overwrite \
+      --omp-threads 6
+
+
+Where to look after a run
+-------------------------
+General outputs:
+    results/quantitative/<run_name>/manifest.json
+    results/quantitative/<run_name>/logs/
+    results/quantitative/<run_name>/raw/
+    results/quantitative/<run_name>/summaries/
+    results/quantitative/<run_name>/report/
+
+Most useful report files:
+    report/main_results_table.csv
+    report/error_report_summary.csv
+    report/convergence_order_report_summary.csv
+    report/conservation_drift_report_summary.csv
+    report/interface_location_report_summary.csv
+    report/performance_report_summary.csv
+    report/bubble_feature_velocity_report_summary.csv
+    summaries/summary.csv
+    summaries/conservation_summary.csv
+    summaries/interface_summary.csv
+    summaries/bubble_feature_summary.csv
+
+
+Recommended run order
+---------------------
+1. smoke_toro
+2. smoke_fedkiw_d2
+3. report2_core
+4. fedkiw_1d_full
+5. oblique_d2
+6. shock_bubble_2d_mass
+7. openmp_scaling
+8. sensitivity runs, if you need the extra discussion
+9. shock_bubble_3d, only if you want the 3D extension

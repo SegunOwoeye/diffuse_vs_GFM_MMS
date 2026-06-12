@@ -12,25 +12,16 @@ from plot_style import (
     save_figure,
 )
 from exact_reference import load_optional_exact_reference
+from fedkiw_common import (
+    TEST_FOLDERS,
+    compute_entropy,
+    solution_folder,
+    solution_path,
+    available_resolutions as common_available_resolutions,
+)
 
 
 # [1] Test / Folder Settings
-TEST_FOLDERS = {
-    "test1": "FedkiwA",
-    "test2": "FedkiwB",
-    "test3": "FedkiwC",
-    "test4": "FedkiwD1",
-    "test5": "FedkiwD2",
-}
-
-TEST_GAMMAS = {
-    "test1": (1.4, 1.2),
-    "test2": (1.4, 1.67),
-    "test3": (1.4, 1.249),
-    "test4": (1.4, 1.67),
-    "test5": (1.4, 1.249),
-}
-
 TEST_TIMES = {
     "test1": 7.0e-4,
     "test2": 1.2e-3,
@@ -74,30 +65,8 @@ def format_time(value):
 
 # [2] Load CSV Data
 def infer_material_ids(df):
-    if "mat" in df.columns:
-        return df["mat"].round().astype(int).to_numpy()
-
-    alpha_columns = sorted([
-        column for column in df.columns
-        if column.startswith("alpha")
-    ])
-
-    if alpha_columns:
-        return df[alpha_columns].to_numpy().argmax(axis=1)
-
-    return None
-
-
-def compute_entropy(df, test_name):
-    material_ids = infer_material_ids(df)
-    gammas = TEST_GAMMAS[test_name]
-
-    if material_ids is None:
-        gamma = gammas[0]
-    else:
-        gamma = np.asarray([gammas[int(mat)] for mat in material_ids])
-
-    return df["p"].to_numpy() / (df["rho"].to_numpy() ** gamma)
+    from fedkiw_common import infer_material_ids as common_infer_material_ids
+    return common_infer_material_ids(df)
 
 
 def load_1d_solution(csv_path, test_name):
@@ -281,31 +250,6 @@ def extract_oblique45_normal_slice(x, y, values, num_samples=None):
 
 
 # [3] Build Paths
-def fedkiw_name(test_name):
-    return TEST_FOLDERS[test_name]
-
-
-def solution_folder(data_root, method, dimension, test_name, name_suffix=""):
-    name = fedkiw_name(test_name)
-    if dimension == 2:
-        name = f"{name}{name_suffix}"
-
-    return data_root / method / f"MM_{dimension}D_validation" / f"{method}_{name}"
-
-
-def solution_path(data_root, method, dimension, test_name, resolution, name_suffix=""):
-    name = fedkiw_name(test_name)
-    if dimension == 2:
-        name = f"{name}{name_suffix}"
-
-    folder = solution_folder(data_root, method, dimension, test_name, name_suffix)
-
-    if dimension == 1:
-        return folder / f"{method}_{name}_N{resolution}.csv"
-
-    return folder / f"{method}_{name}_N{resolution}_N{resolution}.csv"
-
-
 # [4] Resolution Selection
 def extract_resolution(csv_path, dimension):
     if dimension == 1:
@@ -320,20 +264,7 @@ def extract_resolution(csv_path, dimension):
 
 
 def available_resolutions(data_root, method, dimension, test_name, name_suffix=""):
-    folder = solution_folder(data_root, method, dimension, test_name, name_suffix)
-
-    if not folder.exists():
-        return []
-
-    resolutions = []
-
-    for csv_path in folder.glob("*.csv"):
-        resolution = extract_resolution(csv_path, dimension)
-
-        if resolution is not None:
-            resolutions.append(resolution)
-
-    return sorted(set(resolutions))
+    return common_available_resolutions(data_root, method, dimension, test_name, name_suffix)
 
 
 def choose_resolution(data_root, method, test_name, requested_resolution, two_d_name_suffix=""):
@@ -636,8 +567,8 @@ def main():
     parser.add_argument(
         "--exact-root",
         type=Path,
-        default=Path("data/exact/fedkiw"),
-        help="Folder containing optional digitised exact CSVs named test1_exact.csv, test2_exact.csv, ...",
+        default=Path("data/exact/generated_multimaterial"),
+        help="Folder containing generated multimaterial exact CSVs named test1_exact.csv, test2_exact.csv, ...",
     )
     parser.add_argument(
         "--methods",

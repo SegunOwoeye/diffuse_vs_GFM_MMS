@@ -42,6 +42,10 @@ std::vector<CaseDef> case_registry()
         "g++", "-std=c++17", "-O2", "-fopenmp", "-I.", "-DAPP_DIM=2",
         "src/app/multimaterial_main.cpp", "-o", "mm_main_2d"
     };
+    const std::vector<std::string> mm3 = {
+        "g++", "-std=c++17", "-O2", "-fopenmp", "-I.", "-DAPP_DIM=3",
+        "src/app/multimaterial_main.cpp", "-o", "mm_main_3d"
+    };
 
     std::vector<CaseDef> cases;
     for (int i = 1; i <= 5; ++i) {
@@ -60,7 +64,7 @@ std::vector<CaseDef> case_registry()
     cases.push_back({
         "toro_explosion_3d", "explosion2", "explosion2", "common", 3,
         "sm_3d", "sm_main_3d", sm3, "configs/toro/explosion2.txt",
-        {{100, 100, 100}, {200, 200, 200}, {400, 400, 400}}
+        {{50, 50, 50}, {100, 100, 100}, {200, 200, 200}}
     });
 
     const std::vector<std::string> labels = {"FedkiwA", "FedkiwB", "FedkiwC", "FedkiwD1", "FedkiwD2"};
@@ -89,6 +93,18 @@ std::vector<CaseDef> case_registry()
             "configs/DIM/MM_2D_validation/test" + std::to_string(i) + ".txt",
             {{100, 100}, {200, 200}, {400, 400}}
         });
+        cases.push_back({
+            "fedkiw_2d_oblique", "test" + std::to_string(i), labels[i - 1] + "45", "SIM", 2,
+            "mm_2d", "mm_main_2d", mm2,
+            "configs/GFM/MM_2D_validation/test" + std::to_string(i) + "_oblique45.txt",
+            {{100, 100}, {200, 200}, {400, 400}}
+        });
+        cases.push_back({
+            "fedkiw_2d_oblique", "test" + std::to_string(i), labels[i - 1] + "45", "DIM", 2,
+            "mm_2d", "mm_main_2d", mm2,
+            "configs/DIM/MM_2D_validation/test" + std::to_string(i) + "_oblique45.txt",
+            {{100, 100}, {200, 200}, {400, 400}}
+        });
     }
 
     cases.push_back({
@@ -102,6 +118,18 @@ std::vector<CaseDef> case_registry()
         "mm_2d", "mm_main_2d", mm2,
         "configs/DIM/MM_2D_validation/test6.txt",
         {{1300, 178}}
+    });
+    cases.push_back({
+        "shock_bubble_3d", "test6", "helium_bubble_3d", "SIM", 3,
+        "mm_3d", "mm_main_3d", mm3,
+        "configs/GFM/MM_3D_validation/test6.txt",
+        {{325, 45, 45}}
+    });
+    cases.push_back({
+        "shock_bubble_3d", "test6", "helium_bubble_3d", "DIM", 3,
+        "mm_3d", "mm_main_3d", mm3,
+        "configs/DIM/MM_3D_validation/test6.txt",
+        {{325, 45, 45}}
     });
 
     return cases;
@@ -129,8 +157,11 @@ std::set<std::string> groups_for_case_alias(const std::vector<std::string>& alia
         else if (alias == "explosion" || alias == "explosion2d") groups.insert("toro_explosion_2d");
         else if (alias == "explosion3d" || alias == "toro_3d") groups.insert("toro_explosion_3d");
         else if (alias == "fedkiw" || alias == "fedkiw_1d") groups.insert("fedkiw_1d");
+        else if (alias == "fedkiw_d2" || alias == "fedkiwd2") groups.insert("fedkiw_1d");
         else if (alias == "planar" || alias == "fedkiw_2d") groups.insert("fedkiw_2d_planar");
+        else if (alias == "oblique" || alias == "fedkiw_2d_oblique" || alias == "oblique45" || alias == "oblique_mm") groups.insert("fedkiw_2d_oblique");
         else if (alias == "shock_bubble" || alias == "bubble") groups.insert("shock_bubble_2d");
+        else if (alias == "shock_bubble3d" || alias == "shock_bubble_3d" || alias == "bubble3d") groups.insert("shock_bubble_3d");
     }
     return groups;
 }
@@ -140,9 +171,23 @@ bool is_specific_case_filter(const std::string& value)
     const std::string alias = lower(value);
     static const std::set<std::string> broad = {
         "toro", "toro_no3d", "toro_1d", "explosion", "explosion2d", "explosion3d",
-        "toro_3d", "fedkiw", "fedkiw_1d", "planar", "fedkiw_2d", "shock_bubble", "bubble"
+        "toro_3d", "fedkiw", "fedkiw_1d", "planar", "fedkiw_2d", "oblique",
+        "fedkiw_2d_oblique", "oblique45", "oblique_mm", "shock_bubble", "bubble",
+        "shock_bubble3d", "shock_bubble_3d", "bubble3d"
     };
     return !broad.count(alias);
+}
+
+std::string case_filter_key(std::string value)
+{
+    value = lower(value);
+    std::string key;
+    for (char c : value) {
+        if (std::isalnum(static_cast<unsigned char>(c))) {
+            key.push_back(c);
+        }
+    }
+    return key;
 }
 
 bool case_allowed(const CaseDef& def, const Args& args, const std::set<std::string>& groups)
@@ -162,8 +207,10 @@ bool case_allowed(const CaseDef& def, const Args& args, const std::set<std::stri
             continue;
         }
         has_specific = true;
-        const std::string value = lower(item);
-        if (lower(def.name) == value || lower(def.label) == value) {
+        const std::string value = case_filter_key(item);
+        const std::string label = case_filter_key(def.label);
+        const std::string name = case_filter_key(def.name);
+        if (name == value || label == value || label == value + "45") {
             matched = true;
         }
     }
@@ -190,7 +237,7 @@ std::vector<std::vector<int>> preset_resolutions(const Args& args, const CaseDef
         if (def.dimension == 1) {
             return {{100}, {200}};
         }
-        if (def.group == "shock_bubble_2d") {
+        if (def.group == "shock_bubble_2d" || def.group == "shock_bubble_3d") {
             return {};
         }
         return {{100, 100}};
@@ -262,6 +309,61 @@ std::vector<RunSpec> build_normal_runs(const Args& args)
     return runs;
 }
 
+std::vector<std::vector<int>> core_resolutions_for(const Args& args, const CaseDef& def)
+{
+    if (!args.resolutions.empty()) {
+        return preset_resolutions(args, def);
+    }
+    if (def.group == "shock_bubble_2d") {
+        return {{325, 45}, {650, 89}, {1300, 178}};
+    }
+    if (def.dimension == 2) {
+        return {{100, 100}, {200, 200}, {400, 400}};
+    }
+    return {{100}, {200}, {400}};
+}
+
+bool is_core_case(const CaseDef& def)
+{
+    if (def.group == "toro_1d") {
+        return def.name == "test1" && def.method == "common";
+    }
+    if (def.group == "fedkiw_1d") {
+        return def.name == "test5";
+    }
+    if (def.group == "fedkiw_2d_oblique") {
+        return def.name == "test5";
+    }
+    if (def.group == "shock_bubble_2d") {
+        return true;
+    }
+    return false;
+}
+
+std::vector<RunSpec> build_core_runs(const Args& args)
+{
+    std::vector<RunSpec> runs;
+    for (const auto& def : case_registry()) {
+        if (!is_core_case(def) || !contains_method(args.methods, def.method)) {
+            continue;
+        }
+        for (const auto& resolution : core_resolutions_for(args, def)) {
+            RunSpec run;
+            run.case_def = def;
+            run.resolution = resolution;
+            run.omp_threads = args.omp_threads;
+            run.output_prefix =
+                "quant_" + method_prefix(def.method) + "_" + def.label + "_" + resolution_label(resolution);
+            if (def.method == "common") {
+                run.output_prefix = "quant_" + def.label + "_" + resolution_label(resolution);
+            }
+            run.run_id = make_run_id(def, resolution, args.omp_threads);
+            runs.push_back(run);
+        }
+    }
+    return runs;
+}
+
 std::optional<CaseDef> find_case(const std::string& group, const std::string& name, const std::string& method)
 {
     for (const auto& def : case_registry()) {
@@ -276,43 +378,62 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
 {
     std::vector<RunSpec> runs;
     if (args.sensitivity == "dim_epsilon") {
-        const auto def = find_case("fedkiw_1d", "test5", "DIM").value();
-        for (double value : {0.005, 0.01, 0.02, 0.04}) {
+        const auto add_dim_epsilon_run = [&](const CaseDef& def,
+                                             const std::vector<int>& resolution,
+                                             int dx_units,
+                                             double physical_width) {
             RunSpec run;
             run.case_def = def;
-            run.resolution = {400};
+            run.resolution = resolution;
             run.omp_threads = args.omp_threads;
             run.sensitivity = args.sensitivity;
-            run.parameter_name = "epsilon_alpha";
-            std::ostringstream text;
-            text << value;
-            run.parameter_value = text.str();
-            run.overrides["interface_thickness"] = run.parameter_value;
-            run.output_prefix = "quant_dim_FedkiwD2_epsilon_alpha_" + sanitize_value(run.parameter_value);
+            run.parameter_name = "epsilon_alpha_dx";
+            run.parameter_value = std::to_string(dx_units) + "dx";
+            std::ostringstream width;
+            width << physical_width;
+            run.overrides["interface_thickness"] = width.str();
+            run.output_prefix =
+                "quant_dim_" + def.label + "_epsilon_alpha_" + std::to_string(dx_units) + "dx";
             run.run_id = make_run_id(def, run.resolution, args.omp_threads, run.parameter_name, run.parameter_value);
             runs.push_back(run);
+        };
+
+        const auto fedkiw = find_case("fedkiw_1d", "test5", "DIM").value();
+        for (int dx_units : {1, 2, 3, 4, 6}) {
+            add_dim_epsilon_run(fedkiw, {400}, dx_units, static_cast<double>(dx_units) / 400.0);
+        }
+
+        const auto bubble = find_case("shock_bubble_2d", "test6", "DIM").value();
+        for (int dx_units : {1, 2, 3, 4, 6}) {
+            add_dim_epsilon_run(bubble, {1300, 178}, dx_units, 0.25 * static_cast<double>(dx_units));
         }
     }
     else if (args.sensitivity == "sim_reinit") {
-        const auto def = find_case("fedkiw_1d", "test5", "SIM").value();
-        for (int interval : {1, 5, 10, 20}) {
-            for (int iterations : {2, 5, 10}) {
-                RunSpec run;
-                run.case_def = def;
-                run.resolution = {400};
-                run.omp_threads = args.omp_threads;
-                run.sensitivity = args.sensitivity;
-                run.parameter_name = "reinit";
-                run.parameter_value =
-                    "reinit_interval=" + std::to_string(interval) +
-                    ";reinit_iterations=" + std::to_string(iterations);
-                run.overrides["reinit_interval"] = std::to_string(interval);
-                run.overrides["reinit_iterations"] = std::to_string(iterations);
-                run.output_prefix =
-                    "quant_gfm_FedkiwD2_reinit_" + std::to_string(interval) + "_" + std::to_string(iterations);
-                run.run_id = make_run_id(def, run.resolution, args.omp_threads, run.parameter_name, run.parameter_value);
-                runs.push_back(run);
-            }
+        const auto add_sim_reinit_run = [&](const CaseDef& def,
+                                            const std::vector<int>& resolution,
+                                            const std::string& interval_label,
+                                            int interval) {
+            RunSpec run;
+            run.case_def = def;
+            run.resolution = resolution;
+            run.omp_threads = args.omp_threads;
+            run.sensitivity = args.sensitivity;
+            run.parameter_name = "reinit_interval";
+            run.parameter_value = interval_label;
+            run.overrides["reinit_interval"] = std::to_string(interval);
+            run.output_prefix =
+                "quant_gfm_" + def.label + "_reinit_" + sanitize_value(interval_label);
+            run.run_id = make_run_id(def, run.resolution, args.omp_threads, run.parameter_name, run.parameter_value);
+            runs.push_back(run);
+        };
+
+        const auto oblique = find_case("fedkiw_2d_oblique", "test5", "SIM").value();
+        const auto bubble = find_case("shock_bubble_2d", "test6", "SIM").value();
+        for (const auto& item : std::vector<std::pair<std::string, int>>{
+                 {"1", 1}, {"2", 2}, {"5", 5}, {"10", 10}, {"20", 20}, {"never", 0}
+             }) {
+            add_sim_reinit_run(oblique, {200, 200}, item.first, item.second);
+            add_sim_reinit_run(bubble, {1300, 178}, item.first, item.second);
         }
     }
     return runs;
@@ -326,14 +447,12 @@ std::vector<RunSpec> build_scaling_runs(const Args& args)
     }
 
     const std::vector<std::tuple<std::string, std::string, std::string, std::vector<int>>> targets = {
-        {"fedkiw_1d", "test5", "DIM", {400}},
-        {"fedkiw_1d", "test5", "SIM", {400}},
-        {"fedkiw_2d_planar", "test5", "DIM", {200, 200}},
-        {"fedkiw_2d_planar", "test5", "SIM", {200, 200}},
+        {"shock_bubble_2d", "test6", "DIM", {1300, 178}},
+        {"shock_bubble_2d", "test6", "SIM", {1300, 178}},
     };
     for (const auto& target : targets) {
         const auto def = find_case(std::get<0>(target), std::get<1>(target), std::get<2>(target)).value();
-        for (int threads : {1, 2, 4, 6}) {
+        for (int threads : {1, 2, 4, 8, 16}) {
             RunSpec run;
             run.case_def = def;
             run.resolution = std::get<3>(target);
@@ -398,6 +517,9 @@ std::vector<RunSpec> build_runs(const Args& args)
     }
     else if (!args.scaling.empty()) {
         runs = build_scaling_runs(args);
+    }
+    else if (args.all_core) {
+        runs = build_core_runs(args);
     }
     else {
         runs = build_normal_runs(args);

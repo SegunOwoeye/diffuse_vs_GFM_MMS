@@ -12,24 +12,14 @@ from plot_style import (
     save_figure,
 )
 from exact_reference import load_optional_exact_reference
-
-
-# [1] Test / Folder Settings
-TEST_FOLDERS = {
-    "test1": "FedkiwA",
-    "test2": "FedkiwB",
-    "test3": "FedkiwC",
-    "test4": "FedkiwD1",
-    "test5": "FedkiwD2",
-}
-
-TEST_GAMMAS = {
-    "test1": (1.4, 1.2),
-    "test2": (1.4, 1.67),
-    "test3": (1.4, 1.249),
-    "test4": (1.4, 1.67),
-    "test5": (1.4, 1.249),
-}
+from fedkiw_common import (
+    TEST_FOLDERS,
+    available_resolutions as common_available_resolutions,
+    compute_entropy,
+    extract_resolution,
+    solution_folder as common_solution_folder,
+    solution_path as common_solution_path,
+)
 
 METHOD_STYLES = {
     "gfm": {
@@ -69,30 +59,8 @@ def choose_energy_column(df, energy_column):
 
 
 def infer_material_ids(df):
-    if "mat" in df.columns:
-        return df["mat"].round().astype(int)
-
-    alpha_columns = sorted([
-        column for column in df.columns
-        if column.startswith("alpha")
-    ])
-
-    if alpha_columns:
-        return df[alpha_columns].to_numpy().argmax(axis=1)
-
-    return None
-
-
-def compute_entropy(df, test_name):
-    material_ids = infer_material_ids(df)
-    gammas = TEST_GAMMAS[test_name]
-
-    if material_ids is None:
-        gamma = gammas[0]
-    else:
-        gamma = pd.Series(material_ids).map(lambda mat: gammas[int(mat)]).to_numpy()
-
-    return df["p"].to_numpy() / (df["rho"].to_numpy() ** gamma)
+    from fedkiw_common import infer_material_ids as common_infer_material_ids
+    return common_infer_material_ids(df)
 
 
 def fourth_panel_label(panel):
@@ -143,44 +111,16 @@ def remove_legacy_plot_outputs(output_dir):
 
 # [3] Build Paths For Each Method
 def method_folder(data_root, method, test_name):
-    fedkiw_name = TEST_FOLDERS[test_name]
-    folder_name = f"{method}_{fedkiw_name}"
-
-    return data_root / method / "MM_1D_validation" / folder_name
+    return common_solution_folder(data_root, method, 1, test_name)
 
 
 def solution_path(data_root, method, test_name, resolution):
-    fedkiw_name = TEST_FOLDERS[test_name]
-    folder = method_folder(data_root, method, test_name)
-
-    return folder / f"{method}_{fedkiw_name}_N{resolution}.csv"
+    return common_solution_path(data_root, method, 1, test_name, resolution)
 
 
 # [4] Find Available Resolutions
-def extract_resolution(csv_path):
-    match = re.search(r"_N(\d+)\.csv$", csv_path.name)
-
-    if match is None:
-        return None
-
-    return int(match.group(1))
-
-
 def available_resolutions(data_root, method, test_name):
-    folder = method_folder(data_root, method, test_name)
-
-    if not folder.exists():
-        return []
-
-    resolutions = []
-
-    for csv_path in folder.glob("*.csv"):
-        resolution = extract_resolution(csv_path)
-
-        if resolution is not None:
-            resolutions.append(resolution)
-
-    return sorted(set(resolutions))
+    return common_available_resolutions(data_root, method, 1, test_name)
 
 
 def common_resolutions(data_root, test_name):
@@ -356,8 +296,8 @@ def main():
     parser.add_argument(
         "--exact-root",
         type=Path,
-        default=Path("data/exact/fedkiw"),
-        help="Folder containing optional digitised exact CSVs named test1_exact.csv, test2_exact.csv, ...",
+        default=Path("data/exact/generated_multimaterial"),
+        help="Folder containing generated multimaterial exact CSVs named test1_exact.csv, test2_exact.csv, ...",
     )
     parser.add_argument(
         "--include-convergence-overlay",

@@ -24,21 +24,19 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from bubble_feature_tracker import (  # noqa: E402
+from bubble_feature_core import (  # noqa: E402
     extract_main_phi_contour,
     extract_transmitted_shock_candidates,
     extract_upstream_interface_candidates,
-    image_domain_bounds,
     load_grid,
     parse_time_from_name,
-    plot_diagnostic,
-    plot_overlay,
     raw_to_plot,
-    run_tracker,
     select_transmitted_shock_branch,
     select_upstream_interface_branch,
     time_token_from_name,
 )
+from bubble_feature_plotting import image_domain_bounds, plot_diagnostic, plot_overlay  # noqa: E402
+from bubble_feature_tracker import run_tracker  # noqa: E402
 
 
 def find_matching_image(csv_path: Path, image_dir: Path, image_prefix: str) -> Path | None:

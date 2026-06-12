@@ -34,3 +34,4 @@ solid_main
 tools/quant_suite
 /results
 *.Identifier
+/data/exact

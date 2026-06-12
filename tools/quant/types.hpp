@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -58,6 +59,7 @@ struct Args {
     bool dry_run = false;
     bool overwrite = false;
     bool collect_only = false;
+    bool all_core = false;
     fs::path result_root;
     std::vector<std::string> cases;
     std::vector<std::string> methods;
@@ -65,7 +67,7 @@ struct Args {
     std::string sensitivity;
     std::string scaling;
     int omp_threads = 6;
-    int timeout_seconds = 900;
+    int timeout_seconds = 0;
     int conservation_interval = 25;
     int benchmark_repeats = 1;
     int benchmark_warmups = 0;

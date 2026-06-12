@@ -7,6 +7,16 @@
 
 namespace quant {
 
+inline std::vector<std::string> split_cli_list(const std::string& value)
+{
+    std::vector<std::string> out;
+    for (const auto& part : split(value, ',')) {
+        const std::string item = trim(part);
+        if (!item.empty()) out.push_back(item);
+    }
+    return out;
+}
+
 Args parse_args(int argc, char** argv)
 {
     Args args;
@@ -20,7 +30,8 @@ Args parse_args(int argc, char** argv)
         auto collect_values = [&](std::vector<std::string>& out) {
             while (i + 1 < argc && std::string(argv[i + 1]).rfind("--", 0) != 0) {
                 ++i;
-                out.push_back(argv[i]);
+                const auto values = split_cli_list(argv[i]);
+                out.insert(out.end(), values.begin(), values.end());
             }
         };
 
@@ -28,8 +39,17 @@ Args parse_args(int argc, char** argv)
         else if (key == "--dry-run") args.dry_run = true;
         else if (key == "--overwrite") args.overwrite = true;
         else if (key == "--collect-only") args.collect_only = true;
+        else if (key == "--all-core") args.all_core = true;
         else if (key == "--result-root") args.result_root = next();
+        else if (key == "--case") {
+            const auto values = split_cli_list(next());
+            args.cases.insert(args.cases.end(), values.begin(), values.end());
+        }
         else if (key == "--cases") collect_values(args.cases);
+        else if (key == "--method") {
+            const auto values = split_cli_list(next());
+            args.methods.insert(args.methods.end(), values.begin(), values.end());
+        }
         else if (key == "--methods") collect_values(args.methods);
         else if (key == "--resolutions") {
             std::vector<std::string> values;
@@ -50,16 +70,17 @@ Args parse_args(int argc, char** argv)
                 << "  --preset quick|full\n"
                 << "  --dry-run\n"
                 << "  --collect-only (rebuild summaries from existing run output)\n"
-                << "  --cases toro|toro_1d|explosion2d|explosion3d|fedkiw|planar|shock_bubble [case]\n"
-                << "  --methods DIM SIM common\n"
-                << "  --resolutions 100 200 400 or 200x200\n"
-                << "  --sensitivity dim_epsilon|sim_reinit\n"
-                << "  --scaling openmp_threads\n"
+                << "  --all-core (Toro1, FedkiwD2 1D, oblique FedkiwD2, shock bubble)\n"
+                << "  --case/--cases toro|toro_1d|explosion2d|explosion3d|fedkiw|planar|oblique|shock_bubble|bubble3d [case]\n"
+                << "  --method/--methods DIM SIM common (comma lists accepted)\n"
+                << "  --resolutions 100 200 400, or 100,200,400, or 325x45,650x89\n"
+                << "  --sensitivity dim_epsilon|sim_reinit (DIM: 1D D2 + bubble; SIM: oblique + bubble)\n"
+                << "  --scaling openmp_threads (bubble DIM/SIM at 1,2,4,8,16 threads)\n"
                 << "  --omp-threads N\n"
                 << "  --benchmark-mode NAME (default standard; use clean for controlled timing)\n"
                 << "  --benchmark-warmups N (default 0)\n"
                 << "  --benchmark-repeats N measured repeats (default 1)\n"
-                << "  --timeout-seconds N (0 disables timeout; default 900)\n"
+                << "  --timeout-seconds N (0 disables timeout; default disabled)\n"
                 << "  --conservation-interval N (default 25)\n"
                 << "  --result-root results/quantitative/name\n";
             std::exit(0);
