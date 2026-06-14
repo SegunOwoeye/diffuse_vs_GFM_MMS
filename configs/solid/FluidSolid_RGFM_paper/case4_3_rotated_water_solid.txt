@@ -1,0 +1,33 @@
+# Liu, Chowdhury & Khoo (2011), Case 4.3.
+# This is Case 4.2 rotated anticlockwise by 60 degrees on a 251x251 grid.
+# The interface is the oblique line n.x = 5 with n=(cos60,sin60), so it never
+# coincides with Cartesian mesh lines.
+model_type = fluid_solid
+model = fluid_solid_rgfm
+dimension = 2
+domain_min = [0.0], [0.0]
+domain_max = [10.0], [10.0]
+N = [251], [251]
+tfinal = 4.45e-3
+cfl = 0.40
+output_times = [4.45e-3]
+normal_tangent_update = true
+normal_tangent_cells = [2200]
+
+rotation_degrees = 60.0
+interface_offset = 5.0
+
+# Paper water EOS: rho e = (p + gamma B)/(gamma - 1), gamma=7.15, B=3300 nondim.
+fluid = eos=stiffened_gas, gamma=7.15, p_inf=3300.0
+fluid_state = rho=1.0, un=30.0, us=0.0, p=25000.0
+
+# AISI 431 stainless steel scaled by p_ref=1e5 Pa from the paper.
+# For the tensor solid, b0=sqrt(G/rho0) and c0=sqrt((K + 4G/3)/rho0).
+# Plastic flow is disabled for this elastic paper case by using a very high yield.
+solid = eos=eq51_aisi431, rho0=7.7, c0=599.2502739, b0=330.0188162, cv=1.0, T0=300.0, alpha=1.0, beta=3.0, gamma=2.0, sigma0=1.0e30, tau0=1.0e30, n=100.0
+solid_state = rho=7.7, un=-30.0, us=0.0, p=1.0, sigma_nn=-1.0
+
+bc_lo = transmissive, transmissive
+bc_hi = transmissive, transmissive
+output_prefix = case4_3_rotated_water_solid_rgfm
+output_dir = data/csv/fluid_solid

@@ -135,6 +135,7 @@ def plot_profile(ax, x, y, label, index=0):
         linestyle="None",
         linewidth=0.0,
         marker=style["marker"],
+        markevery=marker_step(x),
         markersize=2.8,
         markerfacecolor="none",
         markeredgewidth=0.8,
