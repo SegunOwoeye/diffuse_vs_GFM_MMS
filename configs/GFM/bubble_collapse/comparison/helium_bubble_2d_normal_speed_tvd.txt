@@ -11,7 +11,6 @@ dimension = 2
 domain_min = [0.0, 0.0]
 domain_max = [325, 44.5]
 
-
 N = [1300, 178]
 
 # ========================
@@ -76,5 +75,5 @@ material_bubble = 1
 # ========================
 # Output
 # ========================
-output_prefix = gfm_helium_bubble_2d
-output_dir = data/csv/gfm/MM_2D_validation
+output_prefix = gfm_helium_bubble_2d_normal_speed_tvd
+output_dir = data/csv/gfm/bubble_levelset_advection_comparison

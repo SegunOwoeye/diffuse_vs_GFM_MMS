@@ -1,0 +1,26 @@
+# Favrie-Gavrilyuk Wilkins setup in the Barton-DIM rGFM workflow contract.
+# Air, flyer and target are all represented on the diffuse-interface mesh.
+model = barton_dim
+dimension = 1
+domain_min = [-0.005]
+domain_max = [0.05]
+N = [2000]
+tfinal = 5.0e-6
+cfl = 0.35
+output_times = [0.5e-6,1.0e-6,3.0e-6,5.0e-6]
+output_format = rgfm_compatible
+output_layout = rgfm
+progress_interval = 1000
+
+fluid = eos=ideal_gas,gamma=1.4,p_inf=0.0
+solid = rho0=2700.0,c0=6238.0,b0=3030.6,cv=900.0,T0=300.0,alpha=1.0,beta=3.0,gamma=2.0,sigma0=0.2976e9,tau0=1.0e-5,n=100.0
+
+# Air behind the flyer, a 5 mm aluminium flyer, then stationary target.
+region = lower=[-0.005],upper=[0.0],alpha_solid=0.0,rho_fluid=1.0,p_fluid=1.0e5,vel=[0.0]
+region = lower=[0.0],upper=[0.005],alpha_solid=1.0,rho_solid=2700.0,p_solid=1.0e5,vel=[800.0]
+region = lower=[0.005],upper=[0.05],alpha_solid=1.0,rho_solid=2700.0,p_solid=1.0e5,vel=[0.0]
+
+bc_lo = transmissive
+bc_hi = transmissive
+output_prefix = favrie_gavrilyuk_2012_wilkins_air_flyer_target_barton_dim_1d
+output_dir = data/csv/solid/MM/DIM/1D_validation/Favrie_Gavrilyuk_2012

@@ -1,0 +1,16 @@
+model = barton_dim
+dimension = 1
+domain_min = [0.0]
+domain_max = [0.02]
+N = [160]
+tfinal = 1.0e-6
+cfl = 0.25
+output_times = [5.0e-7,1.0e-6]
+fluid = eos=ideal_gas,gamma=1.4,p_inf=0.0
+solid = rho0=2700.0,c0=5200.0,b0=3000.0,cv=900.0,T0=300.0,gamma=2.0,sigma0=2.976e8,tau0=1.0e-5,n=20.0
+region = lower=[0.0],upper=[0.008],alpha_solid=1.0,rho_solid=2700.0,temperature=300.0,vel=[600.0]
+region = lower=[0.008],upper=[0.02],alpha_solid=1.0,rho_solid=2700.0,temperature=300.0,vel=[0.0]
+bc_lo = transmissive
+bc_hi = transmissive
+output_prefix = flying_plate_1d
+output_dir = results/barton_dim

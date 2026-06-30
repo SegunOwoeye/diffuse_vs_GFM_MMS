@@ -1,0 +1,19 @@
+# Barton-DIM counterpart to the rGFM Case 4.1 gas-solid interface setup.
+# The tensor material matches rho0, shear and bulk scales of the Eq. 49 solid;
+# it is an approximate constitutive translation, not an identical EOS.
+model = barton_dim
+dimension = 1
+domain_min = [0.0]
+domain_max = [10.0]
+N = [2200]
+tfinal = 4.45e-3
+cfl = 0.45
+output_times = [4.45e-3]
+fluid = eos=ideal_gas,gamma=1.4,p_inf=0.0
+solid = rho0=7.7,c0=601.4,b0=329.9,cv=1.0,T0=1.0,alpha=1.0,beta=3.0,gamma=2.0,sigma0=1.0e30,tau0=1.0e30,n=100.0
+region = lower=[0.0],upper=[5.0],alpha_solid=0.0,rho_fluid=0.05,p_fluid=10000.0,vel=[50.0]
+region = lower=[5.0],upper=[10.0],alpha_solid=1.0,rho_solid=7.7,p_solid=1.0,vel=[0.0]
+bc_lo = transmissive
+bc_hi = transmissive
+output_prefix = case4_1_gas_solid_barton_dim
+output_dir = data/csv/solid/MM/DIM/1D_validation/Liu_Chowdhury_Khoo_2011

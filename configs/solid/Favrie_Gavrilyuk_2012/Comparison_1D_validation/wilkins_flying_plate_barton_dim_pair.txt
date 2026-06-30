@@ -1,0 +1,19 @@
+# Fast Barton-DIM counterpart of the Favrie-Gavrilyuk Wilkins comparison pair.
+# The tensor material matches rho0, G and the small-strain bulk modulus of the
+# Eq. 49 aluminium model. It is not an identical EOS replacement.
+model = barton_dim
+dimension = 1
+domain_min = [0.0]
+domain_max = [0.05]
+N = [200]
+tfinal = 5.0e-7
+cfl = 0.35
+output_times = [5.0e-7]
+fluid = eos=ideal_gas,gamma=1.4,p_inf=0.0
+solid = rho0=2700.0,c0=6238.0,b0=3030.6,cv=900.0,T0=300.0,alpha=1.0,beta=3.0,gamma=2.0,sigma0=0.2976e9,tau0=1.0e-5,n=100.0
+region = lower=[0.0],upper=[0.005],alpha_solid=1.0,rho_solid=2700.0,temperature=300.0,vel=[800.0]
+region = lower=[0.005],upper=[0.05],alpha_solid=1.0,rho_solid=2700.0,temperature=300.0,vel=[0.0]
+bc_lo = transmissive
+bc_hi = transmissive
+output_prefix = favrie_gavrilyuk_2012_wilkins_barton_dim_pair
+output_dir = data/csv/solid/Favrie_Gavrilyuk_2012/Comparison_1D_validation

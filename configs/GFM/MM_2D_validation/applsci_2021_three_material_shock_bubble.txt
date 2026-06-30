@@ -1,0 +1,82 @@
+# ========================
+# Problem
+# ========================
+dimension = 2
+
+# ========================
+# Domain
+# ========================
+domain_min = [0.0, 0.0]
+domain_max = [1.0, 0.5]
+
+N = [800, 400]
+
+# ========================
+# Time
+# ========================
+tfinal = 0.0006
+output_times = [0.0001, 0.00015, 0.0002, 0.00025, 0.0003, 0.00035, 0.0004, 0.0005, 0.0006]
+cfl = 0.3
+
+# ========================
+# Interface method
+# ========================
+interface_method = GFM
+time_update = split
+use_level_set = true
+reinit_interval = 10
+reinit_iterations = 2
+level_set_reinit_method = redistance
+level_set_advection = normal_speed
+level_set_spatial_derivative = tvd
+rgfm_star_velocity_mode = input_mean
+
+# ========================
+# Boundary conditions
+# ========================
+bc_lo = [reflective, reflective]
+bc_hi = [reflective, reflective]
+
+# ========================
+# Materials
+# ========================
+material = 0, ideal_gas, gamma=1.4
+material = 1, ideal_gas, gamma=1.648
+material = 2, stiffened_gas, gamma=2.0, p_inf=100.0
+
+# ========================
+# Initial condition
+# Appl. Sci. 2021, 11, 12107, Section 7
+# ========================
+initial_condition = coated_shock_bubble
+shock_axis = 0
+shock_position = 0.3
+
+rho_left = 1.0
+vel_left = [0.0, 0.0]
+p_left = 1.0
+material_left = 0
+
+rho_right = 0.125
+vel_right = [0.0, 0.0]
+p_right = 0.1
+material_right = 0
+
+bubble_center = [0.45, 0.25]
+bubble_radius = 0.08
+rho_bubble = 2.0
+vel_bubble = [0.0, 0.0]
+p_bubble = 0.1
+material_bubble = 2
+
+film_radius = 0.1
+rho_film = 0.0125
+vel_film = [0.0, 0.0]
+p_film = 0.1
+material_film = 1
+
+# ========================
+# Output
+# ========================
+output_prefix = gfm_applsci_2021_three_material_shock_bubble
+output_dir = data/csv/gfm/MM_2D_validation

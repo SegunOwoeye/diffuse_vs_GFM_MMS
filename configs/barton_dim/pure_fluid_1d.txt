@@ -1,0 +1,15 @@
+model = barton_dim
+dimension = 1
+domain_min = [0.0]
+domain_max = [1.0]
+N = [80]
+tfinal = 1.0e-4
+cfl = 0.45
+output_times = [1.0e-4]
+fluid = eos=ideal_gas,gamma=1.4,p_inf=0.0
+solid = rho0=2700.0,c0=5200.0,b0=3000.0,cv=900.0,T0=300.0,gamma=2.0,sigma0=1.0e30
+region = lower=[0.0],upper=[1.0],alpha_solid=0.0,rho_fluid=1.0,p_fluid=100000.0,vel=[25.0]
+bc_lo = transmissive
+bc_hi = transmissive
+output_prefix = pure_fluid_1d
+output_dir = results/barton_dim

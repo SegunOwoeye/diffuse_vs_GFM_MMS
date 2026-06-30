@@ -1,0 +1,29 @@
+# Gorsse et al. (2014) inspired TC4 with Barton/GPR plastic relaxation enabled.
+#
+# This uses the same copper-copper shear Riemann initial data as the elastic
+# TC4-inspired config, but lowers the yield stress to exercise the repository's
+# Barton/GPR tensor plastic relaxation in the rGFM solid-solid interface setting.
+model_type = elastoplastic_solid
+model = barton
+formulation = tensor
+dimension = 1
+test_case = solid_solid_shear_1d
+
+domain_min = [0.0]
+domain_max = [1.0]
+interface = [0.5]
+N = [1000]
+tfinal = 5.0e-5
+cfl = 0.60
+output_times = [5.0e-5]
+
+left_material = eos=eq51_copper, rho0=8900.0, c0=5467.862048759978, b0=3352.0076157699546, cv=390.0, T0=300.0, alpha=1.0, beta=3.0, gamma=4.22, tau0=0.92, sigma0=0.045e9, n=10.1
+right_material = eos=eq51_copper, rho0=8900.0, c0=5434.680654025216, b0=3352.0076157699546, cv=390.0, T0=300.0, alpha=1.0, beta=3.0, gamma=4.22, tau0=0.92, sigma0=0.045e9, n=10.1
+
+left_state = rho=8900.0, u=0.0, v=0.0, w=0.0, p=1.0e9
+right_state = rho=8900.0, u=0.0, v=100.0, w=0.0, p=1.0e5
+
+bc_lo = transmissive
+bc_hi = transmissive
+output_prefix = gorsse_2014_tc4_solid_solid_shear_1d_plastic
+output_dir = data/csv/solid
