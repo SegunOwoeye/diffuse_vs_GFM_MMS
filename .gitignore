@@ -35,3 +35,4 @@ tools/quant_suite
 /results
 *.Identifier
 /data/exact
+mm_main_3d
