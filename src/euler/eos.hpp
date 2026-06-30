@@ -72,6 +72,56 @@ inline double tait_internal_energy_from_density(
     return std::max(compression + reference_shift, 1e-12);
 }
 
+inline double mie_gruneisen_power_term(
+    double r,
+    double exponent,
+    double coefficient,
+    double rho_ref
+)
+{
+    const double denom = rho_ref * safe_denom(exponent - 1.0, 1e-14);
+    return coefficient / denom * (std::pow(clamp_min(r), exponent - 1.0) - 1.0);
+}
+
+
+inline double mie_gruneisen_cold_energy(
+    double rho,
+    const EOSParams& params
+)
+{
+    rho = clamp_min(rho);
+    const double rho_ref = clamp_min(params.rho_ref);
+    const double r = rho / rho_ref;
+    return mie_gruneisen_power_term(r, params.mie_E1, params.mie_A1, rho_ref)
+        - mie_gruneisen_power_term(r, params.mie_E2, params.mie_A2, rho_ref);
+}
+
+
+inline double mie_gruneisen_cold_pressure(
+    double rho,
+    const EOSParams& params
+)
+{
+    rho = clamp_min(rho);
+    const double rho_ref = clamp_min(params.rho_ref);
+    const double r = rho / rho_ref;
+    return params.mie_A1 * std::pow(r, params.mie_E1)
+        - params.mie_A2 * std::pow(r, params.mie_E2);
+}
+
+
+inline double mie_gruneisen_pressure_from_rho_e(
+    double rho,
+    double e,
+    const EOSParams& params
+)
+{
+    rho = clamp_min(rho);
+    const double thermal_e = e - mie_gruneisen_cold_energy(rho, params);
+    return (params.gamma - 1.0) * rho * thermal_e +
+        mie_gruneisen_cold_pressure(rho, params);
+}
+
 
 inline double peng_robinson_kappa(const EOSParams& params)
 {
@@ -823,7 +873,113 @@ struct TaitEOS {
 };
 
 
-// [6] Runtime-dispatched EOS used when different materials have different EOS kinds
+// [6] Mie-Gruneisen fluid EOS
+struct MieGruneisenEOS {
+    template<int DIM>
+    static double pressure(
+        const Conserved<DIM>& U,
+        const EOSParams& params
+    )
+    {
+        const double rho = clamp_min(U.rho);
+        const double e = raw_internal_energy_from_conserved<DIM>(U, rho);
+        return clamp_min(mie_gruneisen_pressure_from_rho_e(rho, e, params));
+    }
+
+    template<int DIM>
+    static double sound_speed(
+        const Conserved<DIM>& U,
+        const EOSParams& params
+    )
+    {
+        const double rho = clamp_min(U.rho);
+        const double e = raw_internal_energy_from_conserved<DIM>(U, rho);
+        return numerical_sound_speed_from_rho_e(
+            rho,
+            e,
+            params,
+            mie_gruneisen_pressure_from_rho_e
+        );
+    }
+
+    static double internal_energy(
+        double rho,
+        double p,
+        const EOSParams& params
+    )
+    {
+        rho = clamp_min(rho);
+        p = clamp_min(p);
+        const double thermal_pressure = p - mie_gruneisen_cold_pressure(rho, params);
+        return safe_div(thermal_pressure, (params.gamma - 1.0) * rho) +
+            mie_gruneisen_cold_energy(rho, params);
+    }
+
+    template<int DIM>
+    static inline void compute_p_c(
+        const Conserved<DIM>& U,
+        const EOSParams& params,
+        double& p,
+        double& c
+    )
+    {
+        p = pressure<DIM>(U, params);
+        c = sound_speed<DIM>(U, params);
+    }
+
+    static double entropy_invariant(
+        double rho,
+        double p,
+        const EOSParams& params
+    )
+    {
+        rho = clamp_min(rho);
+        p = clamp_min(p);
+        const double thermal_pressure =
+            clamp_min(p - mie_gruneisen_cold_pressure(rho, params));
+        return safe_div(thermal_pressure, std::pow(rho, params.gamma));
+    }
+
+    static double density_from_p_invariant(
+        double p,
+        double K,
+        const EOSParams& params
+    )
+    {
+        p = clamp_min(p);
+        K = clamp_min(K);
+        double lo = 1.0e-6 * clamp_min(params.rho_ref);
+        double hi = 100.0 * clamp_min(params.rho_ref);
+
+        auto residual = [&](double rho) {
+            return K * std::pow(clamp_min(rho), params.gamma) +
+                mie_gruneisen_cold_pressure(rho, params) - p;
+        };
+
+        while (residual(lo) > 0.0 && lo > 1.0e-12 * clamp_min(params.rho_ref)) {
+            lo *= 0.5;
+        }
+
+        while (residual(hi) < 0.0 && hi < 1.0e6 * clamp_min(params.rho_ref)) {
+            hi *= 2.0;
+        }
+
+        for (int iter = 0; iter < 100; ++iter) {
+            const double mid = 0.5 * (lo + hi);
+            if (residual(mid) < 0.0) {
+                lo = mid;
+            }
+            else {
+                hi = mid;
+            }
+        }
+
+        return clamp_min(0.5 * (lo + hi));
+    }
+};
+
+
+// [7] Runtime-dispatched EOS used when different materials have different EOS kinds
 struct MaterialEOS {
     template<int DIM>
     static double pressure(
@@ -842,6 +998,8 @@ struct MaterialEOS {
                 return PengRobinsonEOS::pressure<DIM>(U, params);
             case EOSKind::tait:
                 return TaitEOS::pressure<DIM>(U, params);
+            case EOSKind::mie_gruneisen:
+                return MieGruneisenEOS::pressure<DIM>(U, params);
         }
 
         throw std::runtime_error("MaterialEOS::pressure: unsupported EOS kind");
@@ -864,6 +1022,8 @@ struct MaterialEOS {
                 return PengRobinsonEOS::sound_speed<DIM>(U, params);
             case EOSKind::tait:
                 return TaitEOS::sound_speed<DIM>(U, params);
+            case EOSKind::mie_gruneisen:
+                return MieGruneisenEOS::sound_speed<DIM>(U, params);
         }
 
         throw std::runtime_error("MaterialEOS::sound_speed: unsupported EOS kind");
@@ -886,6 +1046,8 @@ struct MaterialEOS {
                 return PengRobinsonEOS::internal_energy(rho, p, params);
             case EOSKind::tait:
                 return TaitEOS::internal_energy(rho, p, params);
+            case EOSKind::mie_gruneisen:
+                return MieGruneisenEOS::internal_energy(rho, p, params);
         }
 
         throw std::runtime_error("MaterialEOS::internal_energy: unsupported EOS kind");
@@ -920,6 +1082,8 @@ struct MaterialEOS {
                 return PengRobinsonEOS::entropy_invariant(rho, p, params);
             case EOSKind::tait:
                 return TaitEOS::entropy_invariant(rho, p, params);
+            case EOSKind::mie_gruneisen:
+                return MieGruneisenEOS::entropy_invariant(rho, p, params);
         }
 
         throw std::runtime_error("MaterialEOS::entropy_invariant: unsupported EOS kind");
@@ -942,6 +1106,8 @@ struct MaterialEOS {
                 return PengRobinsonEOS::density_from_p_invariant(p, K, params);
             case EOSKind::tait:
                 return TaitEOS::density_from_p_invariant(p, K, params);
+            case EOSKind::mie_gruneisen:
+                return MieGruneisenEOS::density_from_p_invariant(p, K, params);
         }
 
         throw std::runtime_error("MaterialEOS::density_from_p_invariant: unsupported EOS kind");

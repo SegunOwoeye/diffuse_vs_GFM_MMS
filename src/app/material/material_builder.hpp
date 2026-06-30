@@ -7,6 +7,7 @@
 #include "src/dim/eos_params.hpp"
 #include "src/euler/eos_params.hpp"
 #include "src/io/config.hpp"
+#include "src/solid/elastoplastic/barton/state.hpp"
 
 inline EOSParams build_one_material_params(
     const MaterialConfig& m
@@ -109,6 +110,22 @@ inline EOSParams build_one_material_params(
         }
     }
 
+    if (params.kind == EOSKind::mie_gruneisen) {
+        if (!m.params.count("rho_ref")) {
+            throw std::runtime_error("build_material_params: missing rho_ref in Mie-Gruneisen material");
+        }
+        if (!m.params.count("A1") || !m.params.count("A2") ||
+            !m.params.count("E1") || !m.params.count("E2")) {
+            throw std::runtime_error("build_material_params: missing A1/A2/E1/E2 in Mie-Gruneisen material");
+        }
+
+        params.rho_ref = m.params.at("rho_ref");
+        params.mie_A1 = m.params.at("A1");
+        params.mie_A2 = m.params.at("A2");
+        params.mie_E1 = m.params.at("E1");
+        params.mie_E2 = m.params.at("E2");
+    }
+
     return params;
 }
 
@@ -148,4 +165,26 @@ inline dim::EOSParams build_dim_material_params(
 
     params.validate();
     return params;
+}
+
+inline solid::barton::TensorMaterial build_barton_tensor_material(
+    const MaterialConfig& material
+)
+{
+    solid::barton::TensorMaterial result{};
+    const auto assign = [&](const char* key, double& target) {
+        if (material.params.count(key)) target = material.params.at(key);
+    };
+    assign("rho0", result.rho0);
+    assign("c0", result.c0);
+    assign("b0", result.b0);
+    assign("cv", result.cv);
+    assign("T0", result.T0);
+    assign("alpha", result.alpha);
+    assign("beta", result.beta);
+    assign("gamma", result.gamma);
+    assign("sigma0", result.sigma0);
+    assign("tau0", result.tau0);
+    if (material.params.count("n")) result.relaxation_n = material.params.at("n");
+    return result;
 }

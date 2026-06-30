@@ -94,6 +94,9 @@ inline bool model_type_matches_interface_method(ModelType type, const std::strin
     if (type == ModelType::Auto) {
         return true;
     }
+    if (type == ModelType::ElastoplasticSolid && normalise_model_type(method) == "dim") {
+        return true;
+    }
     return type == model_type_from_interface_method(method);
 }
 

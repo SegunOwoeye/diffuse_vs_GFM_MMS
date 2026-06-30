@@ -544,6 +544,182 @@ inline double advance_tensor_3d(std::vector<TensorState3D>& U, const TensorMater
     return dt;
 }
 
+inline TensorState3D tensor_rusanov_bimaterial(
+    const TensorState3D& L,
+    const TensorState3D& R,
+    const TensorMaterial& matL,
+    const TensorMaterial& matR,
+    int dir)
+{
+    const TensorPrim3D PL = tensor_prim(L, matL);
+    const TensorPrim3D PR = tensor_prim(R, matR);
+    const TensorState3D FL = tensor_flux_from_prim_dim(L, PL, dir);
+    const TensorState3D FR = tensor_flux_from_prim_dim(R, PR, dir);
+    const double a = std::max(
+        std::abs(PL.vel[dir]) + PL.wave_speed,
+        std::abs(PR.vel[dir]) + PR.wave_speed);
+    return 0.5 * (FL + FR) - 0.5 * a * (R - L);
+}
+
+inline void tensor_solid_interface_star(
+    TensorPrim3D& PL,
+    TensorPrim3D& PR,
+    const TensorMaterial& matL,
+    const TensorMaterial& matR)
+{
+    auto acoustic_star = [](double velL, double velR, double tractionL, double tractionR,
+                            double zL, double zR) {
+        const double qL = -tractionL;
+        const double qR = -tractionR;
+        const double denom = std::max(zL + zR, 1.0e-30);
+        const double q_star = (zR * qL + zL * qR + zL * zR * (velL - velR)) / denom;
+        const double vel_star = (zL * velL + zR * velR + qL - qR) / denom;
+        return std::pair<double, double>{vel_star, -q_star};
+    };
+
+    const double zLn = std::max(PL.rho * PL.wave_speed, 1.0e-30);
+    const double zRn = std::max(PR.rho * PR.wave_speed, 1.0e-30);
+    const auto [u_star, sxx_star] =
+        acoustic_star(PL.vel[0], PR.vel[0], PL.sigma[0], PR.sigma[0], zLn, zRn);
+
+    double v_star_l = PL.vel[1];
+    double v_star_r = PR.vel[1];
+    double w_star_l = PL.vel[2];
+    double w_star_r = PR.vel[2];
+    double sxy_star = 0.0;
+    double sxz_star = 0.0;
+    if (matL.b0 > 1.0e-12 && matR.b0 > 1.0e-12) {
+        const double cLs = matL.b0;
+        const double cRs = matR.b0;
+        const double zLs = std::max(PL.rho * cLs, 1.0e-30);
+        const double zRs = std::max(PR.rho * cRs, 1.0e-30);
+        const auto [v_star, sxy] =
+            acoustic_star(PL.vel[1], PR.vel[1], PL.sigma[1], PR.sigma[1], zLs, zRs);
+        const auto [w_star, sxz] =
+            acoustic_star(PL.vel[2], PR.vel[2], PL.sigma[2], PR.sigma[2], zLs, zRs);
+        v_star_l = v_star;
+        v_star_r = v_star;
+        w_star_l = w_star;
+        w_star_r = w_star;
+        sxy_star = sxy;
+        sxz_star = sxz;
+    }
+
+    PL.vel[0] = u_star;
+    PL.vel[1] = v_star_l;
+    PL.vel[2] = w_star_l;
+    PL.sigma[0] = sxx_star;
+    PL.sigma[1] = sxy_star;
+    PL.sigma[3] = sxy_star;
+    PL.sigma[2] = sxz_star;
+    PL.sigma[6] = sxz_star;
+
+    PR.vel[0] = u_star;
+    PR.vel[1] = v_star_r;
+    PR.vel[2] = w_star_r;
+    PR.sigma[0] = sxx_star;
+    PR.sigma[1] = sxy_star;
+    PR.sigma[3] = sxy_star;
+    PR.sigma[2] = sxz_star;
+    PR.sigma[6] = sxz_star;
+}
+
+inline double tensor_plate_impact_dt(
+    const std::vector<TensorState3D>& U,
+    const std::vector<int>& material_id,
+    const std::array<TensorMaterial, 2>& materials,
+    double dx,
+    double cfl,
+    double max_dt)
+{
+    double speed = 1.0;
+    const int count = static_cast<int>(U.size());
+#pragma omp parallel for reduction(max:speed) schedule(static) if(count > 1024)
+    for (int i = 0; i < count; ++i) {
+        const TensorPrim3D P = tensor_prim(U[i], materials[material_id[i]]);
+        speed = std::max(speed, std::abs(P.vel[0]) + P.wave_speed);
+    }
+    return std::min(max_dt, cfl * dx / std::max(speed, 1.0e-30));
+}
+
+inline double advance_tensor_plate_impact_1d(
+    std::vector<TensorState3D>& U,
+    const std::vector<int>& material_id,
+    const std::array<TensorMaterial, 2>& materials,
+    const BoundaryConditions& bc,
+    double dx,
+    double cfl,
+    double max_dt)
+{
+    const int n = static_cast<int>(U.size());
+    const double dt = tensor_plate_impact_dt(U, material_id, materials, dx, cfl, max_dt);
+
+    std::vector<TensorState3D> ext(n + 2);
+    std::vector<int> ext_material(n + 2);
+    for (int i = 0; i < n; ++i) {
+        ext[i + 1] = U[i];
+        ext_material[i + 1] = material_id[i];
+    }
+    ext[0] = (bc.left == "reflective" || bc.left == "wall")
+        ? tensor_reflect_x(U.front())
+        : U.front();
+    ext_material[0] = material_id.front();
+    ext[n + 1] = (bc.right == "reflective" || bc.right == "wall")
+        ? tensor_reflect_x(U.back())
+        : U.back();
+    ext_material[n + 1] = material_id.back();
+
+    std::vector<TensorState3D> flux_left(n + 1);
+    std::vector<TensorState3D> flux_right(n + 1);
+    std::vector<std::array<double, 3>> faceF_left(n + 1);
+    std::vector<std::array<double, 3>> faceF_right(n + 1);
+    for (int f = 0; f <= n; ++f) {
+        const TensorMaterial& matL = materials[ext_material[f]];
+        const TensorMaterial& matR = materials[ext_material[f + 1]];
+        if (ext_material[f] != ext_material[f + 1]) {
+            TensorPrim3D PL = tensor_prim(ext[f], matL);
+            TensorPrim3D PR = tensor_prim(ext[f + 1], matR);
+            tensor_solid_interface_star(PL, PR, matL, matR);
+            flux_left[f] = tensor_flux_from_prim_dim(ext[f], PL, 0);
+            flux_right[f] = tensor_flux_from_prim_dim(ext[f + 1], PR, 0);
+            for (int col = 0; col < 3; ++col) {
+                faceF_left[f][col] = ext[f].rhoF[col];
+                faceF_right[f][col] = ext[f + 1].rhoF[col];
+            }
+        }
+        else {
+            const TensorState3D flux = tensor_rusanov_bimaterial(ext[f], ext[f + 1], matL, matR, 0);
+            flux_left[f] = flux;
+            flux_right[f] = flux;
+            for (int col = 0; col < 3; ++col) {
+                const double value = 0.5 * (ext[f].rhoF[col] + ext[f + 1].rhoF[col]);
+                faceF_left[f][col] = value;
+                faceF_right[f][col] = value;
+            }
+        }
+    }
+
+    std::vector<TensorState3D> next = U;
+#pragma omp parallel for schedule(static) if(n > 4096)
+    for (int i = 0; i < n; ++i) {
+        const TensorMaterial& mat = materials[material_id[i]];
+        next[i] = U[i] - (dt / dx) * (flux_left[i + 1] - flux_right[i]);
+        const TensorPrim3D Pold = tensor_prim(U[i], mat);
+        const std::array<double, 3> vel{Pold.vel[0], Pold.vel[1], Pold.vel[2]};
+        for (int col = 0; col < 3; ++col) {
+            const double beta = (faceF_left[i + 1][col] - faceF_right[i][col]) / dx;
+            for (int row = 0; row < 3; ++row) {
+                next[i].rhoF[3 * row + col] -= dt * vel[row] * beta;
+            }
+        }
+        enforce_tensor(next[i], mat);
+        apply_tensor_plastic_relaxation(next[i], mat, dt);
+    }
+
+    U.swap(next);
+    return dt;
+}
+
 } // namespace solid::barton
 
 // Cylindrical tensor reference update.

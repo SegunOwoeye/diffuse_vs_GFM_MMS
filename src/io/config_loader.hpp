@@ -297,8 +297,15 @@ inline void validate_config(const Config<DIM>& cfg)
     }
 
     if (cfg.level_set_advection != "normal_speed" &&
-        cfg.level_set_advection != "flow") {
-        throw std::runtime_error("level_set_advection must be normal_speed or flow");
+        cfg.level_set_advection != "flow" &&
+        cfg.level_set_advection != "physical_flow") {
+        throw std::runtime_error("level_set_advection must be normal_speed, flow, or physical_flow");
+    }
+
+    if (cfg.level_set_spatial_derivative != "tvd" &&
+        cfg.level_set_spatial_derivative != "second_order" &&
+        cfg.level_set_spatial_derivative != "first_order") {
+        throw std::runtime_error("level_set_spatial_derivative must be tvd, second_order, or first_order");
     }
 
     if (cfg.reinit_interval < 0) {
@@ -309,6 +316,21 @@ inline void validate_config(const Config<DIM>& cfg)
         throw std::runtime_error("reinit_iterations must be non-negative");
     }
 
+    if (cfg.level_set_reinit_method != "sussman" &&
+        cfg.level_set_reinit_method != "redistance") {
+        throw std::runtime_error("level_set_reinit_method must be sussman or redistance");
+    }
+
+    if (cfg.rgfm_diagnostics_interval <= 0) {
+        throw std::runtime_error("rgfm_diagnostics_interval must be positive");
+    }
+
+    if (cfg.rgfm_star_velocity_mode != "mcrs" &&
+        cfg.rgfm_star_velocity_mode != "input_mean" &&
+        cfg.rgfm_star_velocity_mode != "zero") {
+        throw std::runtime_error("rgfm_star_velocity_mode must be mcrs, input_mean, or zero");
+    }
+
     if (cfg.interface_method == "DIM" && cfg.use_level_set) {
         throw std::runtime_error("DIM should not use level set");
     }
@@ -317,6 +339,8 @@ inline void validate_config(const Config<DIM>& cfg)
         return bc == "transmissive" ||
                bc == "zero_gradient" ||
                bc == "outflow" ||
+               bc == "nonreflective" ||
+               bc == "non_reflective" ||
                bc == "reflective" ||
                bc == "reflection";
     };
@@ -356,7 +380,8 @@ inline void validate_config(const Config<DIM>& cfg)
         }
     }
 
-    if (cfg.initial_condition == "shock_bubble") {
+    if (cfg.initial_condition == "shock_bubble" ||
+        cfg.initial_condition == "coated_shock_bubble") {
         if (cfg.shock_axis < 0 || cfg.shock_axis >= DIM) {
             throw std::runtime_error("Invalid shock axis");
         }
@@ -369,6 +394,16 @@ inline void validate_config(const Config<DIM>& cfg)
             cfg.material_right < 0 ||
             cfg.material_bubble < 0) {
             throw std::runtime_error("Invalid material id in shock_bubble IC");
+        }
+
+        if (cfg.initial_condition == "coated_shock_bubble") {
+            if (cfg.film_radius <= cfg.bubble_radius) {
+                throw std::runtime_error("coated_shock_bubble requires film_radius > bubble_radius");
+            }
+
+            if (cfg.material_film < 0) {
+                throw std::runtime_error("Invalid material id in coated_shock_bubble IC");
+            }
         }
     }
 }
@@ -460,14 +495,26 @@ inline Config<DIM> load_config(const std::string& filename)
         else if (key == "vel_bubble") cfg.vel_bubble = parse_array<DIM>(value);
         else if (key == "p_bubble") cfg.p_bubble = std::stod(value);
         else if (key == "material_bubble") cfg.material_bubble = std::stoi(value);
+        else if (key == "film_radius") cfg.film_radius = std::stod(value);
+        else if (key == "rho_film") cfg.rho_film = std::stod(value);
+        else if (key == "vel_film") cfg.vel_film = parse_array<DIM>(value);
+        else if (key == "p_film") cfg.p_film = std::stod(value);
+        else if (key == "material_film") cfg.material_film = std::stoi(value);
 
         else if (key == "interface_method") cfg.interface_method = value;
         else if (key == "time_update") cfg.time_update = to_lower(value);
         else if (key == "use_level_set") cfg.use_level_set = parse_bool(value);
         else if (key == "reinit_interval") cfg.reinit_interval = std::stoi(value);
         else if (key == "reinit_iterations") cfg.reinit_iterations = std::stoi(value);
+        else if (key == "level_set_reinit_method") cfg.level_set_reinit_method = to_lower(value);
         else if (key == "level_set_advection") cfg.level_set_advection = to_lower(value);
+        else if (key == "level_set_spatial_derivative") cfg.level_set_spatial_derivative = to_lower(value);
+        else if (key == "rgfm_diagnostics") cfg.rgfm_diagnostics = parse_bool(value);
+        else if (key == "rgfm_diagnostics_interval") cfg.rgfm_diagnostics_interval = std::stoi(value);
+        else if (key == "rgfm_star_velocity_mode") cfg.rgfm_star_velocity_mode = to_lower(value);
         else if (key == "interface_thickness") cfg.interface_thickness = std::stod(value);
+        else if (key == "barton_solid_material") cfg.barton_solid_material = std::stoi(value);
+        else if (key == "barton_temperature") cfg.barton_temperature = std::stod(value);
         else if (key == "bc_lo") cfg.bc_lo = parse_string_array<DIM>(value);
         else if (key == "bc_hi") cfg.bc_hi = parse_string_array<DIM>(value);
 

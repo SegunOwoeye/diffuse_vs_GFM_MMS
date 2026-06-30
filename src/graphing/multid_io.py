@@ -15,7 +15,8 @@ import pandas as pd
 def load_solution_csv(filename):
     """Load one 2D/3D solver CSV and return fields in the old plotter shape."""
 
-    data_path = Path("data/csv") / filename
+    input_path = Path(filename)
+    data_path = input_path if input_path.is_absolute() else Path("data/csv") / input_path
 
     if not data_path.exists():
         raise FileNotFoundError(f"{data_path} not found")

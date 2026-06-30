@@ -166,6 +166,24 @@ inline void reconstruct_line_interfaces(
     UL_face.assign(N - 1, Conserved<DIM>{});
     UR_face.assign(N - 1, Conserved<DIM>{});
 
+    bool use_first_order_faces = false;
+    for (const EOSParams& params : cell_params) {
+        if (params.kind == EOSKind::mie_gruneisen) {
+            use_first_order_faces = true;
+            break;
+        }
+    }
+
+    if (use_first_order_faces) {
+        for (int i = 0; i < N - 1; ++i) {
+            UL_face[i] = U_line[i];
+            UR_face[i] = U_line[i + 1];
+            enforce_positive_conserved<DIM, EOS>(UL_face[i], cell_params[i], rho_floor, p_floor);
+            enforce_positive_conserved<DIM, EOS>(UR_face[i], cell_params[i + 1], rho_floor, p_floor);
+        }
+        return;
+    }
+
     std::vector<Primitive<DIM>> P_line(N);
     for (int i = 0; i < N; ++i) {
         P_line[i] = cons_to_prim<DIM, EOS>(U_line[i], cell_params[i]);

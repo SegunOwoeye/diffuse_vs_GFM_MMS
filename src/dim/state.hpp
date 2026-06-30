@@ -12,6 +12,9 @@ namespace dim {
         std::array<double, DIM> mom{};
         double E = 0.0;
         std::vector<double> alpha{};
+        std::array<double, 9> solid_rhoF{};
+        double solid_rho_eqps = 0.0;
+        double solid_rho_damage = 0.0;
     };
 
 
@@ -29,6 +32,9 @@ namespace dim {
         std::vector<double> partial_mass{};
         std::array<double, DIM> mom{};
         double E = 0.0;
+        std::array<double, 9> solid_rhoF{};
+        double solid_rho_eqps = 0.0;
+        double solid_rho_damage = 0.0;
     };
 
     template<int DIM>

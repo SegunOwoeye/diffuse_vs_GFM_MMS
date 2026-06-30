@@ -9,6 +9,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from plot_style import apply_plot_style, configure_profile_axis
+
+
+apply_plot_style()
+
+
+def point_stride(count: int, target_points: int = 1600) -> int:
+    return max(1, count // target_points)
+
 
 def plot_section_8p5(
     csv_path: Path,
@@ -134,24 +143,34 @@ def plot_barton_radial_reference(
         ("T", "T (K)", temperature_ylim),
     ]
     for ax, (field, ylabel, ylim) in zip(axes, fields):
-        ax.plot(ref["r"], ref[field], color="black", linewidth=1.0, label="1D")
+        ref_stride = point_stride(len(ref))
+        solution_stride = point_stride(len(df))
         ax.plot(
-            df["r"],
-            df[field],
-            marker=".",
+            ref["r"].iloc[::ref_stride],
+            ref[field].iloc[::ref_stride],
+            marker="+",
             linestyle="none",
             color="black",
-            markersize=1.0,
-            markeredgewidth=0.0,
+            markersize=2.6,
+            markeredgewidth=0.6,
+            label="1D reference",
+        )
+        ax.plot(
+            df["r"].iloc[::solution_stride],
+            df[field].iloc[::solution_stride],
+            marker="o",
+            linestyle="none",
+            color="tab:blue",
+            markersize=2.0,
+            markerfacecolor="none",
+            markeredgewidth=0.5,
             label=scatter_label,
         )
         ax.set_xlim(0.0, 10.0)
         ax.set_ylim(*ylim)
-        ax.set_xlabel("r (cm)")
         ax.set_ylabel(ylabel)
-        ax.tick_params(direction="in", top=True, right=True)
+        configure_profile_axis(ax, x_label="r (cm)", show_legend=True, show_title=False)
 
-    axes[1].legend(loc="upper right", frameon=False, fontsize=8)
     fig.tight_layout()
 
     if out_path is None:

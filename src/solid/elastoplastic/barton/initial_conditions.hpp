@@ -111,4 +111,34 @@ inline std::vector<TensorState3D> initialise_tensor_spherical_reference(
     return U;
 }
 
+inline std::vector<TensorState3D> initialise_tensor_plate_impact_1d(
+    const TensorSolverConfig& cfg,
+    std::vector<int>& material_id)
+{
+    const int nx = cfg.cells[0];
+    const double dx = (cfg.domain_max[0] - cfg.domain_min[0]) / nx;
+    std::vector<TensorState3D> U(nx);
+    material_id.assign(nx, 0);
+    const std::array<double, 9> identity{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+    for (int i = 0; i < nx; ++i) {
+        const double x = cfg.domain_min[0] + (i + 0.5) * dx;
+        const bool right = x >= cfg.interface_position;
+        const auto& state = right ? cfg.right_state : cfg.left_state;
+        const TensorMaterial& mat = right ? cfg.right_material : cfg.left_material;
+        material_id[i] = right ? 1 : 0;
+        const double temperature = state.has_pressure
+            ? material_temperature_from_rho_p(state.rho, state.pressure, mat)
+            : state.temperature;
+        U[i] = tensor_cons_from_F(
+            state.rho,
+            state.vel[0],
+            state.vel[1],
+            state.vel[2],
+            temperature,
+            identity,
+            mat);
+    }
+    return U;
+}
+
 } // namespace solid::barton

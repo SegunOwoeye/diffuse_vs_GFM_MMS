@@ -255,4 +255,42 @@ inline void write_tensor_spherical_reference(
     }
 }
 
+inline void write_tensor_plate_impact_1d(
+    const std::string& filename,
+    const std::vector<TensorState3D>& U,
+    const std::vector<int>& material_id,
+    const TensorSolverConfig& cfg,
+    const std::array<TensorMaterial, 2>& materials)
+{
+    std::ofstream out(filename);
+    if (!out) throw std::runtime_error("Cannot write Barton tensor plate-impact CSV: " + filename);
+    const int nx = cfg.cells[0];
+    const double dx = (cfg.domain_max[0] - cfg.domain_min[0]) / nx;
+    out << "x,material,rho,u,v,w,T,p,"
+        << "sigma_xx,sigma_xy,sigma_xz,sigma_yy,sigma_yz,sigma_zz,"
+        << "eqps,damage,failed\n";
+    for (int i = 0; i < nx; ++i) {
+        const double x = cfg.domain_min[0] + (i + 0.5) * dx;
+        const int id = material_id[i];
+        const TensorPrim3D P = tensor_prim(U[i], materials[id]);
+        out << x << ","
+            << (id == 0 ? "left" : "right") << ","
+            << P.rho << ","
+            << P.vel[0] << ","
+            << P.vel[1] << ","
+            << P.vel[2] << ","
+            << P.T << ","
+            << P.p << ","
+            << P.sigma[0] << ","
+            << P.sigma[1] << ","
+            << P.sigma[2] << ","
+            << P.sigma[4] << ","
+            << P.sigma[5] << ","
+            << P.sigma[8] << ","
+            << P.eqps << ","
+            << P.damage << ","
+            << (P.failed ? 1 : 0) << "\n";
+    }
+}
+
 } // namespace solid::barton

@@ -4,6 +4,12 @@
 #include <cstddef>
 #include <stdexcept>
 
+enum class LevelSetDerivativeScheme {
+    FirstOrder,
+    Tvd
+};
+
+
 template<int DIM>
 struct LevelSetGrid {
     std::array<int, DIM> N{};

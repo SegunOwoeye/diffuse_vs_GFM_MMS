@@ -13,7 +13,8 @@
 // [0] Boundary Condition Type
 enum class BoundaryConditionType {
     transmissive,
-    reflective
+    reflective,
+    nonreflective
 };
 
 
@@ -44,7 +45,10 @@ struct SolverContext {
     bool advect_level_set = true;
     bool reassign_material_from_phi = true;
     bool use_axis_normals_in_1d = true;
+    std::string level_set_reinit_method = "sussman";
     std::string level_set_advection = "normal_speed";
+    LevelSetDerivativeScheme level_set_derivative_scheme = LevelSetDerivativeScheme::Tvd;
+    std::string rgfm_star_velocity_mode = "input_mean";
     std::string time_update = "split";
 
     // [1.5] Physical boundary conditions
@@ -117,13 +121,25 @@ struct SolverContext {
         }
 
         if (level_set_advection != "normal_speed" &&
-            level_set_advection != "flow") {
+            level_set_advection != "flow" &&
+            level_set_advection != "physical_flow") {
             throw std::runtime_error("SolverContext: invalid level_set_advection");
+        }
+
+        if (level_set_reinit_method != "sussman" &&
+            level_set_reinit_method != "redistance") {
+            throw std::runtime_error("SolverContext: invalid level_set_reinit_method");
         }
 
         if (time_update != "split" &&
             time_update != "unsplit") {
             throw std::runtime_error("SolverContext: invalid time_update");
+        }
+
+        if (rgfm_star_velocity_mode != "mcrs" &&
+            rgfm_star_velocity_mode != "input_mean" &&
+            rgfm_star_velocity_mode != "zero") {
+            throw std::runtime_error("SolverContext: invalid rgfm_star_velocity_mode");
         }
 
         if (reinit_iterations < 0) {
@@ -175,4 +191,3 @@ struct SolverContext {
         }
     }
 };
-

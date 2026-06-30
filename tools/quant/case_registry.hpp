@@ -114,10 +114,124 @@ std::vector<CaseDef> case_registry()
         {{1300, 178}}
     });
     cases.push_back({
+        "shock_bubble_2d_reinit", "test6_reinit5", "helium_bubble_2d_reinit5", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_reinit5_tvd.txt",
+        {{1300, 178}}
+    });
+    cases.push_back({
+        "shock_bubble_2d_reinit", "test6_reinit10", "helium_bubble_2d_reinit10", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_reinit10_tvd.txt",
+        {{1300, 178}}
+    });
+    cases.push_back({
+        "shock_bubble_2d_reinit", "test6_reinit10_iter1", "helium_bubble_2d_reinit10_iter1", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_reinit10_iter1_tvd.txt",
+        {{1300, 178}}
+    });
+    cases.push_back({
+        "shock_bubble_2d_reinit", "test6_reinit10_iter2", "helium_bubble_2d_reinit10_iter2", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_reinit10_iter2_tvd.txt",
+        {{1300, 178}}
+    });
+    cases.push_back({
+        "shock_bubble_2d_reinit", "test6_redistance10_iter2", "helium_bubble_2d_redistance10_iter2", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_redistance10_iter2_tvd.txt",
+        {{1300, 178}}
+    });
+    cases.push_back({
+        "water_air_bubble_2d", "case2", "practical_case2_water_air_bubble_2d", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/practical_case2_water_air_bubble_2d.txt",
+        {{201, 201}, {401, 401}, {601, 601}}
+    });
+    cases.push_back({
+        "water_air_bubble_2d", "case2", "practical_case2_water_air_bubble_2d", "DIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/DIM/bubble_collapse/practical_case2_water_air_bubble_2d.txt",
+        {{201, 201}, {401, 401}, {601, 601}}
+    });
+    cases.push_back({
+        "gorsse_tc9_water_air_bubble_2d", "tc9", "gorsse_tc9_water_air_bubble_2d", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/gorsse_tc9_water_air_bubble_2d.txt",
+        {{240, 200}, {480, 400}}
+    });
+    cases.push_back({
+        "gorsse_tc9_water_air_bubble_2d", "tc9", "gorsse_tc9_water_air_bubble_2d", "DIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/DIM/bubble_collapse/gorsse_tc9_water_air_bubble_2d.txt",
+        {{240, 200}, {480, 400}}
+    });
+    cases.push_back({
+        "applsci_three_material_shock_bubble_2d", "three_material", "applsci_2021_three_material_shock_bubble", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/MM_2D_validation/applsci_2021_three_material_shock_bubble.txt",
+        {{200, 100}, {400, 200}, {800, 400}}
+    });
+    cases.push_back({
+        "applsci_three_material_shock_bubble_2d", "three_material", "applsci_2021_three_material_shock_bubble", "DIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/DIM/MM_2D_validation/applsci_2021_three_material_shock_bubble.txt",
+        {{200, 100}, {400, 200}, {800, 400}}
+    });
+    cases.push_back({
+        "gorsse_tc9_water_air_bubble_3d", "tc9", "gorsse_tc9_water_air_bubble_3d", "SIM", 3,
+        "mm_3d", "mm_main_3d", mm3,
+        "configs/GFM/bubble_collapse/gorsse_tc9_water_air_bubble_3d.txt",
+        {{240, 200, 200}}
+    });
+    cases.push_back({
+        "gorsse_tc9_water_air_bubble_3d", "tc9", "gorsse_tc9_water_air_bubble_3d", "DIM", 3,
+        "mm_3d", "mm_main_3d", mm3,
+        "configs/DIM/bubble_collapse/gorsse_tc9_water_air_bubble_3d.txt",
+        {{240, 200, 200}}
+    });
+    cases.push_back({
         "shock_bubble_2d", "test6", "helium_bubble_2d", "DIM", 2,
         "mm_2d", "mm_main_2d", mm2,
         "configs/DIM/MM_2D_validation/test6.txt",
         {{1300, 178}}
+    });
+    cases.push_back({
+        "shock_bubble_2d_zero_velocity", "test6_zero_velocity", "helium_bubble_2d_zero_velocity", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_zero_velocity_tvd.txt",
+        {{325, 45}, {650, 89}, {1300, 178}}
+    });
+    cases.push_back({
+        "shock_bubble_2d_zero_velocity_physical_flow", "test6_zero_velocity_physical_flow", "helium_bubble_2d_zero_velocity_physical_flow", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_zero_velocity_physical_flow_tvd.txt",
+        {{325, 45}, {650, 89}, {1300, 178}}
+    });
+    cases.push_back({
+        "shock_bubble_2d_zero_velocity_input_mean_star", "test6_zero_velocity_input_mean_star", "helium_bubble_2d_zero_velocity_input_mean_star", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_zero_velocity_input_mean_star_tvd.txt",
+        {{325, 45}, {650, 89}, {1300, 178}}
+    });
+    cases.push_back({
+        "shock_bubble_2d_zero_velocity_zero_star", "test6_zero_velocity_zero_star", "helium_bubble_2d_zero_velocity_zero_star", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_zero_velocity_zero_star_tvd.txt",
+        {{325, 45}, {650, 89}, {1300, 178}}
+    });
+    cases.push_back({
+        "shock_bubble_2d_static_equilibrium", "static_normal_speed", "helium_bubble_2d_static_normal_speed", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_static_normal_speed_tvd.txt",
+        {{325, 45}, {650, 89}, {1300, 178}}
+    });
+    cases.push_back({
+        "shock_bubble_2d_static_equilibrium", "static_flow", "helium_bubble_2d_static_flow", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_static_flow_tvd.txt",
+        {{325, 45}, {650, 89}, {1300, 178}}
     });
     cases.push_back({
         "shock_bubble_3d", "test6", "helium_bubble_3d", "SIM", 3,
@@ -161,6 +275,16 @@ std::set<std::string> groups_for_case_alias(const std::vector<std::string>& alia
         else if (alias == "planar" || alias == "fedkiw_2d") groups.insert("fedkiw_2d_planar");
         else if (alias == "oblique" || alias == "fedkiw_2d_oblique" || alias == "oblique45" || alias == "oblique_mm") groups.insert("fedkiw_2d_oblique");
         else if (alias == "shock_bubble" || alias == "bubble") groups.insert("shock_bubble_2d");
+        else if (alias == "bubble_reinit" || alias == "shock_bubble_reinit" || alias == "rgfm_bubble_reinit") groups.insert("shock_bubble_2d_reinit");
+        else if (alias == "water_air_bubble" || alias == "water_air_bubble_2d" || alias == "practical_case2") groups.insert("water_air_bubble_2d");
+        else if (alias == "gorsse_tc9" || alias == "tc9_water_air_bubble" || alias == "water_air_bubble_gorsse") groups.insert("gorsse_tc9_water_air_bubble_2d");
+        else if (alias == "applsci_three_material" || alias == "three_material" || alias == "three_material_shock_bubble") groups.insert("applsci_three_material_shock_bubble_2d");
+        else if (alias == "gorsse_tc9_3d" || alias == "tc9_water_air_bubble_3d" || alias == "water_air_bubble_gorsse_3d") groups.insert("gorsse_tc9_water_air_bubble_3d");
+        else if (alias == "bubble_zero_velocity" || alias == "shock_bubble_zero_velocity" || alias == "rgfm_bubble_zero_velocity") groups.insert("shock_bubble_2d_zero_velocity");
+        else if (alias == "bubble_zero_velocity_physical_flow" || alias == "rgfm_bubble_zero_velocity_physical_flow") groups.insert("shock_bubble_2d_zero_velocity_physical_flow");
+        else if (alias == "bubble_zero_velocity_input_mean_star" || alias == "rgfm_bubble_zero_velocity_input_mean_star") groups.insert("shock_bubble_2d_zero_velocity_input_mean_star");
+        else if (alias == "bubble_zero_velocity_zero_star" || alias == "rgfm_bubble_zero_velocity_zero_star") groups.insert("shock_bubble_2d_zero_velocity_zero_star");
+        else if (alias == "bubble_static" || alias == "bubble_static_equilibrium" || alias == "rgfm_bubble_static") groups.insert("shock_bubble_2d_static_equilibrium");
         else if (alias == "shock_bubble3d" || alias == "shock_bubble_3d" || alias == "bubble3d") groups.insert("shock_bubble_3d");
     }
     return groups;
@@ -173,6 +297,16 @@ bool is_specific_case_filter(const std::string& value)
         "toro", "toro_no3d", "toro_1d", "explosion", "explosion2d", "explosion3d",
         "toro_3d", "fedkiw", "fedkiw_1d", "planar", "fedkiw_2d", "oblique",
         "fedkiw_2d_oblique", "oblique45", "oblique_mm", "shock_bubble", "bubble",
+        "bubble_reinit", "shock_bubble_reinit", "rgfm_bubble_reinit",
+        "water_air_bubble", "water_air_bubble_2d", "practical_case2",
+        "gorsse_tc9", "tc9_water_air_bubble", "water_air_bubble_gorsse",
+        "applsci_three_material", "three_material", "three_material_shock_bubble",
+        "gorsse_tc9_3d", "tc9_water_air_bubble_3d", "water_air_bubble_gorsse_3d",
+        "bubble_zero_velocity", "shock_bubble_zero_velocity", "rgfm_bubble_zero_velocity",
+        "bubble_zero_velocity_physical_flow", "rgfm_bubble_zero_velocity_physical_flow",
+        "bubble_zero_velocity_input_mean_star", "rgfm_bubble_zero_velocity_input_mean_star",
+        "bubble_zero_velocity_zero_star", "rgfm_bubble_zero_velocity_zero_star",
+        "bubble_static", "bubble_static_equilibrium", "rgfm_bubble_static",
         "shock_bubble3d", "shock_bubble_3d", "bubble3d"
     };
     return !broad.count(alias);

@@ -17,11 +17,13 @@ def main() -> None:
         print("Usage:")
         print("python src/graphing/plot_multid.py [--schlieren] [--pressure-contours] file.csv")
         print("python src/graphing/plot_multid.py [--schlieren] [--pressure-contours] directory_name")
-        print("python src/graphing/plot_multid.py [--schlieren] file1.csv file2.csv")
+        print("python src/graphing/plot_multid.py [--schlieren] [--same-material-schlieren] [--interface-overlay] file1.csv file2.csv")
         raise SystemExit(1)
 
     force_schlieren = False
     pressure_contours = False
+    same_material_schlieren = False
+    interface_overlay = False
     args = []
 
     for arg in sys.argv[1:]:
@@ -29,6 +31,10 @@ def main() -> None:
             force_schlieren = True
         elif arg == "--paper-schlieren":
             force_schlieren = True
+        elif arg == "--same-material-schlieren":
+            same_material_schlieren = True
+        elif arg == "--interface-overlay":
+            interface_overlay = True
         elif arg == "--pressure-contours":
             pressure_contours = True
         else:
@@ -63,6 +69,8 @@ def main() -> None:
                     path_arg,
                     data_root,
                     save_path=save_path,
+                    same_material_schlieren=same_material_schlieren,
+                    interface_overlay=interface_overlay,
                 )
                 raise SystemExit(0)
 
@@ -71,15 +79,24 @@ def main() -> None:
                 title=output_name,
                 save_path=save_path,
                 force_schlieren=force_schlieren,
+                same_material_schlieren=same_material_schlieren,
+                interface_overlay=interface_overlay,
             )
         else:
             plot_multiple_cpp_solutions(
                 [args[0]],
                 force_schlieren=force_schlieren,
+                same_material_schlieren=same_material_schlieren,
+                interface_overlay=interface_overlay,
             )
 
     else:
-        plot_multiple_cpp_solutions(args, force_schlieren=force_schlieren)
+        plot_multiple_cpp_solutions(
+            args,
+            force_schlieren=force_schlieren,
+            same_material_schlieren=same_material_schlieren,
+            interface_overlay=interface_overlay,
+        )
 
 
 if __name__ == "__main__":

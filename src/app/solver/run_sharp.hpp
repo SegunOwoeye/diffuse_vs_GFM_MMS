@@ -2,6 +2,9 @@
 
 #include <array>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <optional>
 #include <stdexcept>
 #include <vector>
@@ -21,6 +24,124 @@
 #include "src/app/levelset/initial_levelset.hpp"
 #include "src/app/solver/solver_builder.hpp"
 #include "src/app/io/euler_output_utils.hpp"
+
+
+// [0.1] Build rGFM diagnostic output path
+template<int DIM>
+inline std::filesystem::path build_rgfm_diagnostics_filename(
+    const Config<DIM>& cfg,
+    const std::array<int, DIM>& N
+)
+{
+    std::string stem = cfg.output_prefix;
+
+    for (int d = 0; d < DIM; ++d) {
+        stem += "_N" + std::to_string(N[d]);
+    }
+
+    stem += "_rgfm_diagnostics.csv";
+
+    const std::filesystem::path dir =
+        std::filesystem::path(cfg.output_dir) / cfg.output_prefix;
+
+    return dir / stem;
+}
+
+
+// [0.2] Append one sampled step of rGFM interface-pair diagnostics
+template<int DIM>
+inline void append_rgfm_diagnostics(
+    const Config<DIM>& cfg,
+    const std::array<int, DIM>& N,
+    int step,
+    double time,
+    const std::vector<RGFMDiagnosticRow<DIM>>& rows
+)
+{
+    if (rows.empty()) {
+        return;
+    }
+
+    const std::filesystem::path filename =
+        build_rgfm_diagnostics_filename<DIM>(cfg, N);
+
+    if (!filename.parent_path().empty()) {
+        std::filesystem::create_directories(filename.parent_path());
+    }
+
+    const bool write_header = !std::filesystem::exists(filename);
+    std::ofstream file(filename, std::ios::app);
+
+    if (!file) {
+        throw std::runtime_error(
+            "append_rgfm_diagnostics: failed to open " + filename.string()
+        );
+    }
+
+    file << std::setprecision(17);
+
+    if (write_header) {
+        file << "step,time,interface_id,neg_id,pos_id";
+
+        for (int d = 0; d < DIM; ++d) {
+            file << ",neg_i" << d;
+        }
+
+        for (int d = 0; d < DIM; ++d) {
+            file << ",pos_i" << d;
+        }
+
+        file << ",neg_mat,pos_mat,phi_neg,phi_pos";
+
+        for (int d = 0; d < DIM; ++d) {
+            file << ",normal" << d;
+        }
+
+        file << ",normal_magnitude,rho_neg,rho_pos,p_neg,p_pos";
+        file << ",un_neg,un_pos,p_star,un_star,un_applied";
+        file << ",pair_alignment,pair_distance,score_neg,score_pos\n";
+    }
+
+    for (const auto& row : rows) {
+        file << step << "," << time << ","
+             << row.interface_id << ","
+             << row.neg_id << ","
+             << row.pos_id;
+
+        for (int d = 0; d < DIM; ++d) {
+            file << "," << row.neg_idx[d];
+        }
+
+        for (int d = 0; d < DIM; ++d) {
+            file << "," << row.pos_idx[d];
+        }
+
+        file << "," << row.neg_mat
+             << "," << row.pos_mat
+             << "," << row.phi_neg
+             << "," << row.phi_pos;
+
+        for (int d = 0; d < DIM; ++d) {
+            file << "," << row.normal[d];
+        }
+
+        file << "," << row.normal_magnitude
+             << "," << row.rho_neg
+             << "," << row.rho_pos
+             << "," << row.p_neg
+             << "," << row.p_pos
+             << "," << row.un_neg
+             << "," << row.un_pos
+             << "," << row.p_star
+             << "," << row.un_star
+             << "," << row.un_applied
+             << "," << row.pair_alignment
+             << "," << row.pair_distance
+             << "," << row.score_neg
+             << "," << row.score_pos
+             << "\n";
+    }
+}
 
 
 // [0] Run SM or GFM sharp-interface case
@@ -126,6 +247,19 @@ inline void run_sharp_interface_case(
             throw std::runtime_error("run_sharp_interface_case: non-positive timestep");
         }
 
+        if (cfg.rgfm_diagnostics &&
+            (step % cfg.rgfm_diagnostics_interval == 0 ||
+             time + result.dt >= cfg.tfinal - 1e-14))
+        {
+            append_rgfm_diagnostics<DIM>(
+                cfg,
+                N,
+                step,
+                time,
+                result.rgfm_diagnostic_rows
+            );
+        }
+
         U = result.U_new;
         ctx.phi_list = result.phi_list_new;
 
@@ -224,4 +358,3 @@ inline void run_sharp_interface_case(
     }
     #endif
 }
-

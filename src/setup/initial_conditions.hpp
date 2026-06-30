@@ -228,6 +228,22 @@ inline EOSParams build_eos_params_from_material(
         }
     }
 
+    if (params.kind == EOSKind::mie_gruneisen) {
+        if (!mat.params.count("rho_ref")) {
+            throw std::runtime_error("Missing rho_ref in material id=" + std::to_string(mat_id));
+        }
+        if (!mat.params.count("A1") || !mat.params.count("A2") ||
+            !mat.params.count("E1") || !mat.params.count("E2")) {
+            throw std::runtime_error("Missing A1/A2/E1/E2 in material id=" + std::to_string(mat_id));
+        }
+
+        params.rho_ref = mat.params.at("rho_ref");
+        params.mie_A1 = mat.params.at("A1");
+        params.mie_A2 = mat.params.at("A2");
+        params.mie_E1 = mat.params.at("E1");
+        params.mie_E2 = mat.params.at("E2");
+    }
+
     return params;
 }
 
@@ -449,6 +465,71 @@ inline void initialise_from_config(
 
             if (mat_id < 0) {
                 throw std::runtime_error("Invalid material id in shock_bubble IC");
+            }
+
+            const EOSParams params = build_eos_params_from_material(cfg.materials, mat_id);
+
+            U[linear] = prim_to_cons<DIM, EOS>(P, params);
+            material_id[linear] = mat_id;
+        }
+
+        return;
+    }
+
+    // [5.4] Coated Shock-bubble Initialisation
+    if (cfg.initial_condition == "coated_shock_bubble") {
+
+        if (cfg.shock_axis < 0 || cfg.shock_axis >= DIM) {
+            throw std::runtime_error("Invalid shock axis");
+        }
+
+        if (cfg.bubble_radius <= 0.0 || cfg.film_radius <= cfg.bubble_radius) {
+            throw std::runtime_error("Invalid coated_shock_bubble radii");
+        }
+
+        for (int linear = 0; linear < total_cells; ++linear) {
+
+            idx = unflatten_raw_index<DIM>(linear, N);
+
+            const auto x = compute_cell_center<DIM>(idx, cfg.domain_min, dx);
+
+            Primitive<DIM> P{};
+            int mat_id = -1;
+
+            double r2 = 0.0;
+            for (int d = 0; d < DIM; ++d) {
+                const double diff = x[d] - cfg.bubble_center[d];
+                r2 += diff * diff;
+            }
+            const double radius = std::sqrt(r2);
+
+            if (radius <= cfg.bubble_radius) {
+                P.rho = cfg.rho_bubble;
+                P.vel = cfg.vel_bubble;
+                P.p = cfg.p_bubble;
+                mat_id = cfg.material_bubble;
+            }
+            else if (radius <= cfg.film_radius) {
+                P.rho = cfg.rho_film;
+                P.vel = cfg.vel_film;
+                P.p = cfg.p_film;
+                mat_id = cfg.material_film;
+            }
+            else if (x[cfg.shock_axis] < cfg.shock_position) {
+                P.rho = cfg.rho_left;
+                P.vel = cfg.vel_left;
+                P.p = cfg.p_left;
+                mat_id = cfg.material_left;
+            }
+            else {
+                P.rho = cfg.rho_right;
+                P.vel = cfg.vel_right;
+                P.p = cfg.p_right;
+                mat_id = cfg.material_right;
+            }
+
+            if (mat_id < 0) {
+                throw std::runtime_error("Invalid material id in coated_shock_bubble IC");
             }
 
             const EOSParams params = build_eos_params_from_material(cfg.materials, mat_id);

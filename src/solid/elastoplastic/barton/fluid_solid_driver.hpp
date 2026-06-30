@@ -494,9 +494,18 @@ struct FluidSolidStateConfig2D {
     double rho = 1.0;
     double un = 0.0;
     double us = 0.0;
+    double ux = 0.0;
+    double uy = 0.0;
     double p = 1.0;
     bool has_sigma_nn = false;
+    bool has_cartesian_velocity = false;
     double sigma_nn = -1.0;
+};
+
+struct FluidSolidRectRegion2D {
+    std::array<double, 2> lower{0.0, 0.0};
+    std::array<double, 2> upper{0.0, 0.0};
+    FluidSolidStateConfig2D state{};
 };
 
 struct FluidSolidConfig2D {
@@ -505,6 +514,8 @@ struct FluidSolidConfig2D {
     std::array<int, 2> cells{251, 251};
     std::array<double, 2> interface_normal{0.5, 0.8660254037844386};
     double interface_offset = 5.0;
+    std::string geometry = "planar_interface";
+    std::vector<FluidSolidRectRegion2D> solid_regions{};
     double tfinal = 4.45e-3;
     double cfl = 0.4;
     bool normal_tangent_update = false;
@@ -574,6 +585,14 @@ inline FluidSolidStateConfig2D parse_fluid_solid_state_2d(const std::string& val
         if (key == "rho") state.rho = std::stod(raw);
         else if (key == "un" || key == "u" || key == "normal_velocity") state.un = std::stod(raw);
         else if (key == "us" || key == "v" || key == "tangent_velocity") state.us = std::stod(raw);
+        else if (key == "ux" || key == "u_cart") {
+            state.ux = std::stod(raw);
+            state.has_cartesian_velocity = true;
+        }
+        else if (key == "uy" || key == "v_cart") {
+            state.uy = std::stod(raw);
+            state.has_cartesian_velocity = true;
+        }
         else if (key == "p" || key == "pressure") state.p = std::stod(raw);
         else if (key == "sigma_nn" || key == "snn") {
             state.has_sigma_nn = true;
@@ -584,6 +603,33 @@ inline FluidSolidStateConfig2D parse_fluid_solid_state_2d(const std::string& val
         }
     }
     return state;
+}
+
+inline FluidSolidRectRegion2D parse_fluid_solid_rect_region_2d(const std::string& value)
+{
+    const auto parts = solid::text::split_csv(value);
+    if (parts.size() < 2) {
+        throw std::runtime_error("solid_region requires lower and upper coordinate pairs");
+    }
+
+    FluidSolidRectRegion2D region{};
+    region.lower = solid::text::parse_pair2d(parts[0]);
+    region.upper = solid::text::parse_pair2d(parts[1]);
+    if (region.upper[0] <= region.lower[0] || region.upper[1] <= region.lower[1]) {
+        throw std::runtime_error("solid_region upper bounds must exceed lower bounds");
+    }
+
+    std::string state_text;
+    for (std::size_t i = 2; i < parts.size(); ++i) {
+        if (!state_text.empty()) {
+            state_text += ", ";
+        }
+        state_text += parts[i];
+    }
+    if (!state_text.empty()) {
+        region.state = parse_fluid_solid_state_2d(state_text);
+    }
+    return region;
 }
 
 inline std::array<double, 2> parse_pair2d_or_scalar(const std::string& value)
@@ -639,6 +685,7 @@ inline FluidSolidConfig2D load_fluid_solid_config_2d(const std::string& filename
         else if (key == "domain_min") cfg.domain_min = parse_pair2d_or_scalar(value);
         else if (key == "domain_max") cfg.domain_max = parse_pair2d_or_scalar(value);
         else if (key == "N" || key == "cells") cfg.cells = parse_cells2d_or_scalar(value);
+        else if (key == "geometry") cfg.geometry = solid::text::trim(value);
         else if (key == "interface_normal") cfg.interface_normal = normalised_pair(parse_pair2d_or_scalar(value));
         else if (key == "interface_offset") cfg.interface_offset = std::stod(value);
         else if (key == "rotation_degrees") {
@@ -668,6 +715,7 @@ inline FluidSolidConfig2D load_fluid_solid_config_2d(const std::string& filename
         }
         else if (key == "fluid_state") cfg.fluid_initial = parse_fluid_solid_state_2d(value);
         else if (key == "solid_state") cfg.solid_initial = parse_fluid_solid_state_2d(value);
+        else if (key == "solid_region") cfg.solid_regions.push_back(parse_fluid_solid_rect_region_2d(value));
         else if (key == "output_times") {
             cfg.output_times.clear();
             for (const auto& part : solid::text::split_csv(value)) {
@@ -684,6 +732,12 @@ inline FluidSolidConfig2D load_fluid_solid_config_2d(const std::string& filename
     }
 
     cfg.interface_normal = normalised_pair(cfg.interface_normal);
+    if (cfg.geometry != "planar_interface" && cfg.geometry != "rectangular_regions") {
+        throw std::runtime_error("Unknown fluid-solid 2D geometry: " + cfg.geometry);
+    }
+    if (cfg.geometry == "rectangular_regions" && cfg.solid_regions.empty()) {
+        throw std::runtime_error("rectangular_regions geometry requires at least one solid_region");
+    }
     if (cfg.cells[0] <= 1 || cfg.cells[1] <= 1 ||
         cfg.domain_max[0] <= cfg.domain_min[0] ||
         cfg.domain_max[1] <= cfg.domain_min[1] ||
@@ -702,8 +756,14 @@ inline Conserved<2> make_fluid_state_from_config_2d(
     const std::array<double, 2> s = tangent_from_normal(n);
     ::Primitive<2> P{};
     P.rho = state.rho;
-    P.vel[0] = state.un * n[0] + state.us * s[0];
-    P.vel[1] = state.un * n[1] + state.us * s[1];
+    if (state.has_cartesian_velocity) {
+        P.vel[0] = state.ux;
+        P.vel[1] = state.uy;
+    }
+    else {
+        P.vel[0] = state.un * n[0] + state.us * s[0];
+        P.vel[1] = state.un * n[1] + state.us * s[1];
+    }
     P.p = state.p;
     return ::prim_to_cons<2, MaterialEOS>(P, params);
 }
@@ -915,10 +975,12 @@ inline TensorState2D make_solid_state_from_config_2d(
     const TensorMaterial& mat,
     const std::array<double, 2>& n)
 {
+    const double ux = state.has_cartesian_velocity ? state.ux : state.un * n[0];
+    const double uy = state.has_cartesian_velocity ? state.uy : state.un * n[1];
     TensorState2D base = tensor_cons_from_F(
         state.rho,
-        state.un * n[0],
-        state.un * n[1],
+        ux,
+        uy,
         mat.T0,
         local_stretch_F(n, 1.0, 1.0),
         mat);
@@ -927,6 +989,53 @@ inline TensorState2D make_solid_state_from_config_2d(
         base = tensor_state_with_normal_stress(base, mat, n, state.sigma_nn, state.un);
     }
     return base;
+}
+
+inline bool point_in_rect_region(
+    const FluidSolidRectRegion2D& region,
+    double x,
+    double y)
+{
+    return x >= region.lower[0] && x <= region.upper[0] &&
+           y >= region.lower[1] && y <= region.upper[1];
+}
+
+inline const FluidSolidRectRegion2D* find_solid_region_2d(
+    const FluidSolidConfig2D& cfg,
+    double x,
+    double y)
+{
+    for (const auto& region : cfg.solid_regions) {
+        if (point_in_rect_region(region, x, y)) {
+            return &region;
+        }
+    }
+    return nullptr;
+}
+
+inline double rect_region_signed_phi(
+    const FluidSolidConfig2D& cfg,
+    double x,
+    double y)
+{
+    double nearest_outside_distance = std::numeric_limits<double>::infinity();
+    for (const auto& region : cfg.solid_regions) {
+        const double dx_out = std::max({region.lower[0] - x, 0.0, x - region.upper[0]});
+        const double dy_out = std::max({region.lower[1] - y, 0.0, y - region.upper[1]});
+        const double outside_distance = std::hypot(dx_out, dy_out);
+        nearest_outside_distance = std::min(nearest_outside_distance, outside_distance);
+
+        if (point_in_rect_region(region, x, y)) {
+            const double inside_distance = std::min({
+                x - region.lower[0],
+                region.upper[0] - x,
+                y - region.lower[1],
+                region.upper[1] - y,
+            });
+            return std::max(inside_distance, 0.0);
+        }
+    }
+    return -nearest_outside_distance;
 }
 
 inline Conserved<2> fluid_state_from_pressure_normal_velocity_2d(
@@ -1180,13 +1289,13 @@ inline void advance_masked_rgfm_tensor_sweep(
     auto index = [&](int a, int line) {
         return dir == 0 ? hidx(a, line, nx) : hidx(line, a, nx);
     };
-    auto interface_state = [&](int fluid_id, int solid_id) {
+    auto interface_state = [&](int fluid_id, int solid_id, const std::array<double, 2>& face_normal) {
         return fluid_solid_rgfm_interface_states_2d(
             fluid[fluid_id],
             U[solid_id],
             cfg.fluid,
             cfg.solid,
-            cfg.interface_normal).solid_interface;
+            face_normal).solid_interface;
     };
 
     for (int line = 0; line < lines; ++line) {
@@ -1214,9 +1323,17 @@ inline void advance_masked_rgfm_tensor_sweep(
             const int right_neighbour = end + 1 < n ? index(end + 1, line) : -1;
             const bool left_fluid = left_neighbour >= 0 && fluid_mask[left_neighbour];
             const bool right_fluid = right_neighbour >= 0 && fluid_mask[right_neighbour];
-            ext[0] = left_fluid ? interface_state(left_neighbour, left_solid) : ext[1];
+            const std::array<double, 2> left_normal =
+                cfg.geometry == "rectangular_regions"
+                    ? (dir == 0 ? std::array<double, 2>{1.0, 0.0} : std::array<double, 2>{0.0, 1.0})
+                    : cfg.interface_normal;
+            const std::array<double, 2> right_normal =
+                cfg.geometry == "rectangular_regions"
+                    ? (dir == 0 ? std::array<double, 2>{-1.0, 0.0} : std::array<double, 2>{0.0, -1.0})
+                    : cfg.interface_normal;
+            ext[0] = left_fluid ? interface_state(left_neighbour, left_solid, left_normal) : ext[1];
             ext[segment_cells + 1] =
-                right_fluid ? interface_state(right_neighbour, right_solid) : ext[segment_cells];
+                right_fluid ? interface_state(right_neighbour, right_solid, right_normal) : ext[segment_cells];
 
             std::vector<TensorState2D> left_cell(segment_cells + 2);
             std::vector<TensorState2D> right_cell(segment_cells + 2);
@@ -1612,9 +1729,23 @@ inline int run_fluid_solid_rgfm_2d(const std::string& config_file)
             const int id = hidx(i, j, nx);
             const double x = cfg.domain_min[0] + (static_cast<double>(i) + 0.5) * dx;
             const double y = cfg.domain_min[1] + (static_cast<double>(j) + 0.5) * dy;
-            phi[id] = signed_phi(cfg, x, y);
-            fluid_mask[id] = is_fluid_phi(phi[id]) ? 1 : 0;
-            solid_mask[id] = fluid_mask[id] ? 0 : 1;
+            if (cfg.geometry == "rectangular_regions") {
+                const FluidSolidRectRegion2D* region = find_solid_region_2d(cfg, x, y);
+                phi[id] = rect_region_signed_phi(cfg, x, y);
+                fluid_mask[id] = region == nullptr ? 1 : 0;
+                solid_mask[id] = region == nullptr ? 0 : 1;
+                if (region != nullptr) {
+                    solid_cells[id] = make_solid_state_from_config_2d(
+                        region->state,
+                        cfg.solid,
+                        cfg.interface_normal);
+                }
+            }
+            else {
+                phi[id] = signed_phi(cfg, x, y);
+                fluid_mask[id] = is_fluid_phi(phi[id]) ? 1 : 0;
+                solid_mask[id] = fluid_mask[id] ? 0 : 1;
+            }
         }
     }
     initialise_solid_material_coordinates(
@@ -1643,13 +1774,13 @@ inline int run_fluid_solid_rgfm_2d(const std::string& config_file)
         const std::array<double, 2> ex{1.0, 0.0};
         const std::array<double, 2> ey{0.0, 1.0};
 
-        auto face_interface = [&](int fluid_id, int solid_id) {
+        auto face_interface = [&](int fluid_id, int solid_id, const std::array<double, 2>& face_normal) {
             const auto state = fluid_solid_rgfm_interface_states_2d(
                 fluid[fluid_id],
                 solid_cells[solid_id],
                 cfg.fluid,
                 cfg.solid,
-                cfg.interface_normal);
+                face_normal);
             rgfm_fluid[fluid_id] = state.fluid_interface;
             rgfm_solid[solid_id] = state.solid_interface;
             return state;
@@ -1678,11 +1809,17 @@ inline int run_fluid_solid_rgfm_2d(const std::string& config_file)
                     continue;
                 }
                 else if (fluid_mask[left] && solid_mask[right]) {
-                    const auto state = face_interface(left, right);
+                    const std::array<double, 2> nface =
+                        cfg.geometry == "rectangular_regions" ? ex : cfg.interface_normal;
+                    const auto state = face_interface(left, right, nface);
                     flux_fx[fid] = compute_flux_normal<2, MaterialEOS>(state.fluid_interface, ex, cfg.fluid);
                 }
                 else {
-                    const auto state = face_interface(right, left);
+                    const std::array<double, 2> nface =
+                        cfg.geometry == "rectangular_regions"
+                            ? std::array<double, 2>{-1.0, 0.0}
+                            : cfg.interface_normal;
+                    const auto state = face_interface(right, left, nface);
                     flux_fx[fid] = compute_flux_normal<2, MaterialEOS>(state.fluid_interface, ex, cfg.fluid);
                 }
             }
@@ -1711,11 +1848,17 @@ inline int run_fluid_solid_rgfm_2d(const std::string& config_file)
                     continue;
                 }
                 else if (fluid_mask[down] && solid_mask[up]) {
-                    const auto state = face_interface(down, up);
+                    const std::array<double, 2> nface =
+                        cfg.geometry == "rectangular_regions" ? ey : cfg.interface_normal;
+                    const auto state = face_interface(down, up, nface);
                     flux_fy[fid] = compute_flux_normal<2, MaterialEOS>(state.fluid_interface, ey, cfg.fluid);
                 }
                 else {
-                    const auto state = face_interface(up, down);
+                    const std::array<double, 2> nface =
+                        cfg.geometry == "rectangular_regions"
+                            ? std::array<double, 2>{0.0, -1.0}
+                            : cfg.interface_normal;
+                    const auto state = face_interface(up, down, nface);
                     flux_fy[fid] = compute_flux_normal<2, MaterialEOS>(state.fluid_interface, ey, cfg.fluid);
                 }
             }

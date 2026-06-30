@@ -15,11 +15,28 @@
 
 #include "src/sim/gfm/tracked_interface.hpp"
 #include "src/euler/riemann/hllc.hpp"
+#include "src/euler/riemann/hll.hpp"
 #include "src/sim/gfm/ghost.hpp"
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
 #include "src/euler/flux.hpp"
 #include "src/math/numerical_safety.hpp"
+
+template<int DIM, typename EOS>
+inline Conserved<DIM> sharp_interface_flux_normal(
+    const Conserved<DIM>& UL,
+    const Conserved<DIM>& UR,
+    const std::array<double, DIM>& normal,
+    const EOSParams& paramsL,
+    const EOSParams& paramsR)
+{
+    if (eos_has_stiffened_gas_wave_curve(paramsL) &&
+        eos_has_stiffened_gas_wave_curve(paramsR)) {
+        return hllc_flux_normal<DIM, EOS>(UL, UR, normal, paramsL, paramsR);
+    }
+
+    return hll_flux_normal<DIM, EOS>(UL, UR, normal, paramsL, paramsR);
+}
 
 
 // [1] Advance one extracted line by one split sweep
@@ -64,7 +81,9 @@ inline void advance_line(
             std::vector<EOSParams> mat_params(L, ctx.material_params[mat]);
 
             for (int i = 0; i < L; ++i) {
-                U_mat_line[i] = (*material_states)[mat][id_line[i]];
+                U_mat_line[i] = (mat_line[i] == mat)
+                    ? U_line[i]
+                    : (*material_states)[mat][id_line[i]];
             }
 
             std::vector<Conserved<DIM>> UL_face;
@@ -91,7 +110,7 @@ inline void advance_line(
                     ctx.material_params[mat]
                 );
 
-                flux_by_material[mat][i] = hllc_flux_normal<DIM, EOS>(
+                flux_by_material[mat][i] = sharp_interface_flux_normal<DIM, EOS>(
                     UL_face[i],
                     UR_face[i],
                     n_axis,
@@ -106,7 +125,7 @@ inline void advance_line(
         for (int i = 1; i < L - 1; ++i) {
             const int mat = mat_line[i];
             Conserved<DIM> U_next =
-                (*material_states)[mat][id_line[i]]
+                U_line[i]
                 - factor * (
                     flux_by_material[mat][i]
                   - flux_by_material[mat][i - 1]
@@ -260,7 +279,7 @@ inline void advance_line(
         if (matL == matR) {
             const std::array<double, DIM> n_axis = axis_normal<DIM>(dir);
 
-            F[i] = hllc_flux_normal<DIM, EOS>(
+            F[i] = sharp_interface_flux_normal<DIM, EOS>(
                 UL_face[i],
                 UR_face[i],
                 n_axis,

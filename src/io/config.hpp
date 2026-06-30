@@ -55,7 +55,7 @@ struct Config {
     std::vector<Region<DIM>> regions{};
 
     // [3.1] Initial condition mode
-    std::string initial_condition = "regions"; // "regions", "planar_regions", "explosion", "double_explosion", or "shock_bubble"
+    std::string initial_condition = "regions"; // "regions", "planar_regions", "explosion", "double_explosion", "shock_bubble", or "coated_shock_bubble"
 
     // [3.1.1] Oblique planar region IC
     std::array<double, DIM> planar_normal{};
@@ -96,6 +96,12 @@ struct Config {
     double p_bubble = 0.0;
     int material_bubble = -1;
 
+    double film_radius = 0.0;
+    double rho_film = 0.0;
+    std::array<double, DIM> vel_film{};
+    double p_film = 0.0;
+    int material_film = -1;
+
     // [3.4] Interface method
     std::string interface_method = "SM"; // SM, GFM, DIM
     std::string time_update = "split"; // split, unsplit
@@ -104,10 +110,17 @@ struct Config {
     bool use_level_set = false;
     int reinit_interval = 0;
     int reinit_iterations = 10;
+    std::string level_set_reinit_method = "sussman";
     std::string level_set_advection = "normal_speed";
+    std::string level_set_spatial_derivative = "tvd";
+    bool rgfm_diagnostics = false;
+    int rgfm_diagnostics_interval = 1;
+    std::string rgfm_star_velocity_mode = "input_mean";
 
     // [3.6] Diffuse interface (DIM only)
     double interface_thickness = 0.0;
+    int barton_solid_material = -1;
+    double barton_temperature = 300.0;
 
     // [3.7] Physical boundary conditions
     std::array<std::string, DIM> bc_lo{};

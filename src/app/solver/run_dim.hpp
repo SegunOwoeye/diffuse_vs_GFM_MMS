@@ -9,6 +9,7 @@
 #include "src/app/io/conservation_report.hpp"
 #include "src/app/io/dim_output_utils.hpp"
 #include "src/app/io/runtime_report.hpp"
+#include "src/app/material/material_builder.hpp"
 #include "src/dim/eos_params.hpp"
 #include "src/dim/solver/advance_step.hpp"
 #include "src/io/config.hpp"
@@ -22,8 +23,23 @@ inline void run_dim_case(
     const dim::EOSParams& material_params
 )
 {
+    dim::EOSParams active_material_params = material_params;
+    if (cfg.barton_solid_material >= 0) {
+        int solid_slot = -1;
+        for (int k = 0; k < static_cast<int>(cfg.materials.size()); ++k) {
+            if (cfg.materials[k].id == cfg.barton_solid_material) {
+                solid_slot = k;
+                active_material_params.barton_solid = build_barton_tensor_material(cfg.materials[k]);
+                break;
+            }
+        }
+        if (solid_slot < 0) {
+            throw std::runtime_error("run_dim_case: barton_solid_material is not configured");
+        }
+        active_material_params.barton_solid_material = solid_slot;
+    }
     std::vector<dim::State<DIM>> U;
-    dim::initialise_dim_from_config<DIM>(U, cfg, N, material_params);
+    dim::initialise_dim_from_config<DIM>(U, cfg, N, active_material_params);
 
     std::array<double, DIM> dx{};
     for (int d = 0; d < DIM; ++d) {
@@ -43,7 +59,7 @@ inline void run_dim_case(
             app_io::compute_dim_conservation_totals<DIM>(
                 U,
                 dx,
-                material_params.nmat()
+                active_material_params.nmat()
             );
 
         conservation_report.emplace(cfg, N, initial_totals);
@@ -55,7 +71,7 @@ inline void run_dim_case(
             cfg,
             N,
             U,
-            material_params,
+            active_material_params,
             dim_app::format_time_tag(snapshot_time)
         );
     };
@@ -70,7 +86,7 @@ inline void run_dim_case(
             U,
             N,
             dx,
-            material_params,
+            active_material_params,
             cfg,
             cfg.cfl,
             next_output_time - time
@@ -91,7 +107,7 @@ inline void run_dim_case(
                     U,
                     N,
                     dx,
-                    material_params
+                    active_material_params
                 )
             );
         }
@@ -113,7 +129,7 @@ inline void run_dim_case(
                 app_io::compute_dim_conservation_totals<DIM>(
                     U,
                     dx,
-                    material_params.nmat()
+                    active_material_params.nmat()
                 )
             );
         }
@@ -124,7 +140,7 @@ inline void run_dim_case(
         std::chrono::duration<double>(wall_end - wall_start).count();
 
     if (cfg.output_times.empty()) {
-        dim_app::write_numerical_output<DIM>(cfg, N, U, material_params);
+        dim_app::write_numerical_output<DIM>(cfg, N, U, active_material_params);
     }
 
     app_io::write_runtime_report<DIM>(cfg, N, step, time, wall_seconds);

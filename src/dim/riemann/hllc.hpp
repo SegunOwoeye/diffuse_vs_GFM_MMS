@@ -140,6 +140,11 @@ namespace dim {
             for (int k = 0; k < nmat; ++k) {
                 UL_star.partial_mass[k] = UL.partial_mass[k] * mass_scale;
             }
+            for (int q = 0; q < 9; ++q) {
+                UL_star.solid_rhoF[q] = UL.solid_rhoF[q] * mass_scale;
+            }
+            UL_star.solid_rho_eqps = UL.solid_rho_eqps * mass_scale;
+            UL_star.solid_rho_damage = UL.solid_rho_damage * mass_scale;
 
             std::array<double, DIM> u_star = PL.vel;
             const double delta = s_star - unL;
@@ -166,6 +171,11 @@ namespace dim {
         for (int k = 0; k < nmat; ++k) {
             UR_star.partial_mass[k] = UR.partial_mass[k] * mass_scale;
         }
+        for (int q = 0; q < 9; ++q) {
+            UR_star.solid_rhoF[q] = UR.solid_rhoF[q] * mass_scale;
+        }
+        UR_star.solid_rho_eqps = UR.solid_rho_eqps * mass_scale;
+        UR_star.solid_rho_damage = UR.solid_rho_damage * mass_scale;
 
         std::array<double, DIM> u_star = PR.vel;
         const double delta = s_star - unR;

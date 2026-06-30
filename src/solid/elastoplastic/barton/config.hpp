@@ -214,7 +214,16 @@ inline Config load_config(const std::string& filename)
 namespace solid::barton {
 
 struct TensorSolverConfig {
+    struct PlateState {
+        double rho = 2700.0;
+        std::array<double, 3> vel{0.0, 0.0, 0.0};
+        double temperature = 300.0;
+        bool has_pressure = false;
+        double pressure = 1.0e5;
+    };
+
     int dimension = 2;
+    std::string test_case = "radial_pressure";
     std::array<double, 3> domain_min{0.0, 0.0, 0.0};
     std::array<double, 3> domain_max{0.10, 0.10, 0.10};
     std::array<int, 3> cells{250, 250, 1};
@@ -225,7 +234,16 @@ struct TensorSolverConfig {
     double hot_pressure = 10.0e9;
     double cold_temperature = 300.0;
     double hot_temperature = 600.0;
+    std::vector<double> output_times{};
+    BoundaryConditions bc{};
     TensorMaterial material{};
+    TensorMaterial left_material{};
+    TensorMaterial right_material{};
+    bool has_left_material = false;
+    bool has_right_material = false;
+    double interface_position = 0.25;
+    PlateState left_state{};
+    PlateState right_state{};
     bool material_points = false;
     int material_point_stride = 2;
     int material_point_output_interval = 0;
@@ -322,6 +340,32 @@ inline void parse_johnson_cook_damage_value(TensorMaterial& mat, const std::stri
     }
 }
 
+inline TensorSolverConfig::PlateState parse_tensor_plate_state(const std::string& value)
+{
+    TensorSolverConfig::PlateState state{};
+    for (const auto& part : solid::text::split_csv(value)) {
+        const auto [key, raw] = solid::text::split_key_value(part);
+        if (key == "rho") state.rho = std::stod(raw);
+        else if (key == "u" || key == "ux") state.vel[0] = std::stod(raw);
+        else if (key == "v" || key == "uy") state.vel[1] = std::stod(raw);
+        else if (key == "w" || key == "uz") state.vel[2] = std::stod(raw);
+        else if (key == "T" || key == "temperature") state.temperature = std::stod(raw);
+        else if (key == "p" || key == "pressure") {
+            state.has_pressure = true;
+            state.pressure = std::stod(raw);
+        }
+        else throw std::runtime_error("Unknown Barton tensor plate state key: " + key);
+    }
+    return state;
+}
+
+inline bool is_tensor_bimaterial_1d_test_case(const std::string& test_case)
+{
+    return test_case == "plate_impact_1d" ||
+           test_case == "solid_solid_shear_1d" ||
+           test_case == "solid_fluid_1d";
+}
+
 inline TensorSolverConfig load_tensor_solver_config(const std::string& filename)
 {
     std::ifstream file(filename);
@@ -340,12 +384,22 @@ inline TensorSolverConfig load_tensor_solver_config(const std::string& filename)
             cfg.cells = parse_tensor_cells3(value, cfg.cells[2]);
         }
         else if (key == "radial_cells") cfg.radial_cells = static_cast<int>(std::stod(value));
+        else if (key == "interface" || key == "interface_x") {
+            cfg.interface_position = solid::text::parse_single_bracket_value(value);
+        }
         else if (key == "tfinal") cfg.tfinal = std::stod(value);
         else if (key == "cfl") cfg.cfl = std::stod(value);
         else if (key == "hot_radius") cfg.hot_radius = std::stod(value);
         else if (key == "hot_pressure") cfg.hot_pressure = std::stod(value);
         else if (key == "cold_temperature") cfg.cold_temperature = std::stod(value);
         else if (key == "hot_temperature") cfg.hot_temperature = std::stod(value);
+        else if (key == "output_times") {
+            cfg.output_times.clear();
+            for (const auto& part : solid::text::split_csv(value)) {
+                cfg.output_times.push_back(solid::text::parse_single_bracket_value(part));
+            }
+            std::sort(cfg.output_times.begin(), cfg.output_times.end());
+        }
         else if (key == "damage_model") {
             parse_tensor_material_value(cfg.material, key, value);
         }
@@ -374,6 +428,24 @@ inline TensorSolverConfig load_tensor_solver_config(const std::string& filename)
         }
         else if (key == "output_prefix") cfg.output_prefix = value;
         else if (key == "output_dir") cfg.output_dir = value;
+        else if (key == "left_material" || key == "material_left") {
+            cfg.left_material = TensorMaterial{};
+            for (const auto& part : solid::text::split_csv(value)) {
+                const auto [mat_key, mat_value] = solid::text::split_key_value(part);
+                parse_tensor_material_value(cfg.left_material, mat_key, mat_value);
+            }
+            cfg.has_left_material = true;
+        }
+        else if (key == "right_material" || key == "material_right") {
+            cfg.right_material = TensorMaterial{};
+            for (const auto& part : solid::text::split_csv(value)) {
+                const auto [mat_key, mat_value] = solid::text::split_key_value(part);
+                parse_tensor_material_value(cfg.right_material, mat_key, mat_value);
+            }
+            cfg.has_right_material = true;
+        }
+        else if (key == "left_state") cfg.left_state = parse_tensor_plate_state(value);
+        else if (key == "right_state") cfg.right_state = parse_tensor_plate_state(value);
         else if (key == "material") {
             for (const auto& part : solid::text::split_csv(value)) {
                 const auto [mat_key, mat_value] = solid::text::split_key_value(part);
@@ -393,14 +465,23 @@ inline TensorSolverConfig load_tensor_solver_config(const std::string& filename)
                 cfg.cells[2] = 1;
             }
         }
-        else if (key == "model" || key == "test_case" || key == "formulation" ||
-                 key == "bc_lo" || key == "bc_hi") {
+        else if (key == "test_case") cfg.test_case = solid::text::trim(value);
+        else if (key == "bc_lo") cfg.bc.left = solid::text::trim(value);
+        else if (key == "bc_hi") cfg.bc.right = solid::text::trim(value);
+        else if (key == "model" || key == "formulation") {
             continue;
         }
         else throw std::runtime_error("Unknown Barton tensor solver config key: " + key);
     }
-    if (cfg.dimension != 2 && cfg.dimension != 3) {
-        throw std::runtime_error("Barton tensor solver supports dimension=2 or dimension=3");
+    if (is_tensor_bimaterial_1d_test_case(cfg.test_case)) {
+        cfg.dimension = 1;
+        cfg.cells[1] = 1;
+        cfg.cells[2] = 1;
+        if (!cfg.has_left_material) cfg.left_material = cfg.material;
+        if (!cfg.has_right_material) cfg.right_material = cfg.material;
+    }
+    if (cfg.dimension != 1 && cfg.dimension != 2 && cfg.dimension != 3) {
+        throw std::runtime_error("Barton tensor solver supports dimension=1, dimension=2, or dimension=3");
     }
     if (cfg.dimension == 2) {
         cfg.cells[2] = 1;
@@ -408,9 +489,14 @@ inline TensorSolverConfig load_tensor_solver_config(const std::string& filename)
     if (cfg.cells[0] <= 0 || cfg.cells[1] <= 0 || cfg.cells[2] <= 0 || cfg.radial_cells <= 0) {
         throw std::runtime_error("Barton tensor solver requires positive grid sizes");
     }
-    if (cfg.domain_max[0] <= cfg.domain_min[0] || cfg.domain_max[1] <= cfg.domain_min[1] ||
+    if (cfg.domain_max[0] <= cfg.domain_min[0] ||
+        (cfg.dimension >= 2 && cfg.domain_max[1] <= cfg.domain_min[1]) ||
         (cfg.dimension == 3 && cfg.domain_max[2] <= cfg.domain_min[2])) {
         throw std::runtime_error("Barton tensor solver domain_max must exceed domain_min");
+    }
+    if (is_tensor_bimaterial_1d_test_case(cfg.test_case) &&
+        (cfg.interface_position <= cfg.domain_min[0] || cfg.interface_position >= cfg.domain_max[0])) {
+        throw std::runtime_error("Barton tensor plate-impact interface must lie inside the domain");
     }
     if (cfg.tfinal <= 0.0 || cfg.cfl <= 0.0 || cfg.hot_radius <= 0.0) {
         throw std::runtime_error("Invalid Barton tensor solver time/CFL/radius controls");
@@ -454,7 +540,8 @@ inline bool is_tensor_solver_config(const std::string& filename)
             return value == "radial_pressure" ||
                    value == "radial_thermal_pressure" ||
                    value == "spherical_pressure" ||
-                   value == "spherical_thermal_pressure";
+                   value == "spherical_thermal_pressure" ||
+                   is_tensor_bimaterial_1d_test_case(value);
         }
     }
     return false;

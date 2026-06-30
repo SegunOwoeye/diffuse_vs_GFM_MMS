@@ -488,6 +488,8 @@ def plot_2d_schlieren(
     labels,
     save_path=None,
     extras_list=None,
+    same_material_schlieren=False,
+    interface_overlay=False,
 ):
     if extras_list is None:
         extras_list = [{} for _ in xs]
@@ -504,8 +506,9 @@ def plot_2d_schlieren(
 
     material_grid = material_grid_from_extras(x, y, extras) if is_bubble_collapse else None
     interface_grid = None
+    interface_contour_level = None
     if is_bubble_collapse:
-        interface_grid, _, _ = bubble_interface_grid_from_extras(x, y, extras)
+        interface_grid, interface_contour_level, _ = bubble_interface_grid_from_extras(x, y, extras)
 
     if is_bubble_collapse:
         if material_grid is not None:
@@ -529,7 +532,15 @@ def plot_2d_schlieren(
         dx_grad = dx
         dy_grad = dy
 
-    grad_y, grad_x = np.gradient(rho_grid, dy_grad, dx_grad)
+    if is_bubble_collapse and same_material_schlieren and material_grid is not None:
+        grad_x, grad_y = same_material_density_gradient(
+            rho_grid,
+            material_grid,
+            dx_grad,
+            dy_grad,
+        )
+    else:
+        grad_y, grad_x = np.gradient(rho_grid, dy_grad, dx_grad)
     grad_mag = np.sqrt(grad_x * grad_x + grad_y * grad_y)
 
     if is_bubble_collapse:
@@ -554,10 +565,24 @@ def plot_2d_schlieren(
         # The reference helium-bubble figure reflects the top-half computation
         # and then rotates the image 90 degrees clockwise for presentation.
         display = rotate_bubble_display(schlieren)
+        contour_display = None
+        contour_level = None
+        if interface_overlay and interface_grid is not None:
+            contour_display = rotate_bubble_display(interface_grid)
+            contour_level = interface_contour_level
         if save_path is not None:
             remove_bubble_collapse_auxiliary_plots(save_path)
 
-        save_rotated_bubble_schlieren(display, X, Y, save_path, draw_reference_circle=True)
+        save_rotated_bubble_schlieren(
+            display,
+            X,
+            Y,
+            save_path,
+            draw_reference_circle=True,
+            contour_display=contour_display,
+            contour_level=contour_level,
+            contour_color="tab:red",
+        )
         return
 
     fig, ax = plt.subplots(figsize=(10, 5), constrained_layout=True)
@@ -700,6 +725,8 @@ def plot_schlieren_sequence_from_times(
     folder_path,
     data_root,
     save_path=None,
+    same_material_schlieren=False,
+    interface_overlay=False,
 ):
     time_files = time_tagged_csv_files(folder_path)
 
@@ -708,7 +735,10 @@ def plot_schlieren_sequence_from_times(
 
     output_stem = save_path.stem if save_path is not None else folder_path.name
     for time_value, csv_path in time_files:
-        relative_csv = csv_path.relative_to(data_root)
+        try:
+            plot_csv = csv_path.relative_to(data_root)
+        except ValueError:
+            plot_csv = csv_path
         time_tag = re.search(r"_(t[0-9peEm+\-]+)_N", csv_path.name)
         if time_tag is not None:
             tag = time_tag.group(1)
@@ -717,10 +747,12 @@ def plot_schlieren_sequence_from_times(
 
         frame_path = folder_path / f"{output_stem}_{tag}.png"
         plot_multiple_cpp_solutions(
-            [str(relative_csv)],
+            [str(plot_csv)],
             save_path=frame_path,
             force_schlieren=True,
             diagnostics=False,
+            same_material_schlieren=same_material_schlieren,
+            interface_overlay=interface_overlay,
         )
 
 
@@ -796,6 +828,8 @@ def plot_multiple_cpp_solutions(
     force_schlieren=False,
     diagnostics=True,
     exact_root=Path("data/exact"),
+    same_material_schlieren=False,
+    interface_overlay=False,
 ):
     """Compatibility orchestration entry point used by `plot_multid.py`.
 
@@ -918,6 +952,8 @@ def plot_multiple_cpp_solutions(
                 labels,
                 save_path=schlieren_path,
                 extras_list=extras_list,
+                same_material_schlieren=same_material_schlieren,
+                interface_overlay=interface_overlay,
             )
         else:
             remove_if_exists(schlieren_path)

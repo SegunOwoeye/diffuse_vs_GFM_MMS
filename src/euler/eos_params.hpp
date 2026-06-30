@@ -10,7 +10,8 @@ enum class EOSKind {
     stiffened_gas,
     noble_abel,
     peng_robinson,
-    tait
+    tait,
+    mie_gruneisen
 };
 
 
@@ -30,6 +31,11 @@ inline EOSKind eos_kind_from_string(const std::string& type)
     }
     if (type == "tait") {
         return EOSKind::tait;
+    }
+    if (type == "mie_gruneisen" ||
+        type == "mie-gruneisen" ||
+        type == "mie_gruneisen_fluid") {
+        return EOSKind::mie_gruneisen;
     }
 
     throw std::runtime_error("Unsupported EOS type: " + type);
@@ -63,5 +69,12 @@ struct EOSParams {
     double tait_B = 0.0;
     double rho0 = 1.0;
     double p0 = 0.0;
+
+    // Mie-Gruneisen fluid parameters from Gorsse et al. TC7.
+    double rho_ref = 1.0;
+    double mie_A1 = 0.0;
+    double mie_A2 = 0.0;
+    double mie_E1 = 1.0;
+    double mie_E2 = 1.0;
 
 };

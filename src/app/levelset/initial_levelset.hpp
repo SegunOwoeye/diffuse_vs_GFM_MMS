@@ -458,7 +458,8 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
         cfg.initial_condition != "planar_regions" &&
         cfg.initial_condition != "explosion" &&
         cfg.initial_condition != "double_explosion" &&
-        cfg.initial_condition != "shock_bubble") {
+        cfg.initial_condition != "shock_bubble" &&
+        cfg.initial_condition != "coated_shock_bubble") {
         throw std::runtime_error(
             "initialise_phi_data_from_regions: unsupported initial condition for GFM level sets"
         );
@@ -542,8 +543,63 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
 
     if (cfg.initial_condition == "explosion" ||
         cfg.initial_condition == "double_explosion" ||
-        cfg.initial_condition == "shock_bubble") {
+        cfg.initial_condition == "shock_bubble" ||
+        cfg.initial_condition == "coated_shock_bubble") {
         const bool is_shock_bubble = (cfg.initial_condition == "shock_bubble");
+        const bool is_coated_shock_bubble = (cfg.initial_condition == "coated_shock_bubble");
+
+        if (is_coated_shock_bubble) {
+            const auto add_radial_phi = [&](int tracked_material, double inner_radius, double outer_radius) {
+                if (tracked_material == out.background_material_id) {
+                    return;
+                }
+
+                std::vector<double> phi(total_cells, 0.0);
+
+                for (int id = 0; id < total_cells; ++id) {
+                    const std::array<int, DIM> idx = unflatten_index<DIM>(id, grid);
+                    const auto x =
+                        initial_level_set_detail::cell_center<DIM>(
+                            idx,
+                            cfg.domain_min,
+                            dx
+                        );
+
+                    double r2 = 0.0;
+                    for (int d = 0; d < DIM; ++d) {
+                        const double delta = x[d] - cfg.bubble_center[d];
+                        r2 += delta * delta;
+                    }
+
+                    const double r = std::sqrt(r2);
+                    if (inner_radius <= 0.0) {
+                        phi[id] = r - outer_radius;
+                    }
+                    else if (r < inner_radius) {
+                        phi[id] = inner_radius - r;
+                    }
+                    else if (r <= outer_radius) {
+                        phi[id] = -std::min(r - inner_radius, outer_radius - r);
+                    }
+                    else {
+                        phi[id] = r - outer_radius;
+                    }
+                }
+
+                out.phi_list.push_back(phi);
+                out.tracked_interfaces.push_back(
+                    TrackedInterface{
+                        tracked_material,
+                        static_cast<int>(out.tracked_interfaces.size())
+                    }
+                );
+            };
+
+            add_radial_phi(cfg.material_bubble, 0.0, cfg.bubble_radius);
+            add_radial_phi(cfg.material_film, cfg.bubble_radius, cfg.film_radius);
+            return out;
+        }
+
         const double radius = is_shock_bubble
             ? cfg.bubble_radius
             : cfg.explosion_radius;
@@ -672,5 +728,4 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
 
     return out;
 }
-
 

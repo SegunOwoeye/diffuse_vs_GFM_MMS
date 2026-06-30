@@ -7,16 +7,10 @@
 
 #include "src/sim/level_set/level_set_core.hpp"
 #include "src/math/numerical_safety.hpp"
+#include "src/core/fv/limiters.hpp"
 
 
 namespace level_set_detail {
-
-// [0] Small parameter for WENO weights
-inline double weno_eps()
-{
-    return 1e-6;
-}
-
 
 // [1] Check that phi size matches grid
 template<int DIM>
@@ -70,51 +64,7 @@ inline double dplus_first_order(
 }
 
 
-// [4] Second-order one-sided minus derivative
-template<int DIM>
-inline double dminus_second_order(
-    const std::vector<double>& phi,
-    const LevelSetGrid<DIM>& grid,
-    const std::array<int, DIM>& idx,
-    int dir
-)
-{
-    const int id = flatten_index<DIM>(idx, grid);
-
-    const auto idx_m1 = offset_index_checked<DIM>(idx, dir, -1, grid);
-    const auto idx_m2 = offset_index_checked<DIM>(idx, dir, -2, grid);
-
-    const int id_m1 = flatten_index<DIM>(idx_m1, grid);
-    const int id_m2 = flatten_index<DIM>(idx_m2, grid);
-
-    return (3.0 * phi[id] - 4.0 * phi[id_m1] + phi[id_m2]) / (2.0 * grid.dx[dir]);
-}
-
-
-// [5] Second-order one-sided plus derivative
-template<int DIM>
-inline double dplus_second_order(
-    const std::vector<double>& phi,
-    const LevelSetGrid<DIM>& grid,
-    const std::array<int, DIM>& idx,
-    int dir
-)
-{
-    const int id = flatten_index<DIM>(idx, grid);
-
-    const auto idx_p1 = offset_index_checked<DIM>(idx, dir, +1, grid);
-    const auto idx_p2 = offset_index_checked<DIM>(idx, dir, +2, grid);
-
-    const int id_p1 = flatten_index<DIM>(idx_p1, grid);
-    const int id_p2 = flatten_index<DIM>(idx_p2, grid);
-
-    return (-3.0 * phi[id] + 4.0 * phi[id_p1] - phi[id_p2]) / (2.0 * grid.dx[dir]);
-}
-
-// FLAT-INDEX 
-
-
-// [6] First-order minus derivative (flat)
+// [4] First-order minus derivative (flat)
 inline double dminus_first_order_flat(
     const std::vector<double>& phi,
     int id,
@@ -126,7 +76,7 @@ inline double dminus_first_order_flat(
 }
 
 
-// [7] First-order plus derivative (flat)
+// [5] First-order plus derivative (flat)
 inline double dplus_first_order_flat(
     const std::vector<double>& phi,
     int id,
@@ -138,106 +88,60 @@ inline double dplus_first_order_flat(
 }
 
 
-// [8] Second-order minus derivative (flat)
-inline double dminus_second_order_flat(
+// [6] Minmod slope for TVD level-set reconstruction
+inline double tvd_minmod_slope_flat(
     const std::vector<double>& phi,
     int id,
-    int stride,
-    double dx
+    int stride
 )
 {
-    return (3.0 * phi[id] - 4.0 * phi[id - stride] + phi[id - 2 * stride]) / (2.0 * dx);
-}
-
-
-// [9] Second-order plus derivative (flat)
-inline double dplus_second_order_flat(
-    const std::vector<double>& phi,
-    int id,
-    int stride,
-    double dx
-)
-{
-    return (-3.0 * phi[id] + 4.0 * phi[id + stride] - phi[id + 2 * stride]) / (2.0 * dx);
-}
-
-
-// [10] WENO5 reconstruction from five consecutive derivative samples
-inline double weno5_from_derivative_samples(
-    double v0, double v1, double v2,
-    double v3, double v4
-)
-{
-    const double q0 = 1.0/3.0*v0 - 7.0/6.0*v1 + 11.0/6.0*v2;
-    const double q1 = -1.0/6.0*v1 + 5.0/6.0*v2 + 1.0/3.0*v3;
-    const double q2 = 1.0/3.0*v2 + 5.0/6.0*v3 - 1.0/6.0*v4;
-
-    const double b0 =
-        13.0/12.0 * (v0 - 2*v1 + v2)*(v0 - 2*v1 + v2) +
-        0.25 * (v0 - 4*v1 + 3*v2)*(v0 - 4*v1 + 3*v2);
-
-    const double b1 =
-        13.0/12.0 * (v1 - 2*v2 + v3)*(v1 - 2*v2 + v3) +
-        0.25 * (v1 - v3)*(v1 - v3);
-
-    const double b2 =
-        13.0/12.0 * (v2 - 2*v3 + v4)*(v2 - 2*v3 + v4) +
-        0.25 * (3*v2 - 4*v3 + v4)*(3*v2 - 4*v3 + v4);
-
-    const double eps = weno_eps();
-
-    const double a0 = 0.1 / ((eps + b0)*(eps + b0));
-    const double a1 = 0.6 / ((eps + b1)*(eps + b1));
-    const double a2 = 0.3 / ((eps + b2)*(eps + b2));
-
-    const double asum = a0 + a1 + a2;
-
-    return (a0/asum)*q0 + (a1/asum)*q1 + (a2/asum)*q2;
-}
-
-
-// [11] Hamilton-Jacobi WENO5 left derivative (flat)
-inline double weno5_left_flat(
-    const std::vector<double>& phi,
-    int id,
-    int stride,
-    double dx
-)
-{
-    return weno5_from_derivative_samples(
-        (phi[id - 2*stride] - phi[id - 3*stride]) / dx,
-        (phi[id - stride] - phi[id - 2*stride]) / dx,
-        (phi[id] - phi[id - stride]) / dx,
-        (phi[id + stride] - phi[id]) / dx,
-        (phi[id + 2*stride] - phi[id + stride]) / dx
+    return core::fv::minmod(
+        phi[id] - phi[id - stride],
+        phi[id + stride] - phi[id]
     );
 }
 
 
-// [12] Hamilton-Jacobi WENO5 right derivative (flat)
-inline double weno5_right_flat(
+// [7] Second-order TVD upwind derivative for positive transport speed
+inline double dminus_tvd_flat(
     const std::vector<double>& phi,
     int id,
     int stride,
     double dx
 )
 {
-    return weno5_from_derivative_samples(
-        (phi[id + 3*stride] - phi[id + 2*stride]) / dx,
-        (phi[id + 2*stride] - phi[id + stride]) / dx,
-        (phi[id + stride] - phi[id]) / dx,
-        (phi[id] - phi[id - stride]) / dx,
-        (phi[id - stride] - phi[id - 2*stride]) / dx
-    );
+    const double slope_i = tvd_minmod_slope_flat(phi, id, stride);
+    const double slope_im1 = tvd_minmod_slope_flat(phi, id - stride, stride);
+    const double right_face_left_state = phi[id] + 0.5 * slope_i;
+    const double left_face_left_state = phi[id - stride] + 0.5 * slope_im1;
+
+    return (right_face_left_state - left_face_left_state) / dx;
+}
+
+
+// [8] Second-order TVD upwind derivative for negative transport speed
+inline double dplus_tvd_flat(
+    const std::vector<double>& phi,
+    int id,
+    int stride,
+    double dx
+)
+{
+    const double slope_i = tvd_minmod_slope_flat(phi, id, stride);
+    const double slope_ip1 = tvd_minmod_slope_flat(phi, id + stride, stride);
+    const double right_face_right_state = phi[id + stride] - 0.5 * slope_ip1;
+    const double left_face_right_state = phi[id] - 0.5 * slope_i;
+
+    return (right_face_right_state - left_face_right_state) / dx;
 }
 
 // Public Flat API 
 
 /*
-    [14] Public one-sided minus derivative (flat)
+    [9] Public one-sided minus derivative (flat)
 
-    Uses the Jiang-Peng Hamilton-Jacobi WENO construction on first differences.
-    Falls back to second-/first-order one-sided differences near boundaries.
+    Uses minmod-limited MUSCL face reconstruction in the interior and falls
+    back to first-order one-sided differences near boundaries.
 */
 template<int DIM>
 inline double dminus_flat(
@@ -245,50 +149,46 @@ inline double dminus_flat(
     const LevelSetGrid<DIM>& grid,
     int id,
     int coord,
-    int dir
+    int dir,
+    LevelSetDerivativeScheme scheme = LevelSetDerivativeScheme::Tvd
 )
 {
     const int stride = grid.stride[dir];
     const double dx = grid.dx[dir];
 
-    if (coord >= 3 && coord <= grid.N[dir] - 3) {
-        return weno5_left_flat(phi, id, stride, dx);
-    }
-
-    if (coord >= 2) {
-        return dminus_second_order_flat(phi, id, stride, dx);
+    if (scheme == LevelSetDerivativeScheme::Tvd &&
+        coord >= 2 && coord <= grid.N[dir] - 2) {
+        return dminus_tvd_flat(phi, id, stride, dx);
     }
 
     return dminus_first_order_flat(phi, id, stride, dx);
 }
 
 
-// [15] Public one-sided plus derivative (flat)
+// [10] Public one-sided plus derivative (flat)
 template<int DIM>
 inline double dplus_flat(
     const std::vector<double>& phi,
     const LevelSetGrid<DIM>& grid,
     int id,
     int coord,
-    int dir
+    int dir,
+    LevelSetDerivativeScheme scheme = LevelSetDerivativeScheme::Tvd
 )
 {
     const int stride = grid.stride[dir];
     const double dx = grid.dx[dir];
 
-    if (coord >= 2 && coord <= grid.N[dir] - 4) {
-        return weno5_right_flat(phi, id, stride, dx);
-    }
-
-    if (coord <= grid.N[dir] - 3) {
-        return dplus_second_order_flat(phi, id, stride, dx);
+    if (scheme == LevelSetDerivativeScheme::Tvd &&
+        coord >= 1 && coord <= grid.N[dir] - 3) {
+        return dplus_tvd_flat(phi, id, stride, dx);
     }
 
     return dplus_first_order_flat(phi, id, stride, dx);
 }
 
 
-// [16] Public central derivative (flat)
+// [11] Public central derivative (flat)
 template<int DIM>
 inline double dcenter_flat(
     const std::vector<double>& phi,

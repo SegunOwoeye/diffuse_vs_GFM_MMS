@@ -10,6 +10,11 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from plot_style import apply_plot_style, configure_profile_axis, plot_profile
+
+
+apply_plot_style()
+
 
 def label_from_path(path: Path) -> str:
     match = re.search(r"_t([0-9p]+)us_", path.name)
@@ -53,12 +58,21 @@ def wilkins_stress_limits(
     )
 
 
+def normal_stress_gpa(frame: pd.DataFrame) -> pd.Series:
+    if "normal_stress" in frame:
+        return frame["normal_stress"] / 1.0e9
+    if "sigma_xx" in frame:
+        return frame["sigma_xx"] / 1.0e9
+    raise ValueError("Expected a normal_stress or sigma_xx column in the solid profile")
+
+
 def plot_wilkins_stress_grid(
     csv_paths: list[Path],
     out_path: Path | None,
     stress_ymin: float | None,
     stress_ymax: float | None,
     x_unit: str,
+    exact_csv_paths: list[Path] | None,
 ) -> None:
     fig, axes = plt.subplots(3, 2, figsize=(8.4, 9.2), sharex=True, sharey=True)
     axes = axes.flatten()
@@ -66,35 +80,39 @@ def plot_wilkins_stress_grid(
     x_scale = 100.0 if x_unit == "cm" else 1000.0
     x_label = "x [cm]" if x_unit == "cm" else "x [mm]"
     x_max = 5.0 if x_unit == "cm" else 50.0
+    if exact_csv_paths is not None and len(exact_csv_paths) != len(csv_paths):
+        raise ValueError("--exact must provide one reference CSV for each numerical snapshot")
 
-    for ax, csv_path in zip(axes, csv_paths):
+    for index, (ax, csv_path) in enumerate(zip(axes, csv_paths)):
         df = pd.read_csv(csv_path)
-        ax.plot(
+        if exact_csv_paths is not None:
+            exact = pd.read_csv(exact_csv_paths[index])
+            plot_profile(
+                ax,
+                x_scale * exact["x"],
+                normal_stress_gpa(exact),
+                "Exact",
+            )
+        plot_profile(
+            ax,
             x_scale * df["x"],
-            df["normal_stress"] / 1.0e9,
-            marker="+",
-            linestyle="none",
-            color="black",
-            markersize=2.2,
-            markeredgewidth=0.45,
+            normal_stress_gpa(df),
+            f"{len(df)} cells",
+            index=0,
         )
         ax.set_xlim(0.0, x_max)
         ax.set_ylim(ymin, ymax)
         ax.text(
             0.82,
             0.08,
-            f"t={time_label(csv_path)}",
+            rf"$t={time_label(csv_path)}\,\mu\mathrm{{s}}$",
             transform=ax.transAxes,
             ha="right",
             va="bottom",
             fontsize=10,
         )
-        ax.tick_params(direction="in", top=True, right=False)
-
-    for ax in axes[::2]:
-        ax.set_ylabel(r"Stress $\sigma_{11}$ [GPa]")
-    for ax in axes[-2:]:
-        ax.set_xlabel(x_label)
+        configure_profile_axis(ax, x_label=x_label, show_legend=True, show_title=False)
+        ax.set_ylabel(r"Stress, $\sigma_{11}$ (GPa)")
 
     fig.tight_layout()
     if out_path is None:
@@ -114,12 +132,20 @@ def plot_solid(
     stress_ymin: float | None,
     stress_ymax: float | None,
     x_unit: str,
+    exact_csv_paths: list[Path] | None,
 ) -> None:
     if not csv_paths:
         raise ValueError("No CSV files supplied")
 
     if wilkins_stress_grid:
-        plot_wilkins_stress_grid(csv_paths, out_path, stress_ymin, stress_ymax, x_unit)
+        plot_wilkins_stress_grid(
+            csv_paths,
+            out_path,
+            stress_ymin,
+            stress_ymax,
+            x_unit,
+            exact_csv_paths,
+        )
         return
 
     df = pd.read_csv(csv_paths[-1])
@@ -235,6 +261,16 @@ def main() -> None:
         default="mm",
         help="x-axis unit for --wilkins-stress-grid. Barton Section 6.1 uses cm.",
     )
+    parser.add_argument(
+        "--exact",
+        type=Path,
+        nargs="+",
+        default=None,
+        help=(
+            "Verified exact/reference CSVs for --wilkins-stress-grid, in the same order as the "
+            "numerical snapshots. Each file must provide x and normal_stress or sigma_xx."
+        ),
+    )
     args = parser.parse_args()
     plot_solid(
         args.csv,
@@ -244,6 +280,7 @@ def main() -> None:
         args.stress_ymin,
         args.stress_ymax,
         args.x_unit,
+        args.exact,
     )
 
 

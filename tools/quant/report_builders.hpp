@@ -10,6 +10,16 @@
 
 namespace quant {
 
+inline bool uses_bubble_feature_diagnostics(const RunSpec& run)
+{
+    return run.case_def.group == "shock_bubble_2d" ||
+           run.case_def.group == "shock_bubble_2d_zero_velocity" ||
+           run.case_def.group == "shock_bubble_2d_zero_velocity_physical_flow" ||
+           run.case_def.group == "shock_bubble_2d_zero_velocity_input_mean_star" ||
+           run.case_def.group == "shock_bubble_2d_zero_velocity_zero_star" ||
+           run.case_def.group == "shock_bubble_2d_static_equilibrium";
+}
+
 void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, const std::vector<bool>& successes)
 {
     std::vector<std::map<std::string, std::string>> summary;
@@ -123,7 +133,7 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
         if (!run.sensitivity.empty()) {
             sensitivity_rows.push_back(row);
         }
-        if (run.case_def.group == "shock_bubble_2d" && successes[i]) {
+        if (uses_bubble_feature_diagnostics(run) && successes[i]) {
             const auto features = bubble_features(result_root / "raw" / run.run_id, run.case_def.method, result_root / "runs" / run.run_id / "bubble_features.json");
             if (!features.summary.empty()) {
                 std::map<std::string, std::string> bubble_row = {

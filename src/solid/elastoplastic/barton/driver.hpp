@@ -93,9 +93,175 @@ inline int run_1d(const std::string& config_file)
 
 namespace solid::barton {
 
+inline TensorState3D tensor_state_from_plate_state(
+    const TensorSolverConfig::PlateState& state,
+    const TensorMaterial& mat)
+{
+    const double temperature = state.has_pressure
+        ? material_temperature_from_rho_p(state.rho, state.pressure, mat)
+        : state.temperature;
+    const std::array<double, 9> identity{1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+    return tensor_cons_from_F(
+        state.rho,
+        state.vel[0],
+        state.vel[1],
+        state.vel[2],
+        temperature,
+        identity,
+        mat);
+}
+
+inline int tensor_bimaterial_transition_index(const std::vector<int>& material_id)
+{
+    for (int i = 0; i + 1 < static_cast<int>(material_id.size()); ++i) {
+        if (material_id[i] != material_id[i + 1]) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+inline double tensor_bimaterial_interface_speed(
+    const std::vector<TensorState3D>& U,
+    const std::vector<int>& material_id,
+    const std::array<TensorMaterial, 2>& materials)
+{
+    const int i = tensor_bimaterial_transition_index(material_id);
+    if (i < 0) {
+        return 0.0;
+    }
+    TensorPrim3D PL = tensor_prim(U[i], materials[material_id[i]]);
+    TensorPrim3D PR = tensor_prim(U[i + 1], materials[material_id[i + 1]]);
+    tensor_solid_interface_star(PL, PR, materials[material_id[i]], materials[material_id[i + 1]]);
+    return 0.5 * (PL.vel[0] + PR.vel[0]);
+}
+
+inline void remap_tensor_bimaterial_materials_1d(
+    std::vector<TensorState3D>& U,
+    std::vector<int>& material_id,
+    const TensorSolverConfig& cfg,
+    const std::array<TensorMaterial, 2>& materials,
+    double interface_position)
+{
+    const int nx = cfg.cells[0];
+    const double dx = (cfg.domain_max[0] - cfg.domain_min[0]) / nx;
+    const TensorState3D fallback_left = tensor_state_from_plate_state(cfg.left_state, materials[0]);
+    const TensorState3D fallback_right = tensor_state_from_plate_state(cfg.right_state, materials[1]);
+    const std::vector<int> old_id = material_id;
+    const std::vector<TensorState3D> old_U = U;
+
+    for (int i = 0; i < nx; ++i) {
+        const double x = cfg.domain_min[0] + (i + 0.5) * dx;
+        const int desired = x < interface_position ? 0 : 1;
+        if (desired == old_id[i]) {
+            material_id[i] = desired;
+            continue;
+        }
+
+        material_id[i] = desired;
+        if (desired == 0) {
+            if (i > 0 && material_id[i - 1] == 0) {
+                U[i] = U[i - 1];
+            }
+            else if (i > 0 && old_id[i - 1] == 0) {
+                U[i] = old_U[i - 1];
+            }
+            else {
+                U[i] = fallback_left;
+            }
+        }
+        else {
+            if (i + 1 < nx && old_id[i + 1] == 1) {
+                U[i] = old_U[i + 1];
+            }
+            else if (i + 1 < nx && material_id[i + 1] == 1) {
+                U[i] = U[i + 1];
+            }
+            else {
+                U[i] = fallback_right;
+            }
+        }
+        enforce_tensor(U[i], materials[desired]);
+    }
+}
+
 inline int run_tensor_solver(const std::string& config_file)
 {
     const TensorSolverConfig cfg = load_tensor_solver_config(config_file);
+    if (is_tensor_bimaterial_1d_test_case(cfg.test_case)) {
+        std::vector<int> material_id;
+        std::vector<TensorState3D> U = initialise_tensor_plate_impact_1d(cfg, material_id);
+        const std::array<TensorMaterial, 2> materials{cfg.left_material, cfg.right_material};
+        const int nx = cfg.cells[0];
+        const double dx = (cfg.domain_max[0] - cfg.domain_min[0]) / nx;
+        std::string base = cfg.output_prefix;
+        if (!cfg.output_dir.empty()) {
+            base = cfg.output_dir + "/" + cfg.output_prefix + "/" + cfg.output_prefix;
+        }
+        ensure_directory(std::filesystem::path(base).parent_path().string());
+
+        std::vector<double> output_times = cfg.output_times.empty() ? std::vector<double>{cfg.tfinal} : cfg.output_times;
+        if (cfg.output_times.empty() && cfg.tfinal >= 15.0e-6 - 1.0e-15) {
+            output_times = {4.0e-6, 10.0e-6, 15.0e-6};
+        }
+        else if (cfg.output_times.empty() && cfg.tfinal >= 10.0e-6 - 1.0e-15) {
+            output_times = {4.0e-6, 10.0e-6};
+        }
+        else if (cfg.output_times.empty() && cfg.tfinal >= 4.0e-6 - 1.0e-15) {
+            output_times = {4.0e-6};
+        }
+
+        double time = 0.0;
+        double interface_position = cfg.interface_position;
+        int steps = 0;
+        std::size_t next_output = 0;
+        const auto wall_start = std::chrono::steady_clock::now();
+        while (time < cfg.tfinal - 1.0e-15) {
+            const double interface_speed = tensor_bimaterial_interface_speed(U, material_id, materials);
+            const double dt = advance_tensor_plate_impact_1d(
+                U, material_id, materials, cfg.bc, dx, cfg.cfl, cfg.tfinal - time);
+            if (!std::isfinite(dt) || dt <= 0.0) {
+                throw std::runtime_error("Barton tensor plate-impact timestep collapsed");
+            }
+            time += dt;
+            interface_position = std::clamp(
+                interface_position + interface_speed * dt,
+                cfg.domain_min[0],
+                cfg.domain_max[0]);
+            remap_tensor_bimaterial_materials_1d(U, material_id, cfg, materials, interface_position);
+            ++steps;
+            while (next_output < output_times.size() &&
+                   time >= output_times[next_output] - 1.0e-15) {
+                const double t_out = output_times[next_output];
+                write_tensor_plate_impact_1d(
+                    base + time_suffix(t_out) + "_N" + std::to_string(nx) + ".csv",
+                    U,
+                    material_id,
+                    cfg,
+                    materials);
+                ++next_output;
+            }
+            if (steps > 50000) {
+                throw std::runtime_error("Barton tensor plate-impact solver exceeded 50000 steps");
+            }
+        }
+        const auto wall_end = std::chrono::steady_clock::now();
+        const double wall_seconds = std::chrono::duration<double>(wall_end - wall_start).count();
+        const std::filesystem::path output_path(base + "_N" + std::to_string(nx) + ".csv");
+        write_tensor_plate_impact_1d(output_path.string(), U, material_id, cfg, materials);
+        std::ofstream runtime(base + "_N" + std::to_string(nx) + "_runtime.txt");
+        runtime << "steps = " << steps << "\n";
+        runtime << "final_time = " << time << "\n";
+        runtime << "wall_time_seconds = " << wall_seconds << "\n";
+        runtime << "cells = " << nx << "\n";
+        runtime << "model = barton_tensor_" << cfg.test_case << "\n";
+        runtime << "initial_interface = " << cfg.interface_position << "\n";
+        runtime << "final_interface = " << interface_position << "\n";
+        std::cout << "Written: " << output_path.string() << "\n";
+        std::cout << "steps = " << steps << ", final_time = " << time << "\n";
+        return 0;
+    }
+
     const TensorMaterial mat = cfg.material;
     if (cfg.dimension == 3) {
         std::vector<TensorState3D> U3 = initialise_tensor_cartesian_3d(cfg, mat);

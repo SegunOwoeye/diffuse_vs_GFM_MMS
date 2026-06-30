@@ -83,7 +83,7 @@ namespace dim {
 
             auto after_accumulation = [&](std::vector<State<DIM>>& U_accum)
             {
-                apply_boundary_conditions<DIM>(U_accum, N, cfg);
+                apply_boundary_conditions<DIM>(U_accum, N, cfg, params);
             };
 
             fv::advance_unsplit_directions<DIM>(
@@ -97,7 +97,7 @@ namespace dim {
         else {
             auto after_direction = [&](int, std::vector<State<DIM>>& U_next)
             {
-                apply_boundary_conditions<DIM>(U_next, N, cfg);
+                apply_boundary_conditions<DIM>(U_next, N, cfg, params);
             };
 
             fv::advance_split_directions<DIM>(

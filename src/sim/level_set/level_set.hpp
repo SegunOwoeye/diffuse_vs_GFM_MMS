@@ -412,12 +412,13 @@ inline void apply_neumann_bc(
 }
 
 
-// [11] RHS for phi_t + u dot grad(phi) = 0 with HJ-WENO upwinding
+// [11] RHS for phi_t + u dot grad(phi) = 0 with TVD upwinding
 template<int DIM>
 inline std::vector<double> level_set_flow_rhs(
     const std::vector<double>& phi,
     const std::vector<std::array<double, DIM>>& vel,
-    const LevelSetGrid<DIM>& grid
+    const LevelSetGrid<DIM>& grid,
+    LevelSetDerivativeScheme derivative_scheme = LevelSetDerivativeScheme::Tvd
 )
 {
     validate_level_set_field_size<DIM>(phi, grid, "level_set_flow_rhs");
@@ -439,8 +440,8 @@ inline std::vector<double> level_set_flow_rhs(
 
         for (int d = 0; d < DIM; ++d) {
             const double grad = (vel[id][d] >= 0.0)
-                ? level_set_detail::dminus_flat<DIM>(phi, grid, id, idx[d], d)
-                : level_set_detail::dplus_flat<DIM>(phi, grid, id, idx[d], d);
+                ? level_set_detail::dminus_flat<DIM>(phi, grid, id, idx[d], d, derivative_scheme)
+                : level_set_detail::dplus_flat<DIM>(phi, grid, id, idx[d], d, derivative_scheme);
 
             adv_term += vel[id][d] * grad;
         }
@@ -452,12 +453,13 @@ inline std::vector<double> level_set_flow_rhs(
 }
 
 
-// [12] RHS for phi_t + V_n |grad(phi)| = 0 with Godunov HJ-WENO derivatives
+// [12] RHS for phi_t + V_n |grad(phi)| = 0 with Godunov TVD derivatives
 template<int DIM>
 inline std::vector<double> level_set_normal_speed_rhs(
     const std::vector<double>& phi,
     const std::vector<double>& normal_speed,
-    const LevelSetGrid<DIM>& grid
+    const LevelSetGrid<DIM>& grid,
+    LevelSetDerivativeScheme derivative_scheme = LevelSetDerivativeScheme::Tvd
 )
 {
     validate_level_set_field_size<DIM>(phi, grid, "level_set_normal_speed_rhs");
@@ -479,8 +481,22 @@ inline std::vector<double> level_set_normal_speed_rhs(
         double grad_sq = 0.0;
 
         for (int d = 0; d < DIM; ++d) {
-            const double dm = level_set_detail::dminus_flat<DIM>(phi, grid, id, idx[d], d);
-            const double dp = level_set_detail::dplus_flat<DIM>(phi, grid, id, idx[d], d);
+            const double dm = level_set_detail::dminus_flat<DIM>(
+                phi,
+                grid,
+                id,
+                idx[d],
+                d,
+                derivative_scheme
+            );
+            const double dp = level_set_detail::dplus_flat<DIM>(
+                phi,
+                grid,
+                id,
+                idx[d],
+                d,
+                derivative_scheme
+            );
 
             double term = 0.0;
 
@@ -511,21 +527,23 @@ inline std::vector<double> level_set_normal_speed_rhs(
     Solves:
         phi_t + u dot grad(phi) = 0
 
-        using HJ-WENO5 spatial derivatives and TVD-RK3 time stepping.
+        using TVD-limited spatial derivatives and TVD-RK3 time stepping.
 */
 template<int DIM>
 inline std::vector<double> advect_phi(
     const std::vector<double>& phi,
     const std::vector<std::array<double, DIM>>& vel,
     const LevelSetGrid<DIM>& grid,
-    double dt
+    double dt,
+    LevelSetDerivativeScheme derivative_scheme = LevelSetDerivativeScheme::Tvd
 )
 {
     validate_level_set_field_size<DIM>(phi, grid, "advect_phi");
     validate_level_set_velocity_size<DIM>(vel, grid, "advect_phi");
 
     const int Ntot = static_cast<int>(total_cells(grid));
-    const std::vector<double> rhs0 = level_set_flow_rhs<DIM>(phi, vel, grid);
+    const std::vector<double> rhs0 =
+        level_set_flow_rhs<DIM>(phi, vel, grid, derivative_scheme);
 
     std::vector<double> phi1(Ntot, 0.0);
 
@@ -536,7 +554,8 @@ inline std::vector<double> advect_phi(
 
     apply_neumann_bc<DIM>(phi1, grid);
 
-    const std::vector<double> rhs1 = level_set_flow_rhs<DIM>(phi1, vel, grid);
+    const std::vector<double> rhs1 =
+        level_set_flow_rhs<DIM>(phi1, vel, grid, derivative_scheme);
 
     std::vector<double> phi2(Ntot, 0.0);
 
@@ -547,7 +566,8 @@ inline std::vector<double> advect_phi(
 
     apply_neumann_bc<DIM>(phi2, grid);
 
-    const std::vector<double> rhs2 = level_set_flow_rhs<DIM>(phi2, vel, grid);
+    const std::vector<double> rhs2 =
+        level_set_flow_rhs<DIM>(phi2, vel, grid, derivative_scheme);
 
     std::vector<double> phi_new(Ntot, 0.0);
 
@@ -569,7 +589,7 @@ inline std::vector<double> advect_phi(
     Solves:
         phi_t + V_n |grad(phi)| = 0
 
-        using Godunov HJ-WENO5 spatial derivatives and TVD-RK3 time stepping.
+        using Godunov TVD-limited spatial derivatives and TVD-RK3 time stepping.
         This is the sharp-interface transport path when V_n is supplied by rGFM.
 */
 template<int DIM>
@@ -577,7 +597,8 @@ inline std::vector<double> advect_phi_normal_speed(
     const std::vector<double>& phi,
     const std::vector<double>& normal_speed,
     const LevelSetGrid<DIM>& grid,
-    double dt
+    double dt,
+    LevelSetDerivativeScheme derivative_scheme = LevelSetDerivativeScheme::Tvd
 )
 {
     validate_level_set_field_size<DIM>(phi, grid, "advect_phi_normal_speed");
@@ -585,7 +606,7 @@ inline std::vector<double> advect_phi_normal_speed(
 
     const int Ntot = static_cast<int>(total_cells(grid));
     const std::vector<double> rhs0 =
-        level_set_normal_speed_rhs<DIM>(phi, normal_speed, grid);
+        level_set_normal_speed_rhs<DIM>(phi, normal_speed, grid, derivative_scheme);
 
     std::vector<double> phi1(Ntot, 0.0);
 
@@ -597,7 +618,7 @@ inline std::vector<double> advect_phi_normal_speed(
     apply_neumann_bc<DIM>(phi1, grid);
 
     const std::vector<double> rhs1 =
-        level_set_normal_speed_rhs<DIM>(phi1, normal_speed, grid);
+        level_set_normal_speed_rhs<DIM>(phi1, normal_speed, grid, derivative_scheme);
 
     std::vector<double> phi2(Ntot, 0.0);
 
@@ -609,7 +630,7 @@ inline std::vector<double> advect_phi_normal_speed(
     apply_neumann_bc<DIM>(phi2, grid);
 
     const std::vector<double> rhs2 =
-        level_set_normal_speed_rhs<DIM>(phi2, normal_speed, grid);
+        level_set_normal_speed_rhs<DIM>(phi2, normal_speed, grid, derivative_scheme);
 
     std::vector<double> phi_new(Ntot, 0.0);
 
@@ -637,7 +658,8 @@ template<int DIM>
 inline std::vector<double> level_set_reinit_rhs(
     const std::vector<double>& phi,
     const std::vector<double>& phi0,
-    const LevelSetGrid<DIM>& grid
+    const LevelSetGrid<DIM>& grid,
+    LevelSetDerivativeScheme derivative_scheme = LevelSetDerivativeScheme::Tvd
 )
 {
     validate_level_set_field_size<DIM>(phi, grid, "level_set_reinit_rhs");
@@ -660,8 +682,22 @@ inline std::vector<double> level_set_reinit_rhs(
         double grad_sq = 0.0;
 
         for (int d = 0; d < DIM; ++d) {
-            const double dm = level_set_detail::dminus_flat<DIM>(phi, grid, id, idx[d], d);
-            const double dp = level_set_detail::dplus_flat<DIM>(phi, grid, id, idx[d], d);
+            const double dm = level_set_detail::dminus_flat<DIM>(
+                phi,
+                grid,
+                id,
+                idx[d],
+                d,
+                derivative_scheme
+            );
+            const double dp = level_set_detail::dplus_flat<DIM>(
+                phi,
+                grid,
+                id,
+                idx[d],
+                d,
+                derivative_scheme
+            );
 
             if (S >= 0.0) {
                 grad_sq +=
@@ -686,7 +722,8 @@ template<int DIM>
 inline std::vector<double> reinitialise_phi(
     const std::vector<double>& phi0,
     const LevelSetGrid<DIM>& grid,
-    int iterations = 10
+    int iterations = 10,
+    LevelSetDerivativeScheme derivative_scheme = LevelSetDerivativeScheme::Tvd
 )
 {
     validate_level_set_field_size<DIM>(phi0, grid, "reinitialise_phi");
@@ -708,7 +745,7 @@ inline std::vector<double> reinitialise_phi(
 
     for (int iter = 0; iter < iterations; ++iter) {
         const std::vector<double> rhs0 =
-            level_set_reinit_rhs<DIM>(phi, phi0, grid);
+            level_set_reinit_rhs<DIM>(phi, phi0, grid, derivative_scheme);
 
         std::vector<double> phi1(Ntot, 0.0);
 
@@ -720,7 +757,7 @@ inline std::vector<double> reinitialise_phi(
         apply_neumann_bc<DIM>(phi1, grid);
 
         const std::vector<double> rhs1 =
-            level_set_reinit_rhs<DIM>(phi1, phi0, grid);
+            level_set_reinit_rhs<DIM>(phi1, phi0, grid, derivative_scheme);
 
         std::vector<double> phi2(Ntot, 0.0);
 
@@ -732,7 +769,7 @@ inline std::vector<double> reinitialise_phi(
         apply_neumann_bc<DIM>(phi2, grid);
 
         const std::vector<double> rhs2 =
-            level_set_reinit_rhs<DIM>(phi2, phi0, grid);
+            level_set_reinit_rhs<DIM>(phi2, phi0, grid, derivative_scheme);
 
         #pragma omp parallel for
         for (int id = 0; id < Ntot; ++id) {
@@ -823,9 +860,6 @@ inline std::vector<std::array<double, DIM>> compute_normals(
 
     return normals;
 }
-
-
-
 
 
 

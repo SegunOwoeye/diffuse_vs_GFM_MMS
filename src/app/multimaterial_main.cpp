@@ -6,6 +6,7 @@
 #include "src/app/material/material_builder.hpp"
 #include "src/app/solver/run_dim.hpp"
 #include "src/app/solver/run_sharp.hpp"
+#include "src/dim/barton_dim.hpp"
 #include "src/euler/eos.hpp"
 #include "src/io/config.hpp"
 #include "src/io/config_loader.hpp"
@@ -22,6 +23,9 @@ int main(int argc, char** argv)
         }
 
         const std::string config_file = argv[1];
+        if (dim::barton_dim::is_barton_dim_config(config_file)) {
+            return dim::barton_dim::run_case<DIM_>(config_file);
+        }
         const Config<DIM_> cfg = load_config<DIM_>(config_file);
 
         std::cout << "Regions parsed: " << cfg.regions.size() << "\n";

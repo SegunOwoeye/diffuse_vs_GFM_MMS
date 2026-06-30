@@ -22,6 +22,9 @@ done
 
 source .venv/bin/activate
 
+plot_dir="data/plots/sm_elastoplastic_barton"
+mkdir -p "$plot_dir"
+
 plot_barton_1d() {
     local prefix="$1"
     local ymin="$2"
@@ -43,7 +46,7 @@ plot_barton_1d() {
         --x-unit cm \
         --stress-ymin "$ymin" \
         --stress-ymax 1 \
-        --out "$out_dir/${prefix}_stress_grid.png"
+        --out "$plot_dir/${prefix}_stress_grid.png"
 }
 
 plot_barton_2d() {
@@ -61,7 +64,7 @@ plot_barton_2d() {
         "$out_dir/${prefix}_N${cells}.csv" \
         --reference "$out_dir/${prefix}_cylindrical_N${radial}.csv" \
         --barton-radial-reference \
-        --out "$out_dir/${prefix}_figure6.png"
+        --out "$plot_dir/${prefix}_figure6.png"
 }
 
 plot_barton_3d() {
@@ -80,7 +83,7 @@ plot_barton_3d() {
         --reference "$out_dir/${prefix}_spherical_N${radial}.csv" \
         --barton-radial-reference \
         --scatter-label "3D" \
-        --out "$out_dir/${prefix}_figure7.png"
+        --out "$plot_dir/${prefix}_figure7.png"
 }
 
 plot_barton_material_points() {

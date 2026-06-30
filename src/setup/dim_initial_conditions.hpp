@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
@@ -392,6 +393,123 @@ namespace dim {
         return P;
     }
 
+    // [7.1] Builds the DIM primitive state for a shock tube with a coated bubble
+    template<int DIM>
+    inline Primitive<DIM> diffuse_coated_shock_bubble_primitive(
+        const Config<DIM>& cfg,
+        const std::array<double, DIM>& x,
+        const EOSParams& params
+    )
+    {
+        const int nmat = params.nmat();
+        const double inner_signed_distance = ::dim::signed_distance_to_sphere<DIM>(
+            x,
+            cfg.bubble_center,
+            cfg.bubble_radius
+        );
+        const double outer_signed_distance = ::dim::signed_distance_to_sphere<DIM>(
+            x,
+            cfg.bubble_center,
+            cfg.film_radius
+        );
+
+        const bool post_shock = x[cfg.shock_axis] >= cfg.shock_position;
+        const double rho_carrier = post_shock ? cfg.rho_right : cfg.rho_left;
+        const auto vel_carrier = post_shock ? cfg.vel_right : cfg.vel_left;
+        const double p_carrier = post_shock ? cfg.p_right : cfg.p_left;
+        const int material_carrier = post_shock ? cfg.material_right : cfg.material_left;
+
+        const int carrier_slot = ::dim::material_slot_from_id<DIM>(cfg, material_carrier);
+        const int film_slot = ::dim::material_slot_from_id<DIM>(cfg, cfg.material_film);
+        const int bubble_slot = ::dim::material_slot_from_id<DIM>(cfg, cfg.material_bubble);
+
+        Primitive<DIM> P{};
+        P.alpha.assign(nmat, 0.0);
+        P.rho.assign(nmat, 1.0);
+
+        if (cfg.interface_thickness <= 0.0) {
+            const bool inside_bubble = inner_signed_distance <= 0.0;
+            const bool inside_film = outer_signed_distance <= 0.0;
+            int slot = carrier_slot;
+
+            if (inside_bubble) {
+                slot = bubble_slot;
+                P.rho[slot] = cfg.rho_bubble;
+                P.vel = cfg.vel_bubble;
+                P.p = cfg.p_bubble;
+            }
+            else if (inside_film) {
+                slot = film_slot;
+                P.rho[slot] = cfg.rho_film;
+                P.vel = cfg.vel_film;
+                P.p = cfg.p_film;
+            }
+            else {
+                P.rho[slot] = rho_carrier;
+                P.vel = vel_carrier;
+                P.p = p_carrier;
+            }
+
+            P.alpha[slot] = 1.0;
+            return P;
+        }
+
+        const double bubble_weight = smooth_indicator(
+            inner_signed_distance,
+            cfg.interface_thickness
+        );
+        const double coated_weight = smooth_indicator(
+            outer_signed_distance,
+            cfg.interface_thickness
+        );
+        const double film_weight = std::max(coated_weight - bubble_weight, 0.0);
+        const double carrier_weight = std::max(1.0 - coated_weight, 0.0);
+
+        std::vector<double> rho_sum(nmat, 0.0);
+        std::vector<double> weight_sum(nmat, 0.0);
+
+        auto add_material = [&](int slot, double weight, double rho) {
+            if (weight <= 1e-14) {
+                return;
+            }
+
+            P.alpha[slot] += weight;
+            rho_sum[slot] += weight * rho;
+            weight_sum[slot] += weight;
+        };
+
+        add_material(carrier_slot, carrier_weight, rho_carrier);
+        add_material(film_slot, film_weight, cfg.rho_film);
+        add_material(bubble_slot, bubble_weight, cfg.rho_bubble);
+
+        const double total_weight = std::max(
+            carrier_weight + film_weight + bubble_weight,
+            1e-14
+        );
+
+        for (int k = 0; k < nmat; ++k) {
+            if (weight_sum[k] > 1e-14) {
+                P.rho[k] = rho_sum[k] / weight_sum[k];
+            }
+        }
+
+        for (int d = 0; d < DIM; ++d) {
+            P.vel[d] = (
+                carrier_weight * vel_carrier[d] +
+                film_weight * cfg.vel_film[d] +
+                bubble_weight * cfg.vel_bubble[d]
+            ) / total_weight;
+        }
+
+        P.p = (
+            carrier_weight * p_carrier +
+            film_weight * cfg.p_film +
+            bubble_weight * cfg.p_bubble
+        ) / total_weight;
+        sanitise_alpha(P.alpha, 0.0);
+        return P;
+    }
+
     /*
     [8] Loops over every grid cell and does the following:
         - Computes the cell center
@@ -447,6 +565,32 @@ namespace dim {
         }
     }
 
+    // [9.1] Initializes the DIM coated shock-bubble validation case
+    template<int DIM>
+    inline void initialise_dim_from_coated_shock_bubble(
+        std::vector<State<DIM>>& U,
+        const Config<DIM>& cfg,
+        const std::array<int, DIM>& N,
+        const EOSParams& params
+    )
+    {
+        const int total = total_cells<DIM>(N);
+        U.resize(total, make_state<DIM>(params.nmat()));
+
+        std::array<double, DIM> dx{};
+        for (int d = 0; d < DIM; ++d) {
+            dx[d] = (cfg.domain_max[d] - cfg.domain_min[d]) / static_cast<double>(N[d]);
+        }
+
+        for (int linear = 0; linear < total; ++linear) {
+            const auto idx = unflatten_index<DIM>(linear, N);
+            const auto x = compute_cell_center<DIM>(idx, cfg.domain_min, dx);
+            const Primitive<DIM> P =
+                ::dim::diffuse_coated_shock_bubble_primitive<DIM>(cfg, x, params);
+            U[linear] = prim_to_cons<DIM>(P, params);
+        }
+    }
+
     // [10] Top-level entry point for DIM initialization from config
     template<int DIM>
     inline void initialise_dim_from_config(
@@ -459,15 +603,35 @@ namespace dim {
         if (cfg.initial_condition == "regions" ||
             cfg.initial_condition == "planar_regions") {
             ::dim::initialise_dim_from_regions<DIM>(U, cfg, N, params);
-            return;
         }
-
-        if (cfg.initial_condition == "shock_bubble") {
+        else if (cfg.initial_condition == "shock_bubble") {
             ::dim::initialise_dim_from_shock_bubble<DIM>(U, cfg, N, params);
+        }
+        else if (cfg.initial_condition == "coated_shock_bubble") {
+            ::dim::initialise_dim_from_coated_shock_bubble<DIM>(U, cfg, N, params);
+        }
+        else {
+            throw std::runtime_error("dim::initialise_dim_from_config: unsupported initial_condition: " + cfg.initial_condition);
+        }
+
+        if (cfg.barton_solid_material < 0) {
             return;
         }
 
-        throw std::runtime_error("dim::initialise_dim_from_config: unsupported initial_condition: " + cfg.initial_condition);
+        const int solid_slot = ::dim::material_slot_from_id<DIM>(
+            cfg,
+            cfg.barton_solid_material);
+        for (State<DIM>& state : U) {
+            const Primitive<DIM> primitive = cons_to_prim<DIM>(state, params);
+            const double solid_mass = state.partial_mass[solid_slot];
+            state.solid_rhoF.fill(0.0);
+            for (int axis = 0; axis < 3; ++axis) {
+                state.solid_rhoF[3 * axis + axis] = solid_mass;
+            }
+            state.solid_rho_eqps = 0.0;
+            state.solid_rho_damage = 0.0;
+            (void)primitive;
+        }
     }
 
 } 

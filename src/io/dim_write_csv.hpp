@@ -55,6 +55,11 @@ namespace dim {
             file << ",mass" << k;
         }
 
+        file << ",solid_eqps,solid_damage";
+        for (int q = 0; q < 9; ++q) {
+            file << ",solid_rhoF" << q;
+        }
+
         file << "\n";
 
         // [1.3.1] Primitive
@@ -93,6 +98,12 @@ namespace dim {
             }
 
             for (double value : U[linear].partial_mass) {
+                file << "," << value;
+            }
+
+            file << "," << U[linear].solid_rho_eqps
+                 << "," << U[linear].solid_rho_damage;
+            for (double value : U[linear].solid_rhoF) {
                 file << "," << value;
             }
 

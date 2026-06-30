@@ -39,6 +39,11 @@ namespace dim {
         }
 
         F.E = (U.E + P.p) * un;
+        for (int q = 0; q < 9; ++q) {
+            F.solid_rhoF[q] = U.solid_rhoF[q] * un;
+        }
+        F.solid_rho_eqps = U.solid_rho_eqps * un;
+        F.solid_rho_damage = U.solid_rho_damage * un;
         return F;
     }
 

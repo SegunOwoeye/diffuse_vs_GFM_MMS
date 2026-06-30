@@ -38,6 +38,7 @@ struct StepResult {
     std::vector<Conserved<DIM>> U_new;
     std::vector<std::vector<double>> phi_list_new;
     double dt;
+    std::vector<RGFMDiagnosticRow<DIM>> rgfm_diagnostic_rows;
 };
 
 
@@ -311,6 +312,29 @@ inline std::vector<std::array<double, DIM>> compute_solver_normals(
 
 
 template<int DIM>
+inline std::vector<double> reinitialise_solver_phi(
+    const std::vector<double>& phi,
+    const SolverContext<DIM>& ctx
+)
+{
+    if (ctx.level_set_reinit_method == "redistance") {
+        return redistance_preserving_zero_level_set<DIM>(
+            phi,
+            ctx.level_set_grid,
+            ctx.reinit_iterations
+        );
+    }
+
+    return reinitialise_phi<DIM>(
+        phi,
+        ctx.level_set_grid,
+        ctx.reinit_iterations,
+        ctx.level_set_derivative_scheme
+    );
+}
+
+
+template<int DIM>
 inline void project_planar_level_set(
     std::vector<double>& phi,
     const SolverContext<DIM>& ctx,
@@ -570,7 +594,7 @@ inline StepResult<DIM> advance_one_step(
         each directional delta from the same beginning-of-step state and then
         accumulate those deltas in one conservative update.
     */
-    std::vector<Conserved<DIM>> U_stage = rgfm_current.U_real;
+    std::vector<Conserved<DIM>> U_stage = U;
     zero_roundoff_planar_transverse_momentum<DIM>(
         U_stage,
         planar_flow_axis
@@ -618,7 +642,7 @@ inline StepResult<DIM> advance_one_step(
                 );
             }
 
-            apply_boundary_conditions<DIM>(U_accum, ctx);
+            apply_boundary_conditions<DIM, EOS>(U_accum, ctx);
             zero_roundoff_planar_transverse_momentum<DIM>(
                 U_accum,
                 planar_flow_axis
@@ -664,7 +688,7 @@ inline StepResult<DIM> advance_one_step(
 
         auto after_direction = [&](int, std::vector<Conserved<DIM>>& U_next)
         {
-            apply_boundary_conditions<DIM>(U_next, ctx);
+            apply_boundary_conditions<DIM, EOS>(U_next, ctx);
             zero_roundoff_planar_transverse_momentum<DIM>(
                 U_next,
                 planar_flow_axis
@@ -690,15 +714,25 @@ inline StepResult<DIM> advance_one_step(
                     ctx.material_params
                 );
         }
+        else if (ctx.level_set_advection == "physical_flow") {
+            level_set_velocity_field =
+                build_velocity_field<DIM, EOS>(
+                    U,
+                    material_id_current,
+                    ctx.material_params
+                );
+        }
 
         #pragma omp parallel for
         for (int k = 0; k < static_cast<int>(phi_list_work.size()); ++k) {
-            if (ctx.level_set_advection == "flow") {
+            if (ctx.level_set_advection == "flow" ||
+                ctx.level_set_advection == "physical_flow") {
                 phi_list_work[k] = advect_phi<DIM>(
                     ctx.phi_list[k],
                     level_set_velocity_field,
                     ctx.level_set_grid,
-                    dt
+                    dt,
+                    ctx.level_set_derivative_scheme
                 );
             }
             else {
@@ -706,7 +740,8 @@ inline StepResult<DIM> advance_one_step(
                     ctx.phi_list[k],
                     rgfm_current.normal_speed_fields[k],
                     ctx.level_set_grid,
-                    dt
+                    dt,
+                    ctx.level_set_derivative_scheme
                 );
             }
 
@@ -727,10 +762,9 @@ inline StepResult<DIM> advance_one_step(
         for (int k = 0; k < static_cast<int>(phi_list_work.size()); ++k) {
 
             phi_list_work[k] =
-                reinitialise_phi<DIM>(
+                reinitialise_solver_phi<DIM>(
                     phi_list_work[k],
-                    ctx.level_set_grid,
-                    ctx.reinit_iterations
+                    ctx
                 );
 
             project_planar_level_set<DIM>(
@@ -783,5 +817,5 @@ inline StepResult<DIM> advance_one_step(
 
     ctx.completed_steps += 1;
 
-    return {U_final, phi_list_work, dt};
+    return {U_final, phi_list_work, dt, rgfm_current.diagnostic_rows};
 }

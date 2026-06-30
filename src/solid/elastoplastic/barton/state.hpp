@@ -175,6 +175,17 @@ inline double material_pressure_from_rho_T(double rho, double T, const TensorMat
     return cold + thermal;
 }
 
+inline double material_temperature_from_rho_p(double rho, double p, const TensorMaterial& mat)
+{
+    rho = clamp_min(rho, 1.0e-12);
+    const double r = rho / mat.rho0;
+    const double a = mat.alpha;
+    const double cold = mat.rho0 * mat.K0() / a *
+        std::pow(r, a + 1.0) * (std::pow(r, a) - 1.0);
+    return mat.T0 * std::pow(r, mat.gamma) +
+        (p - cold) / std::max(rho * mat.gamma * mat.cv, 1.0e-30);
+}
+
 inline double material_temperature_from_rho_e(double rho, double e, const TensorMaterial& mat)
 {
     const double r = clamp_min(rho, 1.0e-12) / mat.rho0;

@@ -4,7 +4,9 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <set>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #ifdef _OPENMP
@@ -32,10 +34,40 @@
     normal-speed fields used by level-set transport.
 */
 template<int DIM>
+struct RGFMDiagnosticRow {
+    int interface_id = -1;
+    int neg_id = -1;
+    int pos_id = -1;
+    std::array<int, DIM> neg_idx{};
+    std::array<int, DIM> pos_idx{};
+    int neg_mat = -1;
+    int pos_mat = -1;
+    double phi_neg = 0.0;
+    double phi_pos = 0.0;
+    std::array<double, DIM> normal{};
+    double normal_magnitude = 0.0;
+    double rho_neg = 0.0;
+    double rho_pos = 0.0;
+    double p_neg = 0.0;
+    double p_pos = 0.0;
+    double un_neg = 0.0;
+    double un_pos = 0.0;
+    double p_star = 0.0;
+    double un_star = 0.0;
+    double un_applied = 0.0;
+    double pair_alignment = 0.0;
+    double pair_distance = 0.0;
+    double score_neg = 0.0;
+    double score_pos = 0.0;
+};
+
+
+template<int DIM>
 struct RGFMInterfaceData {
     std::vector<Conserved<DIM>> U_real;
     std::vector<std::vector<Conserved<DIM>>> material_states;
     std::vector<std::vector<double>> normal_speed_fields;
+    std::vector<RGFMDiagnosticRow<DIM>> diagnostic_rows;
 };
 
 
@@ -169,7 +201,8 @@ inline int rgfm_find_normal_matched_partner(
     const RGFMBoundaryCell<DIM>& cell,
     const std::vector<RGFMBoundaryCell<DIM>>& candidates,
     const std::vector<std::array<double, DIM>>& normals,
-    const std::array<double, DIM>& dx
+    const std::array<double, DIM>& dx,
+    int normal_direction
 )
 {
     if (candidates.empty()) {
@@ -208,13 +241,31 @@ inline int rgfm_find_normal_matched_partner(
             const std::array<double, DIM> n_candidate = normals[candidate.id];
             const double n_candidate_norm = norm<DIM>(n_candidate);
             double normal_score = 1.0;
+            double alignment_score = 1.0;
 
             if (n_cell_norm > 1e-14 && n_candidate_norm > 1e-14) {
                 normal_score = 1.0 - dot<DIM>(n_cell, n_candidate);
             }
 
+            if (n_cell_norm > 1e-14 && dist2 > 1e-28) {
+                std::array<double, DIM> displacement{};
+
+                for (int d = 0; d < DIM; ++d) {
+                    displacement[d] =
+                        static_cast<double>(candidate.idx[d] - cell.idx[d]) * dx[d];
+                }
+
+                const double dist = std::sqrt(dist2);
+                const double projected_alignment =
+                    static_cast<double>(normal_direction) *
+                    safe_div(dot<DIM>(displacement, n_cell), dist * n_cell_norm, 1e-14);
+
+                alignment_score =
+                    1.0 - std::clamp(projected_alignment, -1.0, 1.0);
+            }
+
             const double grid_dist2 = safe_div(dist2, dx_min * dx_min, 1e-14);
-            const double score = normal_score + 0.05 * grid_dist2;
+            const double score = normal_score + 2.0 * alignment_score + 0.05 * grid_dist2;
 
             if (score < best_score) {
                 best_score = score;
@@ -249,6 +300,8 @@ inline void rgfm_extend_normal_speed(
     std::vector<double> work = speed;
 
     for (int iter = 0; iter < iterations; ++iter) {
+        work = speed;
+
         #pragma omp parallel for if(!omp_in_parallel() && Ntot > 512)
         for (int id = 0; id < Ntot; ++id) {
             if (fixed[id] != 0) {
@@ -747,6 +800,7 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
 
         std::vector<char> fixed_speed(Ntot, 0);
         std::vector<double> state_score(Ntot, std::numeric_limits<double>::max());
+        std::set<std::pair<int, int>> processed_pairs;
 
         auto apply_pair = [&](int neg_id, int pos_id) {
             if (neg_id < 0 || pos_id < 0) {
@@ -755,6 +809,12 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
 
             if (material_id[neg_id] != neg_mat ||
                 material_id[pos_id] == neg_mat) {
+                return;
+            }
+
+            const auto pair_key = std::minmax(neg_id, pos_id);
+
+            if (!processed_pairs.insert(pair_key).second) {
                 return;
             }
 
@@ -772,7 +832,7 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
                 normal = scale<DIM>(-1.0, normal);
             }
 
-            const auto states = rgfm_interface_states_normal<DIM, EOS, EOS>(
+            auto states = rgfm_interface_states_normal<DIM, EOS, EOS>(
                 U[neg_id],
                 U[pos_id],
                 normal,
@@ -782,6 +842,106 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
 
             const double score_neg = std::abs(phi_list[k][neg_id]);
             const double score_pos = std::abs(phi_list[k][pos_id]);
+            const int neg_mat = material_id[neg_id];
+            const int pos_mat = material_id[pos_id];
+            const Primitive<DIM> P_neg_input = cons_to_prim<DIM, EOS>(
+                U[neg_id],
+                ctx.material_params[neg_mat]
+            );
+            const Primitive<DIM> P_pos_input = cons_to_prim<DIM, EOS>(
+                U[pos_id],
+                ctx.material_params[pos_mat]
+            );
+            const double normal_magnitude = norm<DIM>(normal);
+            std::array<double, DIM> normal_unit{};
+            std::array<double, DIM> pair_displacement{};
+            double pair_distance_sq = 0.0;
+
+            if (normal_magnitude > 0.0) {
+                normal_unit = scale<DIM>(1.0 / normal_magnitude, normal);
+            }
+
+            const auto neg_idx = unflatten_index<DIM>(neg_id, ctx.level_set_grid);
+            const auto pos_idx = unflatten_index<DIM>(pos_id, ctx.level_set_grid);
+
+            for (int d = 0; d < DIM; ++d) {
+                pair_displacement[d] =
+                    static_cast<double>(pos_idx[d] - neg_idx[d]) * ctx.dx[d];
+                pair_distance_sq += pair_displacement[d] * pair_displacement[d];
+            }
+
+            const double pair_distance = std::sqrt(pair_distance_sq);
+            const double pair_alignment =
+                (pair_distance > 0.0 && normal_magnitude > 0.0)
+                    ? safe_div(dot<DIM>(pair_displacement, normal_unit), pair_distance, 1e-14)
+                    : 0.0;
+            const double un_neg = dot<DIM>(P_neg_input.vel, normal_unit);
+            const double un_pos = dot<DIM>(P_pos_input.vel, normal_unit);
+            const double un_mcrs = states.un_star;
+            double un_applied = un_mcrs;
+
+            if (ctx.rgfm_star_velocity_mode == "input_mean") {
+                un_applied = 0.5 * (un_neg + un_pos);
+            }
+            else if (ctx.rgfm_star_velocity_mode == "zero") {
+                un_applied = 0.0;
+            }
+
+            if (ctx.rgfm_star_velocity_mode != "mcrs") {
+                Primitive<DIM> P_neg_star = cons_to_prim<DIM, EOS>(
+                    states.left,
+                    ctx.material_params[neg_mat]
+                );
+                Primitive<DIM> P_pos_star = cons_to_prim<DIM, EOS>(
+                    states.right,
+                    ctx.material_params[pos_mat]
+                );
+                const std::array<double, DIM> u_neg_t =
+                    sub<DIM>(P_neg_input.vel, scale<DIM>(un_neg, normal_unit));
+                const std::array<double, DIM> u_pos_t =
+                    sub<DIM>(P_pos_input.vel, scale<DIM>(un_pos, normal_unit));
+                const std::array<double, DIM> u_applied_n =
+                    scale<DIM>(un_applied, normal_unit);
+
+                P_neg_star.vel = add<DIM>(u_neg_t, u_applied_n);
+                P_pos_star.vel = add<DIM>(u_pos_t, u_applied_n);
+
+                states.left = prim_to_cons<DIM, EOS>(
+                    P_neg_star,
+                    ctx.material_params[neg_mat]
+                );
+                states.right = prim_to_cons<DIM, EOS>(
+                    P_pos_star,
+                    ctx.material_params[pos_mat]
+                );
+            }
+
+            RGFMDiagnosticRow<DIM> diagnostic{};
+            diagnostic.interface_id = k;
+            diagnostic.neg_id = neg_id;
+            diagnostic.pos_id = pos_id;
+            diagnostic.neg_idx = neg_idx;
+            diagnostic.pos_idx = pos_idx;
+            diagnostic.neg_mat = neg_mat;
+            diagnostic.pos_mat = pos_mat;
+            diagnostic.phi_neg = phi_list[k][neg_id];
+            diagnostic.phi_pos = phi_list[k][pos_id];
+            diagnostic.normal = normal_unit;
+            diagnostic.normal_magnitude = normal_magnitude;
+            diagnostic.rho_neg = P_neg_input.rho;
+            diagnostic.rho_pos = P_pos_input.rho;
+            diagnostic.p_neg = P_neg_input.p;
+            diagnostic.p_pos = P_pos_input.p;
+            diagnostic.un_neg = un_neg;
+            diagnostic.un_pos = un_pos;
+            diagnostic.p_star = states.p_star;
+            diagnostic.un_star = un_mcrs;
+            diagnostic.un_applied = un_applied;
+            diagnostic.pair_alignment = pair_alignment;
+            diagnostic.pair_distance = pair_distance;
+            diagnostic.score_neg = score_neg;
+            diagnostic.score_pos = score_pos;
+            data.diagnostic_rows.push_back(diagnostic);
 
             if (score_neg < state_score[neg_id]) {
                 data.U_real[neg_id] = states.left;
@@ -793,8 +953,6 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
                 state_score[pos_id] = score_pos;
             }
 
-            const int neg_mat = material_id[neg_id];
-            const int pos_mat = material_id[pos_id];
             const Primitive<DIM> P_neg = cons_to_prim<DIM, EOS>(
                 states.left,
                 ctx.material_params[neg_mat]
@@ -858,8 +1016,8 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
                 material_interface_score[pos_mat][pos_id] = score_pos;
             }
 
-            data.normal_speed_fields[k][neg_id] = states.un_star;
-            data.normal_speed_fields[k][pos_id] = states.un_star;
+            data.normal_speed_fields[k][neg_id] = un_applied;
+            data.normal_speed_fields[k][pos_id] = un_applied;
             fixed_speed[neg_id] = 1;
             fixed_speed[pos_id] = 1;
         };
@@ -869,7 +1027,8 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
                 cell,
                 positive_cells,
                 normals_list[k],
-                ctx.dx
+                ctx.dx,
+                +1
             );
 
             apply_pair(cell.id, partner);
@@ -880,7 +1039,8 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
                 cell,
                 negative_cells,
                 normals_list[k],
-                ctx.dx
+                ctx.dx,
+                -1
             );
 
             apply_pair(partner, cell.id);
@@ -934,10 +1094,6 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
 
     return data;
 }
-
-
-
-
 
 
 

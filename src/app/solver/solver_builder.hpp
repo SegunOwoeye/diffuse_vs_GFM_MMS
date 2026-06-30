@@ -27,7 +27,28 @@ inline BoundaryConditionType boundary_condition_from_config(
         return BoundaryConditionType::reflective;
     }
 
+    if (name == "nonreflective" ||
+        name == "non_reflective") {
+        return BoundaryConditionType::nonreflective;
+    }
+
     throw std::runtime_error("Unknown boundary condition: " + name);
+}
+
+
+inline LevelSetDerivativeScheme level_set_derivative_scheme_from_config(
+    const std::string& name
+)
+{
+    if (name == "tvd" || name == "second_order") {
+        return LevelSetDerivativeScheme::Tvd;
+    }
+
+    if (name == "first_order") {
+        return LevelSetDerivativeScheme::FirstOrder;
+    }
+
+    throw std::runtime_error("Unknown level_set_spatial_derivative: " + name);
 }
 
 
@@ -68,7 +89,11 @@ inline SolverContext<DIM> build_solver_context(
 
     ctx.advect_level_set = (cfg.interface_method == "GFM" && cfg.use_level_set && !ctx.phi_list.empty());
     ctx.reassign_material_from_phi = ctx.advect_level_set;
+    ctx.level_set_reinit_method = cfg.level_set_reinit_method;
     ctx.level_set_advection = cfg.level_set_advection;
+    ctx.level_set_derivative_scheme =
+        level_set_derivative_scheme_from_config(cfg.level_set_spatial_derivative);
+    ctx.rgfm_star_velocity_mode = cfg.rgfm_star_velocity_mode;
     ctx.time_update = cfg.time_update;
 
     ctx.reinit_enabled = (
