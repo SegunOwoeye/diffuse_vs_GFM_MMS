@@ -10,14 +10,11 @@ run_favrie_comparison=false
 run_primary=false
 run_legacy_barton=false
 run_barton_dim_case41=false
-run_barton_dim_case41_smoke=false
-run_barton_dim_favrie_smoke=false
-run_barton_dim_favrie_coarse=false
 run_barton_dim_favrie_full=false
 
 usage() {
     cat <<EOF
-Usage: $0 [--primary] [--full] [--legacy-barton] [--validate-damage] [--validate-fluid-solid-rgfm] [--fluid-solid-paper] [--fluid-solid-case43] [--favrie-comparison] [--barton-dim-case41|--barton-dim-case41-smoke] [--barton-dim-favrie-smoke|--barton-dim-favrie-coarse|--barton-dim-favrie-full]
+Usage: $0 [--primary] [--full] [--legacy-barton] [--validate-damage] [--validate-fluid-solid-rgfm] [--fluid-solid-paper] [--fluid-solid-case43] [--favrie-comparison] [--barton-dim-case41] [--barton-dim-favrie-full]
 
 Options:
   --primary                    Run the mapped primary 1D rGFM case and Favrie-Gavrilyuk comparisons.
@@ -27,11 +24,8 @@ Options:
   --validate-fluid-solid-rgfm  Run the 1D fluid-solid rGFM interface-state validation.
   --fluid-solid-paper          Run the 1D fluid-solid paper Case 4.1 and Case 4.2 configs.
   --fluid-solid-case43         Run the rotated 2D fluid-solid paper Case 4.3 config.
-  --favrie-comparison          Run matched Favrie-Gavrilyuk 2D rGFM and Barton-DIM smoke cases, then compare outputs.
+  --favrie-comparison          Run matched Favrie-Gavrilyuk rGFM and Barton-DIM pairs, then compare outputs.
   --barton-dim-case41          Run the Barton-DIM counterpart of rGFM 1D Case 4.1.
-  --barton-dim-case41-smoke    Run the short Barton-DIM regression counterpart of rGFM 1D Case 4.1.
-  --barton-dim-favrie-smoke    Run the canonical 2D Barton-DIM Favrie-Gavrilyuk smoke case.
-  --barton-dim-favrie-coarse   Run the canonical 2D Barton-DIM Favrie-Gavrilyuk coarse case.
   --barton-dim-favrie-full     Run the canonical 2D Barton-DIM Favrie-Gavrilyuk analysis case.
 EOF
 }
@@ -47,9 +41,6 @@ while [[ "$#" -gt 0 ]]; do
         --fluid-solid-case43) run_fluid_solid_case43=true ;;
         --favrie-comparison) run_favrie_comparison=true ;;
         --barton-dim-case41) run_barton_dim_case41=true ;;
-        --barton-dim-case41-smoke) run_barton_dim_case41_smoke=true ;;
-        --barton-dim-favrie-smoke) run_barton_dim_favrie_smoke=true ;;
-        --barton-dim-favrie-coarse) run_barton_dim_favrie_coarse=true ;;
         --barton-dim-favrie-full) run_barton_dim_favrie_full=true ;;
         -h|--help) usage; exit 0 ;;
         *) echo "[ERROR] Unknown option: $1"; usage; exit 1 ;;
@@ -114,27 +105,6 @@ if [ "$run_barton_dim_case41" = true ]; then
         configs/solid/MM/DIM/1D_validation/Liu_Chowdhury_Khoo_2011/case4_1_gas_solid_barton_dim.txt
 fi
 
-if [ "$run_barton_dim_case41_smoke" = true ]; then
-    build_barton_dim_1d
-    echo "[SOLID][Barton-DIM 1D] Running Liu-Chowdhury-Khoo Case 4.1 smoke counterpart"
-    OMP_NUM_THREADS="$cores" ./multimaterial_main_1d \
-        configs/solid/MM/DIM/1D_validation/Liu_Chowdhury_Khoo_2011/case4_1_gas_solid_barton_dim_smoke.txt
-fi
-
-if [ "$run_barton_dim_favrie_smoke" = true ]; then
-    build_barton_dim_2d
-    echo "[SOLID][Barton-DIM 2D] Running Favrie-Gavrilyuk smoke case"
-    OMP_NUM_THREADS="$cores" ./multimaterial_main_2d \
-        configs/solid/MM/DIM/2D_validation/Favrie_Gavrilyuk_2012/copper_projectile_plate_air_barton_dim_smoke.txt
-fi
-
-if [ "$run_barton_dim_favrie_coarse" = true ]; then
-    build_barton_dim_2d
-    echo "[SOLID][Barton-DIM 2D] Running Favrie-Gavrilyuk coarse case"
-    OMP_NUM_THREADS="$cores" ./multimaterial_main_2d \
-        configs/solid/MM/DIM/2D_validation/Favrie_Gavrilyuk_2012/copper_projectile_plate_air_barton_dim_coarse.txt
-fi
-
 if [ "$run_barton_dim_favrie_full" = true ]; then
     build_barton_dim_2d
     echo "[SOLID][Barton-DIM 2D] Running Favrie-Gavrilyuk analysis case"
@@ -178,10 +148,10 @@ if [ "$run_favrie_comparison" = true ]; then
         --barton-dim "$dim_1d_csv" \
         --output-dir "$compare_1d_dir"
 
-    echo "[SOLID][Favrie-Gavrilyuk] Running matched rGFM smoke case"
+    echo "[SOLID][Favrie-Gavrilyuk] Running matched rGFM pair"
     OMP_NUM_THREADS="$cores" ./solid_main "$rgfm_config"
 
-    echo "[SOLID][Favrie-Gavrilyuk] Running matched Barton-DIM smoke case"
+    echo "[SOLID][Favrie-Gavrilyuk] Running matched Barton-DIM pair"
     OMP_NUM_THREADS="$cores" ./multimaterial_main_2d "$dim_config"
 
     echo "[SOLID][Favrie-Gavrilyuk] Comparing matched output fields"
