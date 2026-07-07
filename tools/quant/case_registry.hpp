@@ -180,6 +180,18 @@ std::vector<CaseDef> case_registry()
         {{200, 100}, {400, 200}, {800, 400}}
     });
     cases.push_back({
+        "applsci_three_material_translation_2d", "three_material_translation", "applsci_2021_three_material_translation", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/GFM/MM_2D_validation/applsci_2021_three_material_translation.txt",
+        {{200, 100}, {400, 200}}
+    });
+    cases.push_back({
+        "applsci_three_material_translation_2d", "three_material_translation", "applsci_2021_three_material_translation", "DIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/DIM/MM_2D_validation/applsci_2021_three_material_translation.txt",
+        {{200, 100}, {400, 200}}
+    });
+    cases.push_back({
         "gorsse_tc9_water_air_bubble_3d", "tc9", "gorsse_tc9_water_air_bubble_3d", "SIM", 3,
         "mm_3d", "mm_main_3d", mm3,
         "configs/GFM/bubble_collapse/gorsse_tc9_water_air_bubble_3d.txt",
@@ -279,6 +291,7 @@ std::set<std::string> groups_for_case_alias(const std::vector<std::string>& alia
         else if (alias == "water_air_bubble" || alias == "water_air_bubble_2d" || alias == "practical_case2") groups.insert("water_air_bubble_2d");
         else if (alias == "gorsse_tc9" || alias == "tc9_water_air_bubble" || alias == "water_air_bubble_gorsse") groups.insert("gorsse_tc9_water_air_bubble_2d");
         else if (alias == "applsci_three_material" || alias == "three_material" || alias == "three_material_shock_bubble") groups.insert("applsci_three_material_shock_bubble_2d");
+        else if (alias == "applsci_translation" || alias == "three_material_translation" || alias == "coated_translation") groups.insert("applsci_three_material_translation_2d");
         else if (alias == "gorsse_tc9_3d" || alias == "tc9_water_air_bubble_3d" || alias == "water_air_bubble_gorsse_3d") groups.insert("gorsse_tc9_water_air_bubble_3d");
         else if (alias == "bubble_zero_velocity" || alias == "shock_bubble_zero_velocity" || alias == "rgfm_bubble_zero_velocity") groups.insert("shock_bubble_2d_zero_velocity");
         else if (alias == "bubble_zero_velocity_physical_flow" || alias == "rgfm_bubble_zero_velocity_physical_flow") groups.insert("shock_bubble_2d_zero_velocity_physical_flow");
@@ -301,6 +314,7 @@ bool is_specific_case_filter(const std::string& value)
         "water_air_bubble", "water_air_bubble_2d", "practical_case2",
         "gorsse_tc9", "tc9_water_air_bubble", "water_air_bubble_gorsse",
         "applsci_three_material", "three_material", "three_material_shock_bubble",
+        "applsci_translation", "three_material_translation", "coated_translation",
         "gorsse_tc9_3d", "tc9_water_air_bubble_3d", "water_air_bubble_gorsse_3d",
         "bubble_zero_velocity", "shock_bubble_zero_velocity", "rgfm_bubble_zero_velocity",
         "bubble_zero_velocity_physical_flow", "rgfm_bubble_zero_velocity_physical_flow",
@@ -540,6 +554,40 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
         const auto bubble = find_case("shock_bubble_2d", "test6", "DIM").value();
         for (int dx_units : {1, 2, 3, 4, 6}) {
             add_dim_epsilon_run(bubble, {1300, 178}, dx_units, 0.25 * static_cast<double>(dx_units));
+        }
+    }
+    else if (args.sensitivity == "dim_alpha") {
+        const auto add_dim_alpha_run = [&](const CaseDef& def,
+                                           const std::vector<int>& resolution,
+                                           const std::string& alpha_label,
+                                           double alpha) {
+            RunSpec run;
+            run.case_def = def;
+            run.resolution = resolution;
+            run.omp_threads = args.omp_threads;
+            run.sensitivity = args.sensitivity;
+            run.parameter_name = "tanh_alpha";
+            run.parameter_value = alpha_label;
+            std::ostringstream value;
+            value << alpha;
+            run.overrides["interface_sharpness_alpha"] = value.str();
+            run.output_prefix =
+                "quant_dim_" + def.label + "_tanh_alpha_" + alpha_label;
+            run.run_id = make_run_id(def, run.resolution, args.omp_threads, run.parameter_name, run.parameter_value);
+            runs.push_back(run);
+        };
+
+        const auto fedkiw = find_case("fedkiw_1d", "test5", "DIM").value();
+        const auto bubble = find_case("shock_bubble_2d", "test6", "DIM").value();
+
+        for (const auto& item : std::vector<std::pair<std::string, double>>{
+                 {"0p5", 0.5},
+                 {"1", 1.0},
+                 {"2", 2.0},
+                 {"4", 4.0},
+                 {"8", 8.0}}) {
+            add_dim_alpha_run(fedkiw, {400}, item.first, item.second);
+            add_dim_alpha_run(bubble, {1300, 178}, item.first, item.second);
         }
     }
     else if (args.sensitivity == "sim_reinit") {

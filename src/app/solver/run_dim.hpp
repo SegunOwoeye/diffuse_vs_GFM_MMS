@@ -9,7 +9,6 @@
 #include "src/app/io/conservation_report.hpp"
 #include "src/app/io/dim_output_utils.hpp"
 #include "src/app/io/runtime_report.hpp"
-#include "src/app/material/material_builder.hpp"
 #include "src/dim/eos_params.hpp"
 #include "src/dim/solver/advance_step.hpp"
 #include "src/io/config.hpp"
@@ -23,21 +22,13 @@ inline void run_dim_case(
     const dim::EOSParams& material_params
 )
 {
-    dim::EOSParams active_material_params = material_params;
     if (cfg.barton_solid_material >= 0) {
-        int solid_slot = -1;
-        for (int k = 0; k < static_cast<int>(cfg.materials.size()); ++k) {
-            if (cfg.materials[k].id == cfg.barton_solid_material) {
-                solid_slot = k;
-                active_material_params.barton_solid = build_barton_tensor_material(cfg.materials[k]);
-                break;
-            }
-        }
-        if (solid_slot < 0) {
-            throw std::runtime_error("run_dim_case: barton_solid_material is not configured");
-        }
-        active_material_params.barton_solid_material = solid_slot;
+        throw std::runtime_error(
+            "run_dim_case: base DIM fluid solver does not run Barton solids; use the Barton DIM extension"
+        );
     }
+
+    const dim::EOSParams& active_material_params = material_params;
     std::vector<dim::State<DIM>> U;
     dim::initialise_dim_from_config<DIM>(U, cfg, N, active_material_params);
 
@@ -75,6 +66,13 @@ inline void run_dim_case(
             dim_app::format_time_tag(snapshot_time)
         );
     };
+
+    while (next_output_index < cfg.output_times.size() &&
+           cfg.output_times[next_output_index] <= 1e-14)
+    {
+        write_snapshot(cfg.output_times[next_output_index]);
+        ++next_output_index;
+    }
 
     while (time < cfg.tfinal - 1e-14) {
         const double next_output_time =

@@ -43,7 +43,7 @@ inline int flatten_index(
     
     One level set is associated with one non-background material.
     Rule:
-        - if one or more phi_k < 0, choose the most negative phi_k
+        - if one or more phi_k < 0, choose the accepted field closest to its interface
         - otherwise assign background material
 */
 template<int DIM>
@@ -113,7 +113,9 @@ inline void assign_material_ids_from_phi(
                 component_cells.push_back(id);
 
                 if (has_previous_material_map &&
-                    previous_material_id[id] == tracked_mat) {
+                    tracked_interface_contains_negative_material(
+                        tracked_interfaces[k],
+                        previous_material_id[id])) {
                     overlaps_previous_component = true;
                     overlap_count += 1;
                 }
@@ -167,16 +169,17 @@ inline void assign_material_ids_from_phi(
     for (int id = 0; id < Ntot; ++id) {
         bool found = false;
         bool near_interface = false;
-        double best_phi = 0.0;
+        double best_abs_phi = std::numeric_limits<double>::max();
         int best_mat = background_material_id;
 
         for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
             const double phi = phi_list[k][id];
 
             if (accepted[k][id] != 0) {
-                if (!found || phi < best_phi) {
+                const double abs_phi = std::abs(phi);
+                if (!found || abs_phi < best_abs_phi) {
                     found = true;
-                    best_phi = phi;
+                    best_abs_phi = abs_phi;
                     best_mat = tracked_interfaces[k].negative_material_id;
                 }
             }
@@ -195,7 +198,9 @@ inline void assign_material_ids_from_phi(
             bool preserve_previous = false;
 
             for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
-                if (previous_mat != tracked_interfaces[k].negative_material_id ||
+                if (!tracked_interface_contains_negative_material(
+                        tracked_interfaces[k],
+                        previous_mat) ||
                     std::abs(phi_list[k][id]) > phi_tol) {
                     continue;
                 }
@@ -367,5 +372,4 @@ inline int fill_small_enclosed_background_cavities(
 
     return filled_cells;
 }
-
 

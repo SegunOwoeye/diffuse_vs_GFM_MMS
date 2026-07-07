@@ -74,7 +74,7 @@ Args parse_args(int argc, char** argv)
                 << "  --case/--cases toro|toro_1d|explosion2d|explosion3d|fedkiw|planar|oblique|shock_bubble|bubble_reinit|water_air_bubble|gorsse_tc9|applsci_three_material|gorsse_tc9_3d|bubble_zero_velocity|bubble_zero_velocity_physical_flow|bubble_zero_velocity_input_mean_star|bubble_zero_velocity_zero_star|bubble_static|bubble3d [case]\n"
                 << "  --method/--methods DIM SIM common (comma lists accepted)\n"
                 << "  --resolutions 100 200 400, or 100,200,400, or 325x45,650x89\n"
-                << "  --sensitivity dim_epsilon|sim_reinit (DIM: 1D D2 + bubble; SIM: oblique + bubble)\n"
+                << "  --sensitivity dim_epsilon|dim_alpha|sim_reinit (DIM: 1D D2 + bubble; SIM: oblique + bubble)\n"
                 << "  --scaling openmp_threads (bubble DIM/SIM at 1,2,4,8,16 threads)\n"
                 << "  --omp-threads N\n"
                 << "  --benchmark-mode NAME (default standard; use clean for controlled timing)\n"

@@ -211,12 +211,12 @@ namespace dim {
     }
 
     // [8] Coefficients for Allaire's transported volume-fraction equation:
-    //     d(alpha_k)/dt + div(alpha_k u) = alpha_k div(u).
+    //     d(alpha_k)/dt + div(alpha_k u) = (alpha_k + K_k) div(u).
     template<int DIM>
     inline std::vector<double> alpha_rhs_coefficients(
         const Primitive<DIM>& P,
         const EOSParams& params,
-        double = 1e-12
+        double floor = 1e-12
     )
     {
         params.validate();
@@ -227,6 +227,47 @@ namespace dim {
 
         std::vector<double> rhs = P.alpha;
         sanitise_alpha(rhs, 0.0);
+
+        if (static_cast<int>(P.rho.size()) != params.nmat()) {
+            throw std::runtime_error("dim::alpha_rhs_coefficients: rho size mismatch");
+        }
+
+        double beta_mix = 0.0;
+        std::vector<double> acoustic_impedance(params.nmat(), floor);
+
+        for (int k = 0; k < params.nmat(); ++k) {
+            const double alpha_k = std::max(finite_or(rhs[k]), 0.0);
+
+            if (alpha_k <= floor) {
+                continue;
+            }
+
+            const double rho_k = std::max(finite_or(P.rho[k]), floor);
+            const double c_k = IdealGasEOS::material_sound_speed(
+                rho_k,
+                std::max(finite_or(P.p), floor),
+                params.material[k]
+            );
+            acoustic_impedance[k] = std::max(rho_k * c_k * c_k, floor);
+            beta_mix += alpha_k / acoustic_impedance[k];
+        }
+
+        if (beta_mix <= floor || !std::isfinite(beta_mix)) {
+            return rhs;
+        }
+
+        const double q_mix = 1.0 / beta_mix;
+        for (int k = 0; k < params.nmat(); ++k) {
+            const double alpha_k = std::max(finite_or(rhs[k]), 0.0);
+            if (alpha_k <= floor) {
+                rhs[k] = 0.0;
+                continue;
+            }
+
+            const double K_k = alpha_k * (q_mix / acoustic_impedance[k] - 1.0);
+            rhs[k] = alpha_k + K_k;
+        }
+
         return rhs;
     }
 

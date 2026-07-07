@@ -96,7 +96,8 @@ inline std::vector<Conserved<DIM>> transfer_reassigned_material_states(
     const std::vector<Conserved<DIM>>& U,
     const std::vector<int>& material_before,
     const std::vector<int>& material_after,
-    const SolverContext<DIM>& ctx
+    const SolverContext<DIM>& ctx,
+    const std::vector<std::vector<Conserved<DIM>>>* material_states = nullptr
 )
 {
     if (material_before.size() != material_after.size() ||
@@ -138,6 +139,53 @@ inline std::vector<Conserved<DIM>> transfer_reassigned_material_states(
                 material_after,
                 ctx
             );
+
+        if (material_states != nullptr &&
+            static_cast<int>(material_states->size()) == nmat &&
+            static_cast<int>((*material_states)[new_mat].size()) ==
+                static_cast<int>(U.size()))
+        {
+            Conserved<DIM> transfer_state = (*material_states)[new_mat][id];
+
+            if (donor_id >= 0) {
+                const EOSParams& new_params = ctx.material_params[new_mat];
+                const ThermoState<DIM> old_cell =
+                    compute_thermo<DIM, EOS>(U[id], ctx.material_params[old_mat]);
+                const ThermoState<DIM> donor =
+                    compute_thermo<DIM, EOS>(U[donor_id], new_params);
+                Primitive<DIM> incoming =
+                    cons_to_prim<DIM, EOS>(transfer_state, new_params);
+
+                const double old_pressure = require_positive(
+                    old_cell.p,
+                    "transfer_reassigned_material_states: contact old pressure",
+                    1e-12
+                );
+                const double donor_pressure = require_positive(
+                    donor.p,
+                    "transfer_reassigned_material_states: contact donor pressure",
+                    1e-12
+                );
+                const double contact_scale =
+                    std::max({old_pressure, donor_pressure, 1e-12});
+
+                if (std::abs(old_pressure - donor_pressure) <= 0.25 * contact_scale) {
+                    incoming.p = std::clamp(
+                        require_positive(
+                            incoming.p,
+                            "transfer_reassigned_material_states: contact incoming pressure",
+                            1e-12
+                        ),
+                        0.8 * donor_pressure,
+                        1.25 * donor_pressure
+                    );
+                    transfer_state = prim_to_cons<DIM, EOS>(incoming, new_params);
+                }
+            }
+
+            U_transferred[id] = transfer_state;
+            continue;
+        }
 
         const ThermoState<DIM> old_cell =
             compute_thermo<DIM, EOS>(U[id], ctx.material_params[old_mat]);

@@ -1,0 +1,64 @@
+# [0] Problem
+dimension = 2
+
+# [1] Domain
+domain_min = [0.0, 0.0]
+domain_max = [1.0, 0.5]
+N = [400, 200]
+
+# [2] Time
+tfinal = 0.2
+output_times = [0.05, 0.1, 0.15, 0.2]
+cfl = 0.35
+
+# [3] Interface Method
+interface_method = GFM
+time_update = split
+use_level_set = true
+reinit_interval = 10
+reinit_iterations = 2
+level_set_reinit_method = redistance
+level_set_advection = normal_speed
+level_set_spatial_derivative = tvd
+rgfm_star_velocity_mode = input_mean
+
+# [4] Boundary Conditions
+bc_lo = [transmissive, reflective]
+bc_hi = [transmissive, reflective]
+
+# [5] Materials
+material = 0, ideal_gas, gamma=1.4
+material = 1, ideal_gas, gamma=1.648
+material = 2, stiffened_gas, gamma=2.0, p_inf=100.0
+
+# [6] Initial Condition
+initial_condition = coated_shock_bubble
+shock_axis = 0
+shock_position = 2.0
+
+rho_left = 1.0
+vel_left = [0.5, 0.0]
+p_left = 1.0
+material_left = 0
+
+rho_right = 1.0
+vel_right = [0.5, 0.0]
+p_right = 1.0
+material_right = 0
+
+bubble_center = [0.35, 0.25]
+bubble_radius = 0.08
+rho_bubble = 2.0
+vel_bubble = [0.5, 0.0]
+p_bubble = 1.0
+material_bubble = 2
+
+film_radius = 0.1
+rho_film = 0.0125
+vel_film = [0.5, 0.0]
+p_film = 1.0
+material_film = 1
+
+# [7] Output
+output_prefix = gfm_applsci_2021_three_material_translation
+output_dir = data/csv/gfm/MM_2D_validation

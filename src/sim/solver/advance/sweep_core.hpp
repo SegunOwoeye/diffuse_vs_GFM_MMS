@@ -8,6 +8,8 @@
 #include <array>
 #include <stdexcept>
 #include <string>
+#include <limits>
+#include <cmath>
 
 #include "src/sim/solver/advance/line_ops.hpp"
 #include "src/sim/solver/advance/geometry.hpp"
@@ -151,6 +153,7 @@ inline void advance_line(
     std::vector<Conserved<DIM>> U_rgfm = U_line;
     std::vector<bool> is_interface(L - 1, false);
     std::vector<RGFMInterfaceStates<DIM>> interface_states(L - 1);
+    std::vector<double> rgfm_state_score(L, std::numeric_limits<double>::max());
 
     for (int i = 0; i < L - 1; ++i) {
         const int matL = mat_line[i];
@@ -210,8 +213,55 @@ inline void advance_line(
             cell_params[i + 1]
         );
 
-        U_rgfm[i] = interface_states[i].left;
-        U_rgfm[i + 1] = interface_states[i].right;
+        if (ctx.rgfm_star_velocity_mode != "mcrs") {
+            const Primitive<DIM> P_left_input =
+                cons_to_prim<DIM, EOS>(U_line[i], cell_params[i]);
+            const Primitive<DIM> P_right_input =
+                cons_to_prim<DIM, EOS>(U_line[i + 1], cell_params[i + 1]);
+            Primitive<DIM> P_left_star =
+                cons_to_prim<DIM, EOS>(interface_states[i].left, cell_params[i]);
+            Primitive<DIM> P_right_star =
+                cons_to_prim<DIM, EOS>(interface_states[i].right, cell_params[i + 1]);
+
+            const std::array<double, DIM> normal_unit =
+                normalize<DIM>(n_interface, 1e-14);
+            const double un_left = dot<DIM>(P_left_input.vel, normal_unit);
+            const double un_right = dot<DIM>(P_right_input.vel, normal_unit);
+            double un_applied = 0.5 * (un_left + un_right);
+
+            if (ctx.rgfm_star_velocity_mode == "zero") {
+                un_applied = 0.0;
+            }
+
+            const std::array<double, DIM> left_tangent =
+                sub<DIM>(P_left_input.vel, scale<DIM>(un_left, normal_unit));
+            const std::array<double, DIM> right_tangent =
+                sub<DIM>(P_right_input.vel, scale<DIM>(un_right, normal_unit));
+            const std::array<double, DIM> applied_normal =
+                scale<DIM>(un_applied, normal_unit);
+
+            P_left_star.vel = add<DIM>(left_tangent, applied_normal);
+            P_right_star.vel = add<DIM>(right_tangent, applied_normal);
+
+            interface_states[i].left =
+                prim_to_cons<DIM, EOS>(P_left_star, cell_params[i]);
+            interface_states[i].right =
+                prim_to_cons<DIM, EOS>(P_right_star, cell_params[i + 1]);
+        }
+
+        const double scoreL = std::abs(phi_list[k][idL]);
+        const double scoreR = std::abs(phi_list[k][idR]);
+
+        if (scoreL < rgfm_state_score[i]) {
+            U_rgfm[i] = interface_states[i].left;
+            rgfm_state_score[i] = scoreL;
+        }
+
+        if (scoreR < rgfm_state_score[i + 1]) {
+            U_rgfm[i + 1] = interface_states[i].right;
+            rgfm_state_score[i + 1] = scoreR;
+        }
+
         is_interface[i] = true;
     }
 

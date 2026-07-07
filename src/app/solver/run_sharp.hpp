@@ -233,6 +233,13 @@ inline void run_sharp_interface_case(
         );
     };
 
+    while (next_output_index < cfg.output_times.size() &&
+           cfg.output_times[next_output_index] <= 1e-14)
+    {
+        write_snapshot(cfg.output_times[next_output_index]);
+        ++next_output_index;
+    }
+
     while (time < cfg.tfinal - 1e-14) {
         const double next_output_time =
             (next_output_index < cfg.output_times.size())

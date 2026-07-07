@@ -67,8 +67,9 @@ inline int select_face_interface(
         const double phiL = phi_list[k][idL];
         const double phiR = phi_list[k][idR];
 
-        const int neg_mat = tracked_interfaces[k].negative_material_id;
-        const bool tracked_material_on_face = (neg_mat == matL) || (neg_mat == matR);
+        const bool tracked_material_on_face =
+            tracked_interface_contains_negative_material(tracked_interfaces[k], matL) ||
+            tracked_interface_contains_negative_material(tracked_interfaces[k], matR);
         const bool brackets_or_touches_interface =
             ((phiL <= phi_tol) && (phiR >= -phi_tol)) ||
             ((phiR <= phi_tol) && (phiL >= -phi_tol));

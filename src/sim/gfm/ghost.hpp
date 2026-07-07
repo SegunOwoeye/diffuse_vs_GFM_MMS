@@ -94,6 +94,36 @@ inline RGFMInterfaceStates<DIM> rgfm_interface_states_normal(
     const std::array<double, DIM> uL_t = sub<DIM>(PL.vel, scale<DIM>(unL, n));
     const std::array<double, DIM> uR_t = sub<DIM>(PR.vel, scale<DIM>(unR, n));
 
+    double velocity_jump_sq = 0.0;
+    for (int d = 0; d < DIM; ++d) {
+        const double delta = PL.vel[d] - PR.vel[d];
+        velocity_jump_sq += delta * delta;
+    }
+
+    const double pressure_scale = std::max(
+        1.0,
+        std::max(std::abs(PL.p), std::abs(PR.p))
+    );
+    const double velocity_scale = std::max(
+        1.0,
+        std::max(norm<DIM>(PL.vel), norm<DIM>(PR.vel))
+    );
+    const double contact_pressure_tol = std::max(
+        100.0 * tol * pressure_scale,
+        5.0e-2 * pressure_scale
+    );
+    const double contact_velocity_tol = std::max(
+        100.0 * tol * velocity_scale,
+        5.0e-2 * velocity_scale
+    );
+
+    if (std::abs(PL.p - PR.p) <= contact_pressure_tol &&
+        std::sqrt(velocity_jump_sq) <= contact_velocity_tol) {
+        const double p_interface = 0.5 * (PL.p + PR.p);
+        const double un_interface = 0.5 * (unL + unR);
+        return {UL, UR, p_interface, un_interface};
+    }
+
     // [0.5] Build 1D normal-direction primitive states for MCRS
     Primitive<1> PL_n{};
     Primitive<1> PR_n{};
@@ -215,5 +245,3 @@ inline std::pair<Conserved<DIM>, Conserved<DIM>> ghost_states_pair(
         max_iter
     );
 }
-
-

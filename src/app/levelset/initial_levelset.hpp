@@ -549,7 +549,11 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
         const bool is_coated_shock_bubble = (cfg.initial_condition == "coated_shock_bubble");
 
         if (is_coated_shock_bubble) {
-            const auto add_radial_phi = [&](int tracked_material, double inner_radius, double outer_radius) {
+            const auto add_radial_phi = [&](
+                int tracked_material,
+                double outer_radius,
+                std::vector<int> negative_side_materials
+            ) {
                 if (tracked_material == out.background_material_id) {
                     return;
                 }
@@ -572,31 +576,29 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
                     }
 
                     const double r = std::sqrt(r2);
-                    if (inner_radius <= 0.0) {
-                        phi[id] = r - outer_radius;
-                    }
-                    else if (r < inner_radius) {
-                        phi[id] = inner_radius - r;
-                    }
-                    else if (r <= outer_radius) {
-                        phi[id] = -std::min(r - inner_radius, outer_radius - r);
-                    }
-                    else {
-                        phi[id] = r - outer_radius;
-                    }
+                    phi[id] = r - outer_radius;
                 }
 
                 out.phi_list.push_back(phi);
                 out.tracked_interfaces.push_back(
                     TrackedInterface{
                         tracked_material,
-                        static_cast<int>(out.tracked_interfaces.size())
+                        static_cast<int>(out.tracked_interfaces.size()),
+                        negative_side_materials
                     }
                 );
             };
 
-            add_radial_phi(cfg.material_bubble, 0.0, cfg.bubble_radius);
-            add_radial_phi(cfg.material_film, cfg.bubble_radius, cfg.film_radius);
+            add_radial_phi(
+                cfg.material_bubble,
+                cfg.bubble_radius,
+                {cfg.material_bubble}
+            );
+            add_radial_phi(
+                cfg.material_film,
+                cfg.film_radius,
+                {cfg.material_bubble, cfg.material_film}
+            );
             return out;
         }
 
@@ -728,4 +730,3 @@ inline InitialLevelSetData<DIM> initialise_phi_data_from_regions(
 
     return out;
 }
-

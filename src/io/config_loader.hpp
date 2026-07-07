@@ -250,8 +250,8 @@ inline void validate_config(const Config<DIM>& cfg)
     }
 
     for (double output_time : cfg.output_times) {
-        if (output_time <= 0.0) {
-            throw std::runtime_error("output_times must be positive");
+        if (output_time < 0.0) {
+            throw std::runtime_error("output_times must be non-negative");
         }
     }
 
@@ -513,6 +513,11 @@ inline Config<DIM> load_config(const std::string& filename)
         else if (key == "rgfm_diagnostics_interval") cfg.rgfm_diagnostics_interval = std::stoi(value);
         else if (key == "rgfm_star_velocity_mode") cfg.rgfm_star_velocity_mode = to_lower(value);
         else if (key == "interface_thickness") cfg.interface_thickness = std::stod(value);
+        else if (key == "interface_sharpness_alpha" ||
+                 key == "tan_alpha" ||
+                 key == "alpha") {
+            cfg.interface_sharpness_alpha = std::stod(value);
+        }
         else if (key == "barton_solid_material") cfg.barton_solid_material = std::stoi(value);
         else if (key == "barton_temperature") cfg.barton_temperature = std::stod(value);
         else if (key == "bc_lo") cfg.bc_lo = parse_string_array<DIM>(value);

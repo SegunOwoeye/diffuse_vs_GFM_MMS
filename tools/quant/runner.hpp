@@ -60,19 +60,18 @@ std::string generated_config_text(const RunSpec& run, const fs::path& raw_dir)
 
 void ensure_executable(const CaseDef& def)
 {
-    if (fs::exists(def.executable_path)) {
+    static std::set<std::string> compiled_this_invocation;
+
+    if (compiled_this_invocation.count(def.executable_path)) {
         return;
     }
-#ifdef _WIN32
-    if (fs::exists(def.executable_path + ".exe")) {
-        return;
-    }
-#endif
+
     std::cout << "[compile] " << def.executable_path << "\n";
     const int rc = std::system(join_command(def.compile_command).c_str());
     if (rc != 0) {
         throw std::runtime_error("Compile failed for " + def.executable_path);
     }
+    compiled_this_invocation.insert(def.executable_path);
 }
 
 std::string executable_for(const CaseDef& def)

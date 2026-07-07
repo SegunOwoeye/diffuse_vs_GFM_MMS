@@ -223,14 +223,16 @@ namespace dim {
     // [5] Converts signed distance into a smooth weight using a tanh profile
     inline double smooth_indicator(
         double signed_distance,
-        double thickness
+        double thickness,
+        double sharpness_alpha
     )
     {
         if (thickness <= 0.0) {
             return (signed_distance <= 0.0) ? 1.0 : 0.0;
         }
 
-        return 0.5 * (1.0 - std::tanh(2.0 * signed_distance / thickness));
+        const double alpha = std::max(sharpness_alpha, 1.0e-12);
+        return 0.5 * (1.0 - std::tanh(alpha * signed_distance / thickness));
     }
 
     // [6] Builds the primitive state at a point for the diffuse-interface case
@@ -271,7 +273,11 @@ namespace dim {
                     cfg.domain_min,
                     cfg.domain_max
                 );
-            const double score = smooth_indicator(signed_distance, cfg.interface_thickness);
+            const double score = smooth_indicator(
+                signed_distance,
+                cfg.interface_thickness,
+                cfg.interface_sharpness_alpha
+            );
 
             if (score <= 1e-14) {
                 continue;
@@ -359,7 +365,11 @@ namespace dim {
             return P;
         }
 
-        const double bubble_weight = smooth_indicator(signed_distance, cfg.interface_thickness);
+        const double bubble_weight = smooth_indicator(
+            signed_distance,
+            cfg.interface_thickness,
+            cfg.interface_sharpness_alpha
+        );
         const double air_weight = 1.0 - bubble_weight;
 
         std::vector<double> rho_sum(nmat, 0.0);
@@ -456,11 +466,13 @@ namespace dim {
 
         const double bubble_weight = smooth_indicator(
             inner_signed_distance,
-            cfg.interface_thickness
+            cfg.interface_thickness,
+            cfg.interface_sharpness_alpha
         );
         const double coated_weight = smooth_indicator(
             outer_signed_distance,
-            cfg.interface_thickness
+            cfg.interface_thickness,
+            cfg.interface_sharpness_alpha
         );
         const double film_weight = std::max(coated_weight - bubble_weight, 0.0);
         const double carrier_weight = std::max(1.0 - coated_weight, 0.0);
@@ -612,25 +624,6 @@ namespace dim {
         }
         else {
             throw std::runtime_error("dim::initialise_dim_from_config: unsupported initial_condition: " + cfg.initial_condition);
-        }
-
-        if (cfg.barton_solid_material < 0) {
-            return;
-        }
-
-        const int solid_slot = ::dim::material_slot_from_id<DIM>(
-            cfg,
-            cfg.barton_solid_material);
-        for (State<DIM>& state : U) {
-            const Primitive<DIM> primitive = cons_to_prim<DIM>(state, params);
-            const double solid_mass = state.partial_mass[solid_slot];
-            state.solid_rhoF.fill(0.0);
-            for (int axis = 0; axis < 3; ++axis) {
-                state.solid_rhoF[3 * axis + axis] = solid_mass;
-            }
-            state.solid_rho_eqps = 0.0;
-            state.solid_rho_damage = 0.0;
-            (void)primitive;
         }
     }
 

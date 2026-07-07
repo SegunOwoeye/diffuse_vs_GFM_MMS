@@ -28,11 +28,6 @@ namespace dim {
         }
 
         C.E = A.E + B.E;
-        for (int q = 0; q < 9; ++q) {
-            C.solid_rhoF[q] = A.solid_rhoF[q] + B.solid_rhoF[q];
-        }
-        C.solid_rho_eqps = A.solid_rho_eqps + B.solid_rho_eqps;
-        C.solid_rho_damage = A.solid_rho_damage + B.solid_rho_damage;
         return C;
     }
 
@@ -58,11 +53,6 @@ namespace dim {
         }
 
         C.E = A.E - B.E;
-        for (int q = 0; q < 9; ++q) {
-            C.solid_rhoF[q] = A.solid_rhoF[q] - B.solid_rhoF[q];
-        }
-        C.solid_rho_eqps = A.solid_rho_eqps - B.solid_rho_eqps;
-        C.solid_rho_damage = A.solid_rho_damage - B.solid_rho_damage;
         return C;
     }
 
@@ -84,11 +74,6 @@ namespace dim {
         }
 
         result.E = a * F.E;
-        for (int q = 0; q < 9; ++q) {
-            result.solid_rhoF[q] = a * F.solid_rhoF[q];
-        }
-        result.solid_rho_eqps = a * F.solid_rho_eqps;
-        result.solid_rho_damage = a * F.solid_rho_damage;
         return result;
     }
 
@@ -124,11 +109,6 @@ namespace dim {
         }
 
         delta.E = A.E - B.E;
-        for (int q = 0; q < 9; ++q) {
-            delta.solid_rhoF[q] = A.solid_rhoF[q] - B.solid_rhoF[q];
-        }
-        delta.solid_rho_eqps = A.solid_rho_eqps - B.solid_rho_eqps;
-        delta.solid_rho_damage = A.solid_rho_damage - B.solid_rho_damage;
         return delta;
     }
 
@@ -157,13 +137,6 @@ namespace dim {
         }
 
         result.E -= lambda * (flux_right.E - flux_left.E);
-        for (int q = 0; q < 9; ++q) {
-            result.solid_rhoF[q] -= lambda * (flux_right.solid_rhoF[q] - flux_left.solid_rhoF[q]);
-        }
-        result.solid_rho_eqps -= lambda *
-            (flux_right.solid_rho_eqps - flux_left.solid_rho_eqps);
-        result.solid_rho_damage -= lambda *
-            (flux_right.solid_rho_damage - flux_left.solid_rho_damage);
         return result;
     }
 

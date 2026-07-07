@@ -478,12 +478,12 @@ inline void enforce_level_set_sign_from_material_map(
             );
         }
 
-        const int tracked_mat = ctx.tracked_interfaces[k].negative_material_id;
-
         #pragma omp parallel for if(Ntot > 512)
         for (int id = 0; id < Ntot; ++id) {
             const double magnitude = std::max(std::abs(phi_list[k][id]), sign_floor);
-            phi_list[k][id] = (material_id[id] == tracked_mat)
+            phi_list[k][id] = tracked_interface_contains_negative_material(
+                    ctx.tracked_interfaces[k],
+                    material_id[id])
                 ? -magnitude
                 : magnitude;
         }
@@ -616,7 +616,7 @@ inline StepResult<DIM> advance_one_step(
                 ctx,
                 dt,
                 U_out,
-                &rgfm_current.material_states
+                nullptr
             );
         };
 
@@ -682,7 +682,7 @@ inline StepResult<DIM> advance_one_step(
                 ctx,
                 dt,
                 U_out,
-                &rgfm_stage.material_states
+                nullptr
             );
         };
 
@@ -705,6 +705,10 @@ inline StepResult<DIM> advance_one_step(
     // [2.6] Level-set advection using the current-interface extension speed
     if (ctx.advect_level_set && !phi_list_work.empty()) {
         std::vector<std::array<double, DIM>> level_set_velocity_field;
+        const bool use_vector_level_set_transport =
+            ctx.level_set_advection == "flow" ||
+            ctx.level_set_advection == "physical_flow" ||
+            phi_list_work.size() > 1;
 
         if (ctx.level_set_advection == "flow") {
             level_set_velocity_field =
@@ -714,7 +718,8 @@ inline StepResult<DIM> advance_one_step(
                     ctx.material_params
                 );
         }
-        else if (ctx.level_set_advection == "physical_flow") {
+        else if (ctx.level_set_advection == "physical_flow" ||
+                 (ctx.level_set_advection == "normal_speed" && phi_list_work.size() > 1)) {
             level_set_velocity_field =
                 build_velocity_field<DIM, EOS>(
                     U,
@@ -725,8 +730,7 @@ inline StepResult<DIM> advance_one_step(
 
         #pragma omp parallel for
         for (int k = 0; k < static_cast<int>(phi_list_work.size()); ++k) {
-            if (ctx.level_set_advection == "flow" ||
-                ctx.level_set_advection == "physical_flow") {
+            if (use_vector_level_set_transport) {
                 phi_list_work[k] = advect_phi<DIM>(
                     ctx.phi_list[k],
                     level_set_velocity_field,
@@ -802,12 +806,30 @@ inline StepResult<DIM> advance_one_step(
         );
     }
 
+    std::vector<std::vector<Conserved<DIM>>> transfer_material_states;
+    const std::vector<std::vector<Conserved<DIM>>>* transfer_material_states_ptr = nullptr;
+
+    if (ctx.advect_level_set && !ctx.phi_list.empty()) {
+        const RGFMInterfaceData<DIM> rgfm_transfer =
+            build_rgfm_interface_data<DIM, EOS>(
+                U_stage,
+                material_id_current,
+                ctx.phi_list,
+                ctx.tracked_interfaces,
+                normals_current,
+                ctx
+            );
+        transfer_material_states = rgfm_transfer.material_states;
+        transfer_material_states_ptr = &transfer_material_states;
+    }
+
     std::vector<Conserved<DIM>> U_final =
         transfer_reassigned_material_states<DIM, EOS>(
             U_stage,
             material_id_current,
             material_id_work,
-            ctx
+            ctx,
+            transfer_material_states_ptr
         );
 
     zero_roundoff_planar_transverse_momentum<DIM>(

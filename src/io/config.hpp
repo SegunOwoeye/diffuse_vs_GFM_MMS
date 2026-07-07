@@ -119,6 +119,7 @@ struct Config {
 
     // [3.6] Diffuse interface (DIM only)
     double interface_thickness = 0.0;
+    double interface_sharpness_alpha = 2.0;
     int barton_solid_material = -1;
     double barton_temperature = 300.0;
 

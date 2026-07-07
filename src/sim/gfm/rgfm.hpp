@@ -409,12 +409,14 @@ inline std::vector<double> rgfm_material_distance(
     std::vector<double> distance(Ntot, std::numeric_limits<double>::max());
 
     for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
-        const int neg_mat = tracked_interfaces[k].negative_material_id;
-
         #pragma omp parallel for if(!omp_in_parallel() && Ntot > 512)
         for (int id = 0; id < Ntot; ++id) {
             const double signed_phi =
-                (material == neg_mat) ? phi_list[k][id] : -phi_list[k][id];
+                tracked_interface_contains_negative_material(
+                    tracked_interfaces[k],
+                    material)
+                    ? phi_list[k][id]
+                    : -phi_list[k][id];
 
             if (std::abs(signed_phi) < std::abs(distance[id])) {
                 distance[id] = signed_phi;
@@ -453,12 +455,14 @@ inline std::vector<std::array<double, DIM>> rgfm_material_normals(
     std::vector<double> best_distance(Ntot, std::numeric_limits<double>::max());
 
     for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
-        const int neg_mat = tracked_interfaces[k].negative_material_id;
-
         #pragma omp parallel for if(!omp_in_parallel() && Ntot > 512)
         for (int id = 0; id < Ntot; ++id) {
             const double signed_phi =
-                (material == neg_mat) ? phi_list[k][id] : -phi_list[k][id];
+                tracked_interface_contains_negative_material(
+                    tracked_interfaces[k],
+                    material)
+                    ? phi_list[k][id]
+                    : -phi_list[k][id];
             const double abs_phi = std::abs(signed_phi);
 
             if (abs_phi >= best_distance[id]) {
@@ -466,7 +470,9 @@ inline std::vector<std::array<double, DIM>> rgfm_material_normals(
             }
 
             best_distance[id] = abs_phi;
-            normal[id] = (material == neg_mat)
+            normal[id] = tracked_interface_contains_negative_material(
+                    tracked_interfaces[k],
+                    material)
                 ? normals_list[k][id]
                 : scale<DIM>(-1.0, normals_list[k][id]);
         }
@@ -776,6 +782,11 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
         const int neg_mat = tracked_interfaces[k].negative_material_id;
         std::vector<RGFMBoundaryCell<DIM>> negative_cells;
         std::vector<RGFMBoundaryCell<DIM>> positive_cells;
+        double min_dx = ctx.dx[0];
+        for (int d = 1; d < DIM; ++d) {
+            min_dx = std::min(min_dx, ctx.dx[d]);
+        }
+        const double phi_tol = geometry_tolerance(min_dx);
 
         for (int id = 0; id < Ntot; ++id) {
             if (!rgfm_is_material_boundary_cell<DIM>(
@@ -786,11 +797,21 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
                 continue;
             }
 
+            if (!rgfm_is_bordering_cell<DIM>(
+                    id,
+                    phi_list[k],
+                    ctx.level_set_grid,
+                    phi_tol)) {
+                continue;
+            }
+
             RGFMBoundaryCell<DIM> cell;
             cell.id = id;
             cell.idx = unflatten_index<DIM>(id, ctx.level_set_grid);
 
-            if (material_id[id] == neg_mat) {
+            if (tracked_interface_contains_negative_material(
+                    tracked_interfaces[k],
+                    material_id[id])) {
                 negative_cells.push_back(cell);
             }
             else {
@@ -1016,8 +1037,26 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
                 material_interface_score[pos_mat][pos_id] = score_pos;
             }
 
-            data.normal_speed_fields[k][neg_id] = un_applied;
-            data.normal_speed_fields[k][pos_id] = un_applied;
+            const std::array<double, DIM> interface_velocity =
+                scale<DIM>(un_applied, normal_unit);
+            const auto projected_local_speed = [&](
+                const std::array<double, DIM>& local_normal
+            ) {
+                const double local_magnitude = norm<DIM>(local_normal);
+                if (local_magnitude < 1e-14) {
+                    return un_applied;
+                }
+
+                return dot<DIM>(
+                    interface_velocity,
+                    scale<DIM>(1.0 / local_magnitude, local_normal)
+                );
+            };
+
+            data.normal_speed_fields[k][neg_id] =
+                projected_local_speed(normals_list[k][neg_id]);
+            data.normal_speed_fields[k][pos_id] =
+                projected_local_speed(normals_list[k][pos_id]);
             fixed_speed[neg_id] = 1;
             fixed_speed[pos_id] = 1;
         };
@@ -1094,6 +1133,4 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
 
     return data;
 }
-
-
 
