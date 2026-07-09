@@ -93,7 +93,7 @@ namespace dim {
         const double unL = dot<DIM>(PL.vel, n);
         const double unR = dot<DIM>(PR.vel, n);
 
-        const double cL = IdealGasEOS::generic_mixture_sound_speed(
+        const double cL = MixtureEOS::generic_mixture_sound_speed(
             rhoL,
             pL,
             PL.alpha,
@@ -101,7 +101,7 @@ namespace dim {
             params,
             lambda_model
         );
-        const double cR = IdealGasEOS::generic_mixture_sound_speed(
+        const double cR = MixtureEOS::generic_mixture_sound_speed(
             rhoR,
             pR,
             PR.alpha,

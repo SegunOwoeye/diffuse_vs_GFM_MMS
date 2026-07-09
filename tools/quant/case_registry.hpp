@@ -168,6 +168,18 @@ std::vector<CaseDef> case_registry()
         {{240, 200}, {480, 400}}
     });
     cases.push_back({
+        "gorsse_tc9_water_air_bubble_2d_lowres", "tc9_lowres", "gorsse_tc9_water_air_bubble_2d_lowres", "SIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/diagnostics/gorsse_tc9_water_air_bubble_2d_gfm_lowres.txt",
+        {{120, 100}}
+    });
+    cases.push_back({
+        "gorsse_tc9_water_air_bubble_2d_lowres", "tc9_lowres", "gorsse_tc9_water_air_bubble_2d_lowres", "DIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/diagnostics/gorsse_tc9_water_air_bubble_2d_dim_lowres.txt",
+        {{120, 100}}
+    });
+    cases.push_back({
         "he2023_three_material_1d", "three_material_1d", "he2023_three_material_1d", "SIM", 1,
         "mm_1d", "mm_main_1d", mm1,
         "configs/diagnostics/he2023_three_material_1d_gfm_lowres.txt",
@@ -261,13 +273,13 @@ std::vector<CaseDef> case_registry()
         "shock_bubble_3d", "test6", "helium_bubble_3d", "SIM", 3,
         "mm_3d", "mm_main_3d", mm3,
         "configs/GFM/MM_3D_validation/test6.txt",
-        {{325, 45, 45}}
+        {{650, 89, 89}}
     });
     cases.push_back({
         "shock_bubble_3d", "test6", "helium_bubble_3d", "DIM", 3,
         "mm_3d", "mm_main_3d", mm3,
         "configs/DIM/MM_3D_validation/test6.txt",
-        {{325, 45, 45}}
+        {{650, 89, 89}}
     });
 
     return cases;
@@ -302,6 +314,7 @@ std::set<std::string> groups_for_case_alias(const std::vector<std::string>& alia
         else if (alias == "bubble_reinit" || alias == "shock_bubble_reinit" || alias == "rgfm_bubble_reinit") groups.insert("shock_bubble_2d_reinit");
         else if (alias == "water_air_bubble" || alias == "water_air_bubble_2d" || alias == "practical_case2") groups.insert("water_air_bubble_2d");
         else if (alias == "gorsse_tc9" || alias == "tc9_water_air_bubble" || alias == "water_air_bubble_gorsse") groups.insert("gorsse_tc9_water_air_bubble_2d");
+        else if (alias == "gorsse_tc9_lowres" || alias == "tc9_water_air_bubble_lowres" || alias == "water_air_bubble_gorsse_lowres") groups.insert("gorsse_tc9_water_air_bubble_2d_lowres");
         else if (alias == "he2023_three_material" || alias == "hu2023_three_material" || alias == "three_material" || alias == "three_material_he2023") {
             groups.insert("he2023_three_material_1d");
             groups.insert("he2023_three_material_triple_point_2d");
@@ -331,6 +344,7 @@ bool is_specific_case_filter(const std::string& value)
         "bubble_reinit", "shock_bubble_reinit", "rgfm_bubble_reinit",
         "water_air_bubble", "water_air_bubble_2d", "practical_case2",
         "gorsse_tc9", "tc9_water_air_bubble", "water_air_bubble_gorsse",
+        "gorsse_tc9_lowres", "tc9_water_air_bubble_lowres", "water_air_bubble_gorsse_lowres",
         "he2023_three_material", "hu2023_three_material", "three_material",
         "three_material_he2023", "he2023_three_material_1d", "hu2023_three_material_1d",
         "three_material_1d", "he2023_triple_point", "hu2023_triple_point",

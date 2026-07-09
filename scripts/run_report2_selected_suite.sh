@@ -16,6 +16,8 @@ skip_sensitivity=false
 skip_reinit_sensitivity=false
 skip_alpha_sensitivity=false
 skip_plots=false
+skip_organize=false
+organized_output_dir="results/report2_organized"
 benchmark_repeats=3
 benchmark_warmups=1
 
@@ -39,6 +41,9 @@ Options:
   --skip-reinit-sensitivity  Skip rGFM reinitialisation sensitivity.
   --skip-alpha-sensitivity   Skip DIM interface-thickness sensitivity.
   --skip-plots               Skip report PNG generation after solver runs.
+  --skip-organize            Skip final report output organization.
+  --organized-output-dir PATH
+                              Destination for organized report outputs.
   --benchmark-repeats N      Measured repeats for speedup study.
   --benchmark-warmups N      Warmup repeats for speedup study.
   --help, -h                 Show this help.
@@ -110,6 +115,18 @@ while [[ $# -gt 0 ]]; do
         --skip-plots)
             skip_plots=true
             shift
+            ;;
+        --skip-organize)
+            skip_organize=true
+            shift
+            ;;
+        --organized-output-dir)
+            if [[ $# -lt 2 ]]; then
+                echo "run_report2_selected_suite.sh: --organized-output-dir requires a path" >&2
+                exit 2
+            fi
+            organized_output_dir="$2"
+            shift 2
             ;;
         --benchmark-repeats)
             if [[ $# -lt 2 ]]; then
@@ -223,7 +240,7 @@ if [[ "$skip_3d" != true ]]; then
     run_quant_with_conservation "3D contaminated helium shock-bubble" \
         --case bubble3d \
         --methods sim,dim \
-        --resolutions 650x90x90 \
+        --resolutions 650x89x89 \
         --result-root "$result_root_base/report_selected_helium_bubble_3d"
 fi
 
@@ -285,6 +302,14 @@ fi
 echo
 echo "[report2] Updating run tracker"
 "$python_bin" scripts/update_report2_run_tracker.py
+
+if [[ "$skip_organize" != true ]]; then
+    echo
+    echo "[report2] Organizing report outputs"
+    "$python_bin" scripts/organize_report2_outputs.py \
+        --output-dir "$organized_output_dir" \
+        --clean
+fi
 
 echo
 echo "[report2] Selected suite complete"

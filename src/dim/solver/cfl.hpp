@@ -44,7 +44,7 @@ namespace dim {
         #pragma omp parallel for reduction(min:dt)
         for (int i = 0; i < static_cast<int>(U.size()); ++i) {
             const Primitive<DIM> P = cons_to_prim<DIM>(U[i], params);
-            const double c = IdealGasEOS::generic_mixture_sound_speed(
+            const double c = MixtureEOS::generic_mixture_sound_speed(
                 total_density(U[i]),
                 P.p,
                 P.alpha,
@@ -92,7 +92,7 @@ namespace dim {
         #pragma omp parallel for reduction(min:dt)
         for (int i = 0; i < static_cast<int>(U.size()); ++i) {
             const Primitive<DIM> P = cons_to_prim<DIM>(U[i], params);
-            const double c = IdealGasEOS::generic_mixture_sound_speed(
+            const double c = MixtureEOS::generic_mixture_sound_speed(
                 total_density(U[i]),
                 P.p,
                 P.alpha,

@@ -7,6 +7,7 @@
 #include "report_interfaces.hpp"
 #include "report_performance.hpp"
 #include "report_bubble.hpp"
+#include "gorsse_tc9_metrics.hpp"
 
 namespace quant {
 
@@ -18,6 +19,12 @@ inline bool uses_bubble_feature_diagnostics(const RunSpec& run)
            run.case_def.group == "shock_bubble_2d_zero_velocity_input_mean_star" ||
            run.case_def.group == "shock_bubble_2d_zero_velocity_zero_star" ||
            run.case_def.group == "shock_bubble_2d_static_equilibrium";
+}
+
+inline bool uses_gorsse_tc9_diagnostics(const RunSpec& run)
+{
+    return run.case_def.group == "gorsse_tc9_water_air_bubble_2d" ||
+           run.case_def.group == "gorsse_tc9_water_air_bubble_2d_lowres";
 }
 
 inline fs::path run_case_dir(const fs::path& result_root, const RunSpec& run)
@@ -201,6 +208,8 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
     std::vector<std::map<std::string, std::string>> scaling_rows;
     std::vector<std::map<std::string, std::string>> bubble_rows;
     std::vector<std::map<std::string, std::string>> bubble_timeseries_rows;
+    std::vector<std::map<std::string, std::string>> gorsse_tc9_rows;
+    std::vector<std::map<std::string, std::string>> gorsse_tc9_reference_rows;
     std::vector<std::map<std::string, std::string>> error_rows;
 
     for (std::size_t i = 0; i < runs.size(); ++i) {
@@ -335,6 +344,45 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
                 bubble_timeseries_rows.push_back(bubble_time_row);
             }
         }
+        if (uses_gorsse_tc9_diagnostics(run) && successes[i]) {
+            auto tc9_rows = tc9_model_summary_rows(
+                result_root / "raw" / run.run_id,
+                run.case_def.method
+            );
+            for (auto& tc9_row : tc9_rows) {
+                tc9_row["case"] = run.case_def.name;
+                tc9_row["case_label"] = run.case_def.label;
+                tc9_row["method"] = run.case_def.method;
+                tc9_row["resolution"] = resolution_label(run.resolution);
+                tc9_row["run_id"] = run.run_id;
+                tc9_row["success"] = successes[i] ? "true" : "false";
+            }
+            const fs::path reference_summary =
+                fs::path("data") / "bubble_collapse_validation" /
+                "gorsse_2014_tc9" / "gorsse_tc9_reference_interface_summary.csv";
+            auto comparison_rows = tc9_reference_comparison_rows(
+                tc9_rows,
+                reference_summary
+            );
+            for (auto& comparison_row : comparison_rows) {
+                comparison_row["case"] = run.case_def.name;
+                comparison_row["case_label"] = run.case_def.label;
+                comparison_row["method"] = run.case_def.method;
+                comparison_row["resolution"] = resolution_label(run.resolution);
+                comparison_row["run_id"] = run.run_id;
+                comparison_row["success"] = successes[i] ? "true" : "false";
+            }
+            gorsse_tc9_rows.insert(
+                gorsse_tc9_rows.end(),
+                tc9_rows.begin(),
+                tc9_rows.end()
+            );
+            gorsse_tc9_reference_rows.insert(
+                gorsse_tc9_reference_rows.end(),
+                comparison_rows.begin(),
+                comparison_rows.end()
+            );
+        }
         const auto errors = error_rows_for(run, solution, case_dir);
         error_rows.insert(error_rows.end(), errors.begin(), errors.end());
         summary.push_back(row);
@@ -455,6 +503,86 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
             "transverse_triple_point_x_latest_position_mm",
             "transverse_triple_point_y_latest_position_mm",
             "transverse_wave_y_latest_position_mm",
+        }
+    );
+    write_csv_ordered(
+        summaries_dir / "gorsse_tc9_interface_summary.csv",
+        gorsse_tc9_rows,
+        {
+            "case",
+            "case_label",
+            "method",
+            "resolution",
+            "run_id",
+            "success",
+            "time_s",
+            "time_us",
+            "interface_label",
+            "extraction_mode",
+            "contour_point_count",
+            "x0_min_m",
+            "x0_max_m",
+            "x1_min_m",
+            "x1_max_m",
+            "centroid_x0_m",
+            "centroid_x1_m",
+            "csv_file",
+        }
+    );
+    write_csv_ordered(
+        summaries_dir / "gorsse_tc9_reference_comparison.csv",
+        gorsse_tc9_reference_rows,
+        {
+            "case",
+            "case_label",
+            "method",
+            "resolution",
+            "run_id",
+            "success",
+            "time_us",
+            "reference_time_us",
+            "time_delta_us",
+            "reference_x_offset_m",
+            "interface_label",
+            "extraction_mode",
+            "x0_min_m",
+            "reference_x0_min_m",
+            "x0_min_m_error_m",
+            "x0_max_m",
+            "reference_x0_max_m",
+            "x0_max_m_error_m",
+            "x1_min_m",
+            "reference_x1_min_m",
+            "x1_min_m_error_m",
+            "x1_max_m",
+            "reference_x1_max_m",
+            "x1_max_m_error_m",
+            "centroid_x0_m",
+            "reference_centroid_x0_m",
+            "centroid_x0_m_error_m",
+            "centroid_x1_m",
+            "reference_centroid_x1_m",
+            "centroid_x1_m_error_m",
+            "csv_file",
+        }
+    );
+    write_csv_ordered(
+        report_dir / "gorsse_tc9_reference_comparison_summary.csv",
+        gorsse_tc9_reference_rows,
+        {
+            "case_label",
+            "method",
+            "resolution",
+            "time_us",
+            "reference_time_us",
+            "reference_x_offset_m",
+            "extraction_mode",
+            "x0_min_m_error_m",
+            "x0_max_m_error_m",
+            "x1_min_m_error_m",
+            "x1_max_m_error_m",
+            "centroid_x0_m_error_m",
+            "centroid_x1_m_error_m",
         }
     );
     write_csv_ordered(

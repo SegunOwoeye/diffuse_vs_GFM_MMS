@@ -1,0 +1,50 @@
+# [0] Problem
+dimension = 2
+
+# [1] Domain
+domain_min = [-0.2, 0.0]
+domain_max = [1.0, 1.0]
+N = [120, 100]
+
+# [2] Time
+tfinal = 5.0e-4
+output_times = [1.06e-4, 2.04e-4, 3.01e-4, 3.58e-4, 4.06e-4, 5.0e-4]
+cfl = 0.45
+
+bc_lo = [zero_gradient, reflective]
+bc_hi = [zero_gradient, reflective]
+
+# [3] Interface Method
+interface_method = DIM
+use_level_set = false
+interface_thickness = 0.015
+
+# [4] Materials
+material = 0, stiffened_gas, gamma=4.4, p_inf=6.0e8
+material = 1, noble_abel, gamma=1.4, b=1.0e-3
+
+# [5] Initial Condition
+initial_condition = shock_bubble
+shock_axis = 0
+shock_position = 0.75
+
+rho_left = 1000.0
+vel_left = [0.0, 0.0]
+p_left = 1.0e5
+material_left = 0
+
+rho_right = 1230.0
+vel_right = [-432.69, 0.0]
+p_right = 1.0e9
+material_right = 0
+
+bubble_center = [0.5, 0.5]
+bubble_radius = 0.2
+rho_bubble = 1.2
+vel_bubble = [0.0, 0.0]
+p_bubble = 1.0e5
+material_bubble = 1
+
+# [6] Output
+output_prefix = dim_gorsse_tc9_water_air_bubble_2d_lowres
+output_dir = data/csv/dim/gorsse_2014_lowres

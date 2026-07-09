@@ -709,7 +709,7 @@ inline StepResult<DIM> advance_one_step(
         const bool use_vector_level_set_transport =
             ctx.level_set_advection == "flow" ||
             ctx.level_set_advection == "physical_flow" ||
-            phi_list_work.size() > 1;
+            (ctx.level_set_advection == "normal_speed" && phi_list_work.size() > 1);
 
         if (ctx.level_set_advection == "flow") {
             level_set_velocity_field =

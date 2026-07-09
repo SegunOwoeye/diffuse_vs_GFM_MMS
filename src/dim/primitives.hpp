@@ -148,7 +148,7 @@ namespace dim {
         const double kinetic = 0.5 * rho_total * velocity_squared;
         const double internal_energy = safe_div(finite_or(U.E, kinetic) - kinetic, rho_total);
         P.p = std::max(
-            IdealGasEOS::pressure_from_internal_energy(
+            MixtureEOS::pressure_from_internal_energy(
                 rho_total,
                 internal_energy,
                 P.alpha,
@@ -202,7 +202,7 @@ namespace dim {
             velocity_squared += P.vel[d] * P.vel[d];
         }
 
-        const double internal_energy = IdealGasEOS::internal_energy_from_pressure(
+        const double internal_energy = MixtureEOS::internal_energy_from_pressure(
             rho_total, P.p, P.alpha, P.rho, params);
 
         U.E = rho_total * internal_energy + 0.5 * rho_total * velocity_squared;
@@ -247,7 +247,7 @@ namespace dim {
                 if (alpha_k <= floor || alpha_k < std::max(active_alpha_floor, 0.0)) {
                     continue;
                 }
-                sound_speed[k] = IdealGasEOS::material_sound_speed(
+                sound_speed[k] = MixtureEOS::material_sound_speed(
                     std::max(finite_or(P.rho[k]), floor),
                     std::max(finite_or(P.p), floor),
                     params.material[k]
@@ -293,7 +293,7 @@ namespace dim {
 
             active[k] = 1;
             const double rho_k = std::max(finite_or(P.rho[k]), floor);
-            const double c_k = IdealGasEOS::material_sound_speed(
+            const double c_k = MixtureEOS::material_sound_speed(
                 rho_k,
                 std::max(finite_or(P.p), floor),
                 params.material[k]
@@ -368,7 +368,7 @@ namespace dim {
         const double internal_before =
             safe_div(finite_or(U.E, kinetic_before) - kinetic_before, rho_before);
         const double pressure_before = std::max(
-            IdealGasEOS::pressure_from_internal_energy(
+            MixtureEOS::pressure_from_internal_energy(
                 rho_before,
                 internal_before,
                 alpha_before,
@@ -422,7 +422,7 @@ namespace dim {
             }
 
             const double internal_energy =
-                IdealGasEOS::internal_energy_from_pressure(
+                MixtureEOS::internal_energy_from_pressure(
                     rho_total,
                     pressure_before,
                     alpha_full,
@@ -447,7 +447,7 @@ namespace dim {
 
         const double kinetic = 0.5 * rho_total * velocity_squared;
         const double minimum_internal =
-            IdealGasEOS::mixture_internal_energy_density(
+            MixtureEOS::mixture_internal_energy_density(
                 p_floor,
                 alpha_full,
                 rho_material,

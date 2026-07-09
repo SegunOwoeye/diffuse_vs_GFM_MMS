@@ -12,7 +12,7 @@
 
 namespace dim {
 
-struct IdealGasEOS {
+struct MixtureEOS {
     static double material_pressure_from_density_energy(
         double rho,
         double e,
@@ -86,7 +86,7 @@ struct IdealGasEOS {
 
         if (static_cast<int>(alpha.size()) != params.nmat() ||
             static_cast<int>(rho.size()) != params.nmat()) {
-            throw std::runtime_error("dim::IdealGasEOS::pressure_from_internal_energy: mixture size mismatch");
+            throw std::runtime_error("dim::MixtureEOS::pressure_from_internal_energy: mixture size mismatch");
         }
 
         rho_total = clamp_min(rho_total);
@@ -152,7 +152,7 @@ struct IdealGasEOS {
         params.validate();
 
         if (static_cast<int>(alpha.size()) != params.nmat()) {
-            throw std::runtime_error("dim::IdealGasEOS::pressure_from_internal_energy: alpha size mismatch");
+            throw std::runtime_error("dim::MixtureEOS::pressure_from_internal_energy: alpha size mismatch");
         }
 
         rho = clamp_min(rho);
@@ -172,7 +172,7 @@ struct IdealGasEOS {
 
         if (static_cast<int>(alpha.size()) != params.nmat() ||
             static_cast<int>(rho.size()) != params.nmat()) {
-            throw std::runtime_error("dim::IdealGasEOS::internal_energy_from_pressure: mixture size mismatch");
+            throw std::runtime_error("dim::MixtureEOS::internal_energy_from_pressure: mixture size mismatch");
         }
 
         rho_total = clamp_min(rho_total);
@@ -204,7 +204,7 @@ struct IdealGasEOS {
 
         if (static_cast<int>(alpha.size()) != params.nmat() ||
             static_cast<int>(rho.size()) != params.nmat()) {
-            throw std::runtime_error("dim::IdealGasEOS::mixture_sound_speed: mixture size mismatch");
+            throw std::runtime_error("dim::MixtureEOS::mixture_sound_speed: mixture size mismatch");
         }
 
         rho_total = clamp_min(rho_total);
@@ -236,7 +236,7 @@ struct IdealGasEOS {
         params.validate();
         if (static_cast<int>(alpha.size()) != params.nmat() ||
             static_cast<int>(rho.size()) != params.nmat()) {
-            throw std::runtime_error("dim::IdealGasEOS::generic_mixture_sound_speed: mixture size mismatch");
+            throw std::runtime_error("dim::MixtureEOS::generic_mixture_sound_speed: mixture size mismatch");
         }
 
         std::vector<double> sound_speed(params.nmat(), 0.0);
@@ -265,7 +265,7 @@ struct IdealGasEOS {
                 lambda_k = safe_div(1.0 / safe_denom(sound_speed[k], 1e-14), inverse_sound_sum, 1e-14);
             }
             else if (lambda_model != "allaire") {
-                throw std::runtime_error("dim::IdealGasEOS::generic_mixture_sound_speed: unknown lambda model");
+                throw std::runtime_error("dim::MixtureEOS::generic_mixture_sound_speed: unknown lambda model");
             }
 
             rho_c_squared += lambda_k * alpha_k * xi[k] * sound_speed[k] * sound_speed[k] / xi_mix;
@@ -285,5 +285,7 @@ struct IdealGasEOS {
         return mixture_sound_speed(rho, p, alpha, rho_k, params);
     }
 };
+
+using IdealGasEOS = MixtureEOS;
 
 } 

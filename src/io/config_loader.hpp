@@ -320,9 +320,10 @@ inline void validate_config(const Config<DIM>& cfg)
     }
 
     if (cfg.level_set_advection != "normal_speed" &&
+        cfg.level_set_advection != "rgfm_normal_speed" &&
         cfg.level_set_advection != "flow" &&
         cfg.level_set_advection != "physical_flow") {
-        throw std::runtime_error("level_set_advection must be normal_speed, flow, or physical_flow");
+        throw std::runtime_error("level_set_advection must be normal_speed, rgfm_normal_speed, flow, or physical_flow");
     }
 
     if (cfg.level_set_spatial_derivative != "tvd" &&
