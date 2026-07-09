@@ -517,7 +517,8 @@ inline StepResult<DIM> advance_one_step(
             ctx.tracked_interfaces,
             ctx.background_material_id,
             material_id_current,
-            ctx.level_set_grid
+            ctx.level_set_grid,
+            ctx.level_set_component_policy
         );
 
         fill_small_enclosed_background_cavities<DIM>(
@@ -789,7 +790,8 @@ inline StepResult<DIM> advance_one_step(
             ctx.tracked_interfaces,
             ctx.background_material_id,
             material_id_work,
-            ctx.level_set_grid
+            ctx.level_set_grid,
+            ctx.level_set_component_policy
         );
 
         fill_small_enclosed_background_cavities<DIM>(

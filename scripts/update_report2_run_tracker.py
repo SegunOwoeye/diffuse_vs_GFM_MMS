@@ -32,7 +32,8 @@ CORE_ROWS = [
     RunRow("Core Report Runs", "2D helium shock-bubble", "--case bubble", "results/quantitative/report_selected_helium_bubble_2d", "conservation, bubble feature, interface, performance, and PNG outputs", "Main 2D gas-gas comparison"),
     RunRow("Core Report Runs", "3D helium shock-bubble", "--case bubble3d", "results/quantitative/report_selected_helium_bubble_3d", "summary, runtime, and PNG outputs", "Main 3D gas-gas extension"),
     RunRow("Core Report Runs", "2D Gorsse TC9 water-air bubble", "--case gorsse_tc9", "results/quantitative/report_selected_gorsse_tc9_water_air_2d", "conservation, interface, performance, and Schlieren PNG outputs", "Main water-air and multiple-EOS case"),
-    RunRow("Core Report Runs", "2D Appl Sci 2021 three-material shock-bubble", "--case applsci_three_material", "results/quantitative/report_selected_applsci_three_material_2d", "conservation, interface, performance, alpha fields, and PNG outputs", "Main three-material DIM versus rGFM comparison"),
+    RunRow("Core Report Runs", "He 2023 three-material 1D convergence", "--case he2023_three_material_1d", "results/quantitative/report_selected_he2023_three_material_1d", "self-reference convergence, conservation, interface, performance, and PNG outputs", "Initial K-material 1D validation against N=2000 reference"),
+    RunRow("Core Report Runs", "He 2023 three-material triple-point 2D", "--case he2023_triple_point", "results/quantitative/report_selected_he2023_three_material_triple_point_2d", "density, pressure, material-map, Schlieren, conservation, and performance outputs", "Main three-material DIM versus rGFM comparison at paper resolution 1400x600"),
     RunRow("Core Report Runs", "3D Gorsse TC9 water-air bubble", "--case gorsse_tc9_3d", "results/quantitative/report_selected_gorsse_tc9_water_air_3d", "summary, runtime, and PNG outputs", "3D water-air extension with zero z velocity"),
 ]
 

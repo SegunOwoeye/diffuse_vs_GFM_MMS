@@ -183,7 +183,8 @@ inline void run_sharp_interface_case(
             ctx.tracked_interfaces,
             ctx.background_material_id,
             ctx.material_id,
-            ctx.level_set_grid
+            ctx.level_set_grid,
+            ctx.level_set_component_policy
         );
 
         fill_small_enclosed_background_cavities<DIM>(
@@ -276,7 +277,8 @@ inline void run_sharp_interface_case(
                 ctx.tracked_interfaces,
                 ctx.background_material_id,
                 ctx.material_id,
-                ctx.level_set_grid
+                ctx.level_set_grid,
+                ctx.level_set_component_policy
             );
 
             fill_small_enclosed_background_cavities<DIM>(

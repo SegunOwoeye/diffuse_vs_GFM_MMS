@@ -38,3 +38,6 @@ tools/quant_suite
 mm_main_3d
 /tmp
 /docs
+/tools/diagnostics
+multimaterial_main_2d
+multimaterial_main_1d

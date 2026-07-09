@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "src/dim/conservative.hpp"
@@ -150,7 +151,9 @@ namespace dim {
         const EOSParams& params,
         int dir,
         double dt,
-        double dx
+        double dx,
+        double alpha_source_floor,
+        const std::string& lambda_model
     )
     {
         std::array<double, DIM> normal{};
@@ -167,7 +170,13 @@ namespace dim {
         const double u_left = P_left_face.vel[dir];
         const double u_right = P_right_face.vel[dir];
         const double div_u = (u_right - u_left) / dx;
-        const std::vector<double> rhs = alpha_rhs_coefficients<DIM>(P_center, params);
+        const std::vector<double> rhs = alpha_rhs_coefficients<DIM>(
+            P_center,
+            params,
+            1e-12,
+            alpha_source_floor,
+            lambda_model
+        );
 
         std::vector<double> alpha_new = P_center.alpha;
         for (int k = 0; k < params.nmat(); ++k) {
@@ -192,6 +201,8 @@ namespace dim {
         int dir,
         double dt,
         double dx,
+        double alpha_source_floor,
+        const std::string& lambda_model,
         std::vector<State<DIM>>& UL_face,
         std::vector<State<DIM>>& UR_face
     )
@@ -265,7 +276,9 @@ namespace dim {
                 params,
                 dir,
                 dt,
-                dx
+                dx,
+                alpha_source_floor,
+                lambda_model
             );
         }
 

@@ -975,13 +975,21 @@ inline TensorState2D make_solid_state_from_config_2d(
     const TensorMaterial& mat,
     const std::array<double, 2>& n)
 {
-    const double ux = state.has_cartesian_velocity ? state.ux : state.un * n[0];
-    const double uy = state.has_cartesian_velocity ? state.uy : state.un * n[1];
+    const std::array<double, 2> s = tangent_from_normal(n);
+    const double ux = state.has_cartesian_velocity
+        ? state.ux
+        : state.un * n[0] + state.us * s[0];
+    const double uy = state.has_cartesian_velocity
+        ? state.uy
+        : state.un * n[1] + state.us * s[1];
+    const double temperature = state.p > 0.0
+        ? material_temperature_from_rho_p(state.rho, state.p, mat)
+        : mat.T0;
     TensorState2D base = tensor_cons_from_F(
         state.rho,
         ux,
         uy,
-        mat.T0,
+        temperature,
         local_stretch_F(n, 1.0, 1.0),
         mat);
     enforce_tensor(base, mat);
@@ -989,6 +997,28 @@ inline TensorState2D make_solid_state_from_config_2d(
         base = tensor_state_with_normal_stress(base, mat, n, state.sigma_nn, state.un);
     }
     return base;
+}
+
+inline std::pair<double, double> projected_normal_bounds(
+    const FluidSolidConfig2D& cfg)
+{
+    const std::array<std::array<double, 2>, 4> corners{{
+        {cfg.domain_min[0], cfg.domain_min[1]},
+        {cfg.domain_max[0], cfg.domain_min[1]},
+        {cfg.domain_min[0], cfg.domain_max[1]},
+        {cfg.domain_max[0], cfg.domain_max[1]},
+    }};
+    double xi_min = dot2(corners.front(), cfg.interface_normal);
+    double xi_max = xi_min;
+    for (const auto& corner : corners) {
+        const double xi = dot2(corner, cfg.interface_normal);
+        xi_min = std::min(xi_min, xi);
+        xi_max = std::max(xi_max, xi);
+    }
+    if (xi_max <= xi_min) {
+        throw std::runtime_error("Invalid projected normal bounds for fluid-solid 2D normal-tangent update");
+    }
+    return {xi_min, xi_max};
 }
 
 inline bool point_in_rect_region(
@@ -1330,7 +1360,7 @@ inline void advance_masked_rgfm_tensor_sweep(
             const std::array<double, 2> right_normal =
                 cfg.geometry == "rectangular_regions"
                     ? (dir == 0 ? std::array<double, 2>{-1.0, 0.0} : std::array<double, 2>{0.0, -1.0})
-                    : cfg.interface_normal;
+                    : std::array<double, 2>{-cfg.interface_normal[0], -cfg.interface_normal[1]};
             ext[0] = left_fluid ? interface_state(left_neighbour, left_solid, left_normal) : ext[1];
             ext[segment_cells + 1] =
                 right_fluid ? interface_state(right_neighbour, right_solid, right_normal) : ext[segment_cells];
@@ -1566,8 +1596,7 @@ inline void write_fluid_solid_normal_tangent_csv_2d(
 inline int run_fluid_solid_rgfm_2d_normal_tangent(const FluidSolidConfig2D& cfg)
 {
     const int cells = cfg.normal_tangent_cells > 1 ? cfg.normal_tangent_cells : cfg.cells[0];
-    const double xi_min = cfg.domain_min[0];
-    const double xi_max = cfg.domain_max[0];
+    const auto [xi_min, xi_max] = projected_normal_bounds(cfg);
     const double dxi = (xi_max - xi_min) / cells;
     const int count = cells;
     FluidSolidConfig2D line_cfg = cfg;
@@ -1693,6 +1722,8 @@ inline int run_fluid_solid_rgfm_2d_normal_tangent(const FluidSolidConfig2D& cfg)
     runtime << "cells = " << cfg.cells[0] * cfg.cells[1] << "\n";
     runtime << "model = fluid_solid_rgfm_2d_normal_tangent\n";
     runtime << "normal_cells = " << cells << "\n";
+    runtime << "normal_domain_min = " << xi_min << "\n";
+    runtime << "normal_domain_max = " << xi_max << "\n";
     runtime << "interface_normal = " << cfg.interface_normal[0] << ","
             << cfg.interface_normal[1] << "\n";
     runtime << "interface_offset = " << cfg.interface_offset << "\n";
@@ -1818,7 +1849,7 @@ inline int run_fluid_solid_rgfm_2d(const std::string& config_file)
                     const std::array<double, 2> nface =
                         cfg.geometry == "rectangular_regions"
                             ? std::array<double, 2>{-1.0, 0.0}
-                            : cfg.interface_normal;
+                            : std::array<double, 2>{-cfg.interface_normal[0], -cfg.interface_normal[1]};
                     const auto state = face_interface(right, left, nface);
                     flux_fx[fid] = compute_flux_normal<2, MaterialEOS>(state.fluid_interface, ex, cfg.fluid);
                 }
@@ -1857,7 +1888,7 @@ inline int run_fluid_solid_rgfm_2d(const std::string& config_file)
                     const std::array<double, 2> nface =
                         cfg.geometry == "rectangular_regions"
                             ? std::array<double, 2>{0.0, -1.0}
-                            : cfg.interface_normal;
+                            : std::array<double, 2>{-cfg.interface_normal[0], -cfg.interface_normal[1]};
                     const auto state = face_interface(up, down, nface);
                     flux_fy[fid] = compute_flux_normal<2, MaterialEOS>(state.fluid_interface, ey, cfg.fluid);
                 }

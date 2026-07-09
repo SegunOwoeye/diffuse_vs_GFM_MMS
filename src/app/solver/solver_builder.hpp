@@ -91,6 +91,7 @@ inline SolverContext<DIM> build_solver_context(
     ctx.reassign_material_from_phi = ctx.advect_level_set;
     ctx.level_set_reinit_method = cfg.level_set_reinit_method;
     ctx.level_set_advection = cfg.level_set_advection;
+    ctx.level_set_component_policy = cfg.level_set_component_policy;
     ctx.level_set_derivative_scheme =
         level_set_derivative_scheme_from_config(cfg.level_set_spatial_derivative);
     ctx.rgfm_star_velocity_mode = cfg.rgfm_star_velocity_mode;

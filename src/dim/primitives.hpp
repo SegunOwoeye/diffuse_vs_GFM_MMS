@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "src/dim/eos.hpp"
@@ -216,7 +217,9 @@ namespace dim {
     inline std::vector<double> alpha_rhs_coefficients(
         const Primitive<DIM>& P,
         const EOSParams& params,
-        double floor = 1e-12
+        double floor = 1e-12,
+        double active_alpha_floor = 0.0,
+        const std::string& lambda_model = "kapila"
     )
     {
         params.validate();
@@ -228,20 +231,67 @@ namespace dim {
         std::vector<double> rhs = P.alpha;
         sanitise_alpha(rhs, 0.0);
 
+        if (lambda_model == "allaire") {
+            return rhs;
+        }
+
         if (static_cast<int>(P.rho.size()) != params.nmat()) {
             throw std::runtime_error("dim::alpha_rhs_coefficients: rho size mismatch");
         }
 
+        if (lambda_model == "equal_velocity") {
+            double inverse_sound_sum = 0.0;
+            std::vector<double> sound_speed(params.nmat(), floor);
+            for (int k = 0; k < params.nmat(); ++k) {
+                const double alpha_k = std::max(finite_or(rhs[k]), 0.0);
+                if (alpha_k <= floor || alpha_k < std::max(active_alpha_floor, 0.0)) {
+                    continue;
+                }
+                sound_speed[k] = IdealGasEOS::material_sound_speed(
+                    std::max(finite_or(P.rho[k]), floor),
+                    std::max(finite_or(P.p), floor),
+                    params.material[k]
+                );
+                inverse_sound_sum += alpha_k / safe_denom(sound_speed[k], 1e-14);
+            }
+
+            if (inverse_sound_sum <= floor || !std::isfinite(inverse_sound_sum)) {
+                return rhs;
+            }
+
+            for (int k = 0; k < params.nmat(); ++k) {
+                const double alpha_k = std::max(finite_or(rhs[k]), 0.0);
+                if (alpha_k <= floor) {
+                    rhs[k] = 0.0;
+                    continue;
+                }
+                const double lambda_k = safe_div(
+                    1.0 / safe_denom(sound_speed[k], 1e-14),
+                    inverse_sound_sum,
+                    1e-14
+                );
+                rhs[k] = alpha_k * lambda_k;
+            }
+            return rhs;
+        }
+
+        if (lambda_model != "kapila" && !lambda_model.empty()) {
+            throw std::runtime_error("dim::alpha_rhs_coefficients: unknown lambda model");
+        }
+
+        const double source_alpha_floor = std::max(active_alpha_floor, 0.0);
         double beta_mix = 0.0;
         std::vector<double> acoustic_impedance(params.nmat(), floor);
+        std::vector<int> active(params.nmat(), 0);
 
         for (int k = 0; k < params.nmat(); ++k) {
             const double alpha_k = std::max(finite_or(rhs[k]), 0.0);
 
-            if (alpha_k <= floor) {
+            if (alpha_k <= floor || alpha_k < source_alpha_floor) {
                 continue;
             }
 
+            active[k] = 1;
             const double rho_k = std::max(finite_or(P.rho[k]), floor);
             const double c_k = IdealGasEOS::material_sound_speed(
                 rho_k,
@@ -259,7 +309,7 @@ namespace dim {
         const double q_mix = 1.0 / beta_mix;
         for (int k = 0; k < params.nmat(); ++k) {
             const double alpha_k = std::max(finite_or(rhs[k]), 0.0);
-            if (alpha_k <= floor) {
+            if (!active[k] || alpha_k <= floor) {
                 rhs[k] = 0.0;
                 continue;
             }
@@ -408,6 +458,3 @@ namespace dim {
 
 
 } 
-
-
-

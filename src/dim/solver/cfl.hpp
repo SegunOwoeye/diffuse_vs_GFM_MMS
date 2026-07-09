@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "src/dim/primitives.hpp"
@@ -15,6 +16,7 @@ namespace dim {
         const std::vector<State<DIM>>& U,
         const std::array<double, DIM>& dx,
         const EOSParams& params,
+        const std::string& lambda_model,
         double cfl,
         double dt_max
     )
@@ -42,12 +44,13 @@ namespace dim {
         #pragma omp parallel for reduction(min:dt)
         for (int i = 0; i < static_cast<int>(U.size()); ++i) {
             const Primitive<DIM> P = cons_to_prim<DIM>(U[i], params);
-            const double c = IdealGasEOS::mixture_sound_speed(
+            const double c = IdealGasEOS::generic_mixture_sound_speed(
                 total_density(U[i]),
                 P.p,
                 P.alpha,
                 P.rho,
-                params
+                params,
+                lambda_model
             );
 
             for (int d = 0; d < DIM; ++d) {
@@ -67,6 +70,7 @@ namespace dim {
         const std::vector<State<DIM>>& U,
         const std::array<double, DIM>& dx,
         const EOSParams& params,
+        const std::string& lambda_model,
         double cfl,
         double dt_max
     )
@@ -88,12 +92,13 @@ namespace dim {
         #pragma omp parallel for reduction(min:dt)
         for (int i = 0; i < static_cast<int>(U.size()); ++i) {
             const Primitive<DIM> P = cons_to_prim<DIM>(U[i], params);
-            const double c = IdealGasEOS::mixture_sound_speed(
+            const double c = IdealGasEOS::generic_mixture_sound_speed(
                 total_density(U[i]),
                 P.p,
                 P.alpha,
                 P.rho,
-                params
+                params,
+                lambda_model
             );
 
             double spectral_sum = 0.0;

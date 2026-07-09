@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.colors import BoundaryNorm, ListedColormap
 import numpy as np
 import pandas as pd
 
@@ -41,6 +42,10 @@ PROFILE_FIELDS = [
 
 HELIUM_BUBBLE_CENTER = (175.0, 0.0)
 HELIUM_BUBBLE_RADIUS = 25.0
+COATED_MATERIAL_CMAP = ListedColormap(["#374196", "#a60c23", "#b2b7b8"])
+COATED_MATERIAL_NORM = BoundaryNorm([-0.5, 0.5, 1.5, 2.5], COATED_MATERIAL_CMAP.N)
+HE2023_MATERIAL_CMAP = ListedColormap(["#374196", "#b20f2c", "#b9bec0"])
+HE2023_MATERIAL_NORM = BoundaryNorm([-0.5, 0.5, 1.5, 2.5], HE2023_MATERIAL_CMAP.N)
 
 
 @dataclass(frozen=True)
@@ -284,10 +289,16 @@ def plot_1d_profiles(files: list[SolutionFile], title: str, outdir: Path) -> Non
         return
 
     methods = sorted({item.method for item in items})
+    target_resolution = "800" if "He 2023" in title else None
 
     highest_by_method: list[SolutionFile] = []
     for method in methods:
         method_items = [item for item in items if item.method == method]
+        if target_resolution is not None:
+            target_items = [item for item in method_items if item.resolution == target_resolution]
+            if target_items:
+                highest_by_method.append(max(target_items, key=lambda item: item.time_value or 0.0))
+                continue
         highest_by_method.append(max(method_items, key=lambda item: resolution_size(item.resolution)))
 
     exact = read_exact_reference(title)
@@ -615,16 +626,22 @@ def plot_2d_schlieren_images(
 
 
 def coated_material_indicator(df: pd.DataFrame) -> np.ndarray:
-    if {"alpha1", "alpha2"}.issubset(df.columns):
-        return np.clip(
-            pd.to_numeric(df["alpha1"], errors="coerce").fillna(0.0).to_numpy(dtype=float) +
-            pd.to_numeric(df["alpha2"], errors="coerce").fillna(0.0).to_numpy(dtype=float),
-            0.0,
-            1.0,
-        )
+    if {"alpha0", "alpha1", "alpha2"}.issubset(df.columns):
+        alpha0 = pd.to_numeric(df["alpha0"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+        alpha1 = pd.to_numeric(df["alpha1"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+        alpha2 = pd.to_numeric(df["alpha2"], errors="coerce").fillna(0.0).to_numpy(dtype=float)
+        alphas = np.column_stack((alpha0, alpha1, alpha2))
+        return np.argmax(alphas, axis=1).astype(float)
     if "mat" in df.columns:
         material = pd.to_numeric(df["mat"], errors="coerce").fillna(-1).to_numpy(dtype=int)
-        return np.isin(material, [1, 2]).astype(float)
+        return np.where(np.isin(material, [0, 1, 2]), material, 0).astype(float)
+    if {"phi0", "phi1"}.issubset(df.columns):
+        phi0 = pd.to_numeric(df["phi0"], errors="coerce").fillna(1.0).to_numpy(dtype=float)
+        phi1 = pd.to_numeric(df["phi1"], errors="coerce").fillna(1.0).to_numpy(dtype=float)
+        material = np.zeros(len(df), dtype=float)
+        material[phi1 < 0.0] = 1.0
+        material[phi0 < 0.0] = 2.0
+        return material
     return np.zeros(len(df), dtype=float)
 
 
@@ -672,9 +689,8 @@ def plot_2d_coated_material_panel(
                 image,
                 extent=extent,
                 origin="lower",
-                cmap="viridis",
-                vmin=0.0,
-                vmax=1.0,
+                cmap=COATED_MATERIAL_CMAP,
+                norm=COATED_MATERIAL_NORM,
                 interpolation="nearest",
             )
             add_initial_coated_bubble(ax, plot_center, inner_radius, outer_radius)
@@ -739,9 +755,8 @@ def plot_2d_coated_material_images(
                 image,
                 extent=extent,
                 origin="lower",
-                cmap="viridis",
-                vmin=0.0,
-                vmax=1.0,
+                cmap=COATED_MATERIAL_CMAP,
+                norm=COATED_MATERIAL_NORM,
                 interpolation="nearest",
             )
             add_initial_coated_bubble(ax, plot_center, inner_radius, outer_radius)
@@ -766,6 +781,147 @@ def plot_2d_coated_material_images(
             save_figure(
                 fig,
                 outdir / f"{safe_name(title)}_{safe_name(method)}_coated_material_{time_slug(item.time_value)}.png",
+            )
+
+
+def material_indicator(df: pd.DataFrame) -> np.ndarray:
+    alpha_columns = [column for column in df.columns if re.fullmatch(r"alpha\d+", column)]
+    alpha_columns = sorted(alpha_columns, key=lambda value: int(value.replace("alpha", "")))
+    if alpha_columns:
+        return np.argmax(df[alpha_columns].to_numpy(dtype=float), axis=1).astype(float)
+    if "mat" in df.columns:
+        return pd.to_numeric(df["mat"], errors="coerce").fillna(0).to_numpy(dtype=float)
+    return np.zeros(len(df), dtype=float)
+
+
+def material_color_function(df: pd.DataFrame) -> np.ndarray:
+    alpha_columns = [column for column in df.columns if re.fullmatch(r"alpha\d+", column)]
+    alpha_columns = sorted(alpha_columns, key=lambda value: int(value.replace("alpha", "")))
+    if alpha_columns:
+        weights = np.arange(1, len(alpha_columns) + 1, dtype=float)
+        return df[alpha_columns].to_numpy(dtype=float) @ weights
+    if "mat" in df.columns:
+        return pd.to_numeric(df["mat"], errors="coerce").fillna(0).to_numpy(dtype=float) + 1.0
+    return np.ones(len(df), dtype=float)
+
+
+def save_he2023_contour(
+    xs: np.ndarray,
+    ys: np.ndarray,
+    values: np.ndarray,
+    path: Path,
+    label: str,
+    cmap: str | ListedColormap = "turbo",
+    norm: BoundaryNorm | None = None,
+    levels: int | None = 32,
+) -> None:
+    fig, ax = plt.subplots(figsize=(7.0, 3.0))
+    if norm is None:
+        if levels is None:
+            image = ax.imshow(
+                values,
+                extent=[float(xs[0]), float(xs[-1]), float(ys[0]), float(ys[-1])],
+                origin="lower",
+                cmap=cmap,
+                interpolation="nearest",
+                aspect="equal",
+            )
+        else:
+            contour_levels = np.linspace(float(np.nanmin(values)), float(np.nanmax(values)), levels)
+            if np.allclose(contour_levels[0], contour_levels[-1]):
+                contour_levels = levels
+            image = ax.contourf(xs, ys, values, levels=contour_levels, cmap=cmap)
+    else:
+        image = ax.imshow(
+            values,
+            extent=[float(xs[0]), float(xs[-1]), float(ys[0]), float(ys[-1])],
+            origin="lower",
+            cmap=cmap,
+            norm=norm,
+            interpolation="nearest",
+            aspect="equal",
+        )
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_aspect("equal", adjustable="box")
+    cbar = fig.colorbar(image, ax=ax, fraction=0.035, pad=0.02)
+    cbar.set_label(label)
+    save_figure(fig, path)
+
+
+def plot_he2023_2d_validation_images(files: list[SolutionFile], title: str, outdir: Path) -> None:
+    items = [item for item in files if item.dimension == 2]
+    if not items:
+        log(f"no 2D solution CSVs for {title}")
+        return
+
+    for method in sorted({item.method for item in items}):
+        method_items = [item for item in items if item.method == method]
+        max_resolution = max({item.resolution for item in method_items}, key=resolution_size)
+        frames = sorted(
+            [item for item in method_items if item.resolution == max_resolution],
+            key=lambda item: -math.inf if item.time_value is None else item.time_value,
+        )
+        method_schlieren_scale = schlieren_gradient_scale(frames)
+        method_label = safe_name(method)
+
+        for item in frames:
+            df = read_csv(item.path)
+            slug = time_slug(item.time_value)
+
+            xs, ys, rho = structured_grid(df, "rho")
+            save_he2023_contour(
+                xs,
+                ys,
+                rho,
+                outdir / f"{safe_name(title)}_{method_label}_density_contour_{slug}.png",
+                "Density",
+            )
+
+            xs, ys, pressure = structured_grid(df, "p")
+            save_he2023_contour(
+                xs,
+                ys,
+                pressure,
+                outdir / f"{safe_name(title)}_{method_label}_pressure_contour_{slug}.png",
+                "Pressure",
+            )
+
+            material_df = df.copy()
+            material_df["material_indicator"] = material_indicator(df)
+            xs, ys, material = structured_grid(material_df, "material_indicator")
+            save_he2023_contour(
+                xs,
+                ys,
+                material,
+                outdir / f"{safe_name(title)}_{method_label}_material_{slug}.png",
+                "Material",
+                cmap=HE2023_MATERIAL_CMAP,
+                norm=HE2023_MATERIAL_NORM,
+                levels=None,
+            )
+
+            color_df = df.copy()
+            color_df["material_color_function"] = material_color_function(df)
+            xs, ys, color_function = structured_grid(color_df, "material_color_function")
+            save_he2023_contour(
+                xs,
+                ys,
+                color_function,
+                outdir / f"{safe_name(title)}_{method_label}_color_function_{slug}.png",
+                r"$\sum k\alpha_k$",
+            )
+
+            xs, ys, rho = structured_grid(df, "rho")
+            image = schlieren(xs, ys, rho, method_schlieren_scale)
+            save_he2023_contour(
+                xs,
+                ys,
+                image,
+                outdir / f"{safe_name(title)}_{method_label}_schlieren_{slug}.png",
+                "Density Schlieren",
+                cmap="gray",
+                levels=None,
             )
 
 
@@ -1077,7 +1233,7 @@ def plot_root(
             center=(0.45, 0.25),
             radius=0.1,
             inner_radius=0.08,
-            time_label_scale=10000.0,
+            time_label_scale=1000.0,
             time_label_unit="us",
             max_frames=None,
             show_time_label=False,
@@ -1089,11 +1245,13 @@ def plot_root(
             center=(0.45, 0.25),
             inner_radius=0.08,
             outer_radius=0.1,
-            time_label_scale=10000.0,
+            time_label_scale=1000.0,
             time_label_unit="us",
             max_frames=None,
             show_time_label=False,
         )
+    elif kind == "2d_he2023":
+        plot_he2023_2d_validation_images(files, title, local_dir)
     elif kind == "2d":
         plot_2d_schlieren_images(files, title, local_dir)
     elif kind == "3d":
@@ -1118,6 +1276,7 @@ def main() -> None:
 
     plot_root(base / "report_selected_toro_test5", "Toro test 5", "1d", global_dir)
     plot_root(base / "report_selected_fedkiw_d2_1d", "FedkiwD2 1D", "1d", global_dir)
+    plot_root(base / "report_selected_he2023_three_material_1d", "He 2023 three-material 1D", "1d", global_dir)
     clear_root_report_artifacts(base / "report_selected_explosion_2d")
     plot_root(base / "report_selected_explosion_3d", "3D explosion", "3d", global_dir)
     plot_root(
@@ -1129,7 +1288,7 @@ def main() -> None:
     )
     plot_root(base / "report_selected_helium_bubble_3d", "Helium shock-bubble 3D", "3d_interactive", global_dir)
     plot_root(base / "report_selected_gorsse_tc9_water_air_2d", "Gorsse TC9 water-air 2D", "2d_gorsse", global_dir)
-    plot_root(base / "report_selected_applsci_three_material_2d", "Appl Sci 2021 three-material 2D", "2d_coated_bubble", global_dir)
+    plot_root(base / "report_selected_he2023_three_material_triple_point_2d", "He 2023 three-material triple-point 2D", "2d_he2023", global_dir)
     plot_root(base / "report_selected_gorsse_tc9_water_air_3d", "Gorsse TC9 water-air 3D", "3d", global_dir)
     plot_sensitivity(
         base / "report_selected_sim_reinit_sensitivity",

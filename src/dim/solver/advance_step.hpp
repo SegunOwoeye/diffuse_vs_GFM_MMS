@@ -42,8 +42,8 @@ namespace dim {
         }
 
         const double dt = (cfg.time_update == "unsplit")
-            ? compute_dt_cfl_unsplit<DIM>(U, dx, params, cfl, dt_max)
-            : compute_dt_cfl<DIM>(U, dx, params, cfl, dt_max);
+            ? compute_dt_cfl_unsplit<DIM>(U, dx, params, cfg.dim_lambda_model, cfl, dt_max)
+            : compute_dt_cfl<DIM>(U, dx, params, cfg.dim_lambda_model, cfl, dt_max);
 
         std::vector<State<DIM>> U_stage = U;
 
@@ -51,7 +51,17 @@ namespace dim {
                          const std::vector<State<DIM>>& U_in,
                          std::vector<State<DIM>>& U_out)
         {
-            sweep_direction_dispatch<DIM>(dir, U_in, N, dx, params, dt, U_out);
+            sweep_direction_dispatch<DIM>(
+                dir,
+                U_in,
+                N,
+                dx,
+                params,
+                dt,
+                cfg.dim_alpha_source_floor,
+                cfg.dim_lambda_model,
+                U_out
+            );
         };
 
         if (cfg.time_update == "unsplit") {

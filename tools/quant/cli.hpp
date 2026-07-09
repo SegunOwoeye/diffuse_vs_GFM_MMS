@@ -71,7 +71,7 @@ Args parse_args(int argc, char** argv)
                 << "  --dry-run\n"
                 << "  --collect-only (rebuild summaries from existing run output)\n"
                 << "  --all-core (Toro1, FedkiwD2 1D, oblique FedkiwD2, shock bubble)\n"
-                << "  --case/--cases toro|toro_1d|explosion2d|explosion3d|fedkiw|planar|oblique|shock_bubble|bubble_reinit|water_air_bubble|gorsse_tc9|applsci_three_material|gorsse_tc9_3d|bubble_zero_velocity|bubble_zero_velocity_physical_flow|bubble_zero_velocity_input_mean_star|bubble_zero_velocity_zero_star|bubble_static|bubble3d [case]\n"
+                << "  --case/--cases toro|toro_1d|explosion2d|explosion3d|fedkiw|planar|oblique|shock_bubble|bubble_reinit|water_air_bubble|gorsse_tc9|he2023_three_material|he2023_three_material_1d|he2023_triple_point|gorsse_tc9_3d|bubble_zero_velocity|bubble_zero_velocity_physical_flow|bubble_zero_velocity_input_mean_star|bubble_zero_velocity_zero_star|bubble_static|bubble3d [case]\n"
                 << "  --method/--methods DIM SIM common (comma lists accepted)\n"
                 << "  --resolutions 100 200 400, or 100,200,400, or 325x45,650x89\n"
                 << "  --sensitivity dim_epsilon|dim_alpha|sim_reinit (DIM: 1D D2 + bubble; SIM: oblique + bubble)\n"

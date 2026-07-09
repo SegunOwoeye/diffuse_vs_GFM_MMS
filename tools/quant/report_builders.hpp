@@ -20,6 +20,176 @@ inline bool uses_bubble_feature_diagnostics(const RunSpec& run)
            run.case_def.group == "shock_bubble_2d_static_equilibrium";
 }
 
+inline fs::path run_case_dir(const fs::path& result_root, const RunSpec& run)
+{
+    return result_root / "raw" / run.run_id / run.output_prefix;
+}
+
+inline fs::path run_solution_path(const fs::path& result_root, const RunSpec& run)
+{
+    const fs::path case_dir = run_case_dir(result_root, run);
+    const fs::path direct = case_dir / (run.output_prefix + resolution_suffix(run.resolution) + ".csv");
+    if (fs::exists(direct)) {
+        return direct;
+    }
+
+    std::vector<fs::path> candidates;
+    const std::string suffix = resolution_suffix(run.resolution) + ".csv";
+    if (fs::exists(case_dir)) {
+        for (const auto& entry : fs::directory_iterator(case_dir)) {
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+            const fs::path path = entry.path();
+            const std::string name = path.filename().string();
+            if (path.extension() != ".csv" ||
+                name.find(run.output_prefix + "_t") != 0 ||
+                name.size() < suffix.size() ||
+                name.substr(name.size() - suffix.size()) != suffix ||
+                name.find("conservation") != std::string::npos ||
+                name.find("diagnostic") != std::string::npos ||
+                name.find("exact") != std::string::npos) {
+                continue;
+            }
+            candidates.push_back(path);
+        }
+    }
+
+    if (!candidates.empty()) {
+        std::sort(candidates.begin(), candidates.end());
+        return candidates.back();
+    }
+
+    return direct;
+}
+
+inline std::vector<std::map<std::string, std::string>> he2023_self_reference_error_rows(
+    const fs::path& result_root,
+    const std::vector<RunSpec>& runs,
+    const std::vector<bool>& successes
+)
+{
+    struct Candidate {
+        std::size_t index = 0;
+        int n = 0;
+        fs::path solution;
+    };
+
+    std::map<std::string, std::vector<Candidate>> groups;
+    for (std::size_t i = 0; i < runs.size() && i < successes.size(); ++i) {
+        const auto& run = runs[i];
+        if (!successes[i] ||
+            run.case_def.group != "he2023_three_material_1d" ||
+            run.case_def.dimension != 1) {
+            continue;
+        }
+
+        const fs::path solution = run_solution_path(result_root, run);
+        if (!fs::exists(solution)) {
+            continue;
+        }
+
+        const std::string key = run.case_def.label + "|" + run.case_def.method;
+        groups[key].push_back({
+            i,
+            resolution_n(resolution_label(run.resolution)),
+            solution
+        });
+    }
+
+    std::vector<std::map<std::string, std::string>> rows;
+    const std::map<std::string, std::string> variables = {
+        {"rho", "density"},
+        {"u0", "velocity"},
+        {"p", "pressure"},
+        {"e", "energy"},
+    };
+
+    for (auto& item : groups) {
+        auto& candidates = item.second;
+        if (candidates.size() < 2) {
+            continue;
+        }
+        std::sort(
+            candidates.begin(),
+            candidates.end(),
+            [](const Candidate& lhs, const Candidate& rhs) {
+                return lhs.n < rhs.n;
+            }
+        );
+
+        const Candidate& reference_candidate = candidates.back();
+        const auto ref_cols = read_csv_columns(reference_candidate.solution);
+        if (!ref_cols.count("x0")) {
+            continue;
+        }
+
+        for (const auto& candidate : candidates) {
+            if (candidate.index == reference_candidate.index) {
+                continue;
+            }
+
+            const auto& run = runs[candidate.index];
+            const auto solution_cols = read_csv_columns(candidate.solution);
+            if (!solution_cols.count("x0")) {
+                continue;
+            }
+
+            const double dx = cell_width(solution_cols.at("x0"));
+            for (const auto& variable : variables) {
+                const std::string& column = variable.first;
+                if (!solution_cols.count(column) || !ref_cols.count(column)) {
+                    continue;
+                }
+
+                double l1 = 0.0;
+                double l2sum = 0.0;
+                double linf = 0.0;
+                double ref_l1 = 0.0;
+                double ref_l2sum = 0.0;
+                double ref_linf = 0.0;
+                const auto& xs = solution_cols.at("x0");
+                const auto& values = solution_cols.at(column);
+
+                for (std::size_t row_index = 0; row_index < xs.size() && row_index < values.size(); ++row_index) {
+                    const double ref_value = interp(ref_cols.at("x0"), ref_cols.at(column), xs[row_index]);
+                    if (!std::isfinite(values[row_index]) || !std::isfinite(ref_value)) {
+                        continue;
+                    }
+                    const double diff = values[row_index] - ref_value;
+                    l1 += std::abs(diff);
+                    l2sum += diff * diff;
+                    linf = std::max(linf, std::abs(diff));
+                    ref_l1 += std::abs(ref_value);
+                    ref_l2sum += ref_value * ref_value;
+                    ref_linf = std::max(ref_linf, std::abs(ref_value));
+                }
+
+                for (const auto& norm_error : {
+                    std::pair<std::string, std::pair<double, double>>{"L1", {dx * l1, dx * ref_l1}},
+                    std::pair<std::string, std::pair<double, double>>{"L2", {std::sqrt(dx * l2sum), std::sqrt(dx * ref_l2sum)}},
+                    std::pair<std::string, std::pair<double, double>>{"Linf", {linf, ref_linf}},
+                }) {
+                    const double raw_error = norm_error.second.first;
+                    const double ref_norm = norm_error.second.second;
+                    const double denominator = std::max(ref_norm, reference_floor(column, norm_error.first));
+                    auto row = base_row(run, true);
+                    row["variable"] = variable.second;
+                    row["norm"] = norm_error.first;
+                    row["error"] = double_text(raw_error);
+                    row["raw_error"] = double_text(raw_error);
+                    row["reference_norm"] = double_text(ref_norm);
+                    row["normalized_error"] = double_text(raw_error / denominator);
+                    row["reference"] = "finest_self:" + reference_candidate.solution.string();
+                    rows.push_back(row);
+                }
+            }
+        }
+    }
+
+    return rows;
+}
+
 void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, const std::vector<bool>& successes)
 {
     std::vector<std::map<std::string, std::string>> summary;
@@ -36,8 +206,8 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
     for (std::size_t i = 0; i < runs.size(); ++i) {
         const auto& run = runs[i];
         auto row = base_row(run, successes[i]);
-        const fs::path case_dir = result_root / "raw" / run.run_id / run.output_prefix;
-        const fs::path solution = case_dir / (run.output_prefix + resolution_suffix(run.resolution) + ".csv");
+        const fs::path case_dir = run_case_dir(result_root, run);
+        const fs::path solution = run_solution_path(result_root, run);
         const fs::path runtime = case_dir / (run.output_prefix + resolution_suffix(run.resolution) + "_runtime.txt");
         const fs::path conservation = case_dir / (run.output_prefix + resolution_suffix(run.resolution) + "_conservation.csv");
 
@@ -169,6 +339,13 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
         error_rows.insert(error_rows.end(), errors.begin(), errors.end());
         summary.push_back(row);
     }
+    const auto self_reference_errors =
+        he2023_self_reference_error_rows(result_root, runs, successes);
+    error_rows.insert(
+        error_rows.end(),
+        self_reference_errors.begin(),
+        self_reference_errors.end()
+    );
     const auto error_report = build_error_reports(error_rows);
     const auto interface_report = build_interface_reports(interface_rows);
     const auto conservation_report = build_conservation_reports(conservation_rows);
@@ -194,13 +371,16 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
         {
             "case",
             "resolution",
+            "common_cell_updates_per_second_median",
             "SIM_cell_updates_per_second_median",
             "DIM_cell_updates_per_second_median",
             "SIM_over_DIM_speedup",
+            "common_wall_time_seconds_median",
             "SIM_wall_time_seconds_median",
             "DIM_wall_time_seconds_median",
             "SIM_cost_per_cell_update_seconds_median",
             "DIM_cost_per_cell_update_seconds_median",
+            "common_repeat_count",
             "SIM_repeat_count",
             "DIM_repeat_count",
         }
@@ -230,6 +410,8 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
             "drift_100",
             "drift_200",
             "drift_400",
+            "finest_resolution",
+            "finest_reportable_drift",
         }
     );
     write_csv(summaries_dir / "conservation_balance_compact.csv", conservation_compact);
@@ -392,6 +574,7 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
             "normalized_error_100",
             "normalized_error_200",
             "normalized_error_400",
+            "normalized_error_800",
             "non_monotonic_100_400",
             "non_monotonic_any_refinement",
         }
@@ -407,6 +590,7 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
             "normalized_error_100",
             "normalized_error_200",
             "normalized_error_400",
+            "normalized_error_800",
             "non_monotonic_100_400",
             "non_monotonic_any_refinement",
         }
@@ -436,6 +620,7 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
             "norm",
             "order_100_200",
             "order_200_400",
+            "order_400_800",
             "order_100_400",
             "non_monotonic_100_400",
             "non_monotonic_any_refinement",
@@ -452,8 +637,10 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
             "normalized_error_100",
             "normalized_error_200",
             "normalized_error_400",
+            "normalized_error_800",
             "order_100_200",
             "order_200_400",
+            "order_400_800",
             "order_100_400",
             "non_monotonic_100_400",
             "non_monotonic_any_refinement",

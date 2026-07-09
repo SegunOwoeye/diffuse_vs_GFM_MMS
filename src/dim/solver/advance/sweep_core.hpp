@@ -5,6 +5,7 @@
 #endif
 
 #include <array>
+#include <string>
 #include <vector>
 
 #include "src/dim/primitives.hpp"
@@ -22,7 +23,9 @@ namespace dim {
         double dx,
         double dt,
         const EOSParams& params,
-        int dir
+        int dir,
+        double alpha_source_floor,
+        const std::string& lambda_model
     )
     {
         const int n = static_cast<int>(U_in.size());
@@ -63,6 +66,8 @@ namespace dim {
             dir,
             dt,
             dx,
+            alpha_source_floor,
+            lambda_model,
             UL_face,
             UR_face
         );
@@ -78,7 +83,13 @@ namespace dim {
         // MUSCL-Hancock predicted HLLC interface fluxes
         #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int i = 0; i < n - 1; ++i) {
-            const RiemannResult<DIM> result = hllc_flux_normal<DIM>(UL_face[i], UR_face[i], params, normal);
+            const RiemannResult<DIM> result = hllc_flux_normal<DIM>(
+                UL_face[i],
+                UR_face[i],
+                params,
+                normal,
+                lambda_model
+            );
             F[i + 1] = result.flux;
             face_velocity[i + 1] = result.face_velocity;
         }
@@ -117,7 +128,13 @@ namespace dim {
         #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int i = 0; i < n; ++i) {
             std::vector<double> alpha_new = alpha_full[i];
-            const std::vector<double> rhs = alpha_rhs_coefficients<DIM>(primitive[i], params);
+            const std::vector<double> rhs = alpha_rhs_coefficients<DIM>(
+                primitive[i],
+                params,
+                1e-12,
+                alpha_source_floor,
+                lambda_model
+            );
             const double div_u = (face_velocity[i + 1] - face_velocity[i]) / dx;
 
             for (int k = 0; k < nmat; ++k) {
@@ -139,6 +156,8 @@ namespace dim {
         const std::array<double, DIM>& dx,
         const EOSParams& params,
         double dt,
+        double alpha_source_floor,
+        const std::string& lambda_model,
         std::vector<State<DIM>>& U_out
     )
     {
@@ -162,7 +181,16 @@ namespace dim {
             }
 
             extract_line<DIM>(U_in, N, stride, dir, idx, line_in);
-            solve_line<DIM>(line_in, line_out, dx[dir], dt, params, dir);
+            solve_line<DIM>(
+                line_in,
+                line_out,
+                dx[dir],
+                dt,
+                params,
+                dir,
+                alpha_source_floor,
+                lambda_model
+            );
             write_line<DIM>(U_out, N, stride, dir, idx, line_out);
         }
     }

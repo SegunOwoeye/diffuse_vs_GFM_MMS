@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -52,10 +53,21 @@ inline void assign_material_ids_from_phi(
     const std::vector<TrackedInterface>& tracked_interfaces,
     int background_material_id,
     std::vector<int>& material_id,
-    const LevelSetGrid<DIM>& grid
+    const LevelSetGrid<DIM>& grid,
+    const std::string& component_policy = "largest_overlap"
 )
 {
     const int Ntot = static_cast<int>(total_cells(grid));
+
+    if (component_policy != "largest_overlap" &&
+        component_policy != "all_overlapping") {
+        throw std::runtime_error(
+            "assign_material_ids_from_phi: invalid component policy"
+        );
+    }
+
+    const bool preserve_all_overlapping_components =
+        component_policy == "all_overlapping";
 
     if (phi_list.empty()) {
         material_id.assign(Ntot, background_material_id);
@@ -88,7 +100,6 @@ inline void assign_material_ids_from_phi(
     std::vector<std::vector<char>> accepted(phi_list.size());
 
     for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
-        const int tracked_mat = tracked_interfaces[k].negative_material_id;
         std::vector<char> visited(Ntot, 0);
         accepted[k].assign(Ntot, 0);
         std::vector<int> best_component_cells;
@@ -145,6 +156,13 @@ inline void assign_material_ids_from_phi(
             }
 
             if (!overlaps_previous_component) {
+                continue;
+            }
+
+            if (preserve_all_overlapping_components) {
+                for (const int id : component_cells) {
+                    accepted[k][id] = 1;
+                }
                 continue;
             }
 
@@ -372,4 +390,3 @@ inline int fill_small_enclosed_background_cavities(
 
     return filled_cells;
 }
-

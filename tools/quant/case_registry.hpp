@@ -168,16 +168,28 @@ std::vector<CaseDef> case_registry()
         {{240, 200}, {480, 400}}
     });
     cases.push_back({
-        "applsci_three_material_shock_bubble_2d", "three_material", "applsci_2021_three_material_shock_bubble", "SIM", 2,
-        "mm_2d", "mm_main_2d", mm2,
-        "configs/GFM/MM_2D_validation/applsci_2021_three_material_shock_bubble.txt",
-        {{200, 100}, {400, 200}, {800, 400}}
+        "he2023_three_material_1d", "three_material_1d", "he2023_three_material_1d", "SIM", 1,
+        "mm_1d", "mm_main_1d", mm1,
+        "configs/diagnostics/he2023_three_material_1d_gfm_lowres.txt",
+        {{100}, {200}, {400}, {800}, {2000}}
     });
     cases.push_back({
-        "applsci_three_material_shock_bubble_2d", "three_material", "applsci_2021_three_material_shock_bubble", "DIM", 2,
+        "he2023_three_material_1d", "three_material_1d", "he2023_three_material_1d", "DIM", 1,
+        "mm_1d", "mm_main_1d", mm1,
+        "configs/diagnostics/he2023_three_material_1d_dim_lowres.txt",
+        {{100}, {200}, {400}, {800}, {2000}}
+    });
+    cases.push_back({
+        "he2023_three_material_triple_point_2d", "triple_point", "he2023_three_material_triple_point_2d", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/DIM/MM_2D_validation/applsci_2021_three_material_shock_bubble.txt",
-        {{200, 100}, {400, 200}, {800, 400}}
+        "configs/diagnostics/he2023_three_material_triple_point_2d_gfm_lowres_mcrs.txt",
+        {{1400, 600}}
+    });
+    cases.push_back({
+        "he2023_three_material_triple_point_2d", "triple_point", "he2023_three_material_triple_point_2d", "DIM", 2,
+        "mm_2d", "mm_main_2d", mm2,
+        "configs/diagnostics/he2023_three_material_triple_point_2d_dim_lowres.txt",
+        {{1400, 600}}
     });
     cases.push_back({
         "applsci_three_material_translation_2d", "three_material_translation", "applsci_2021_three_material_translation", "SIM", 2,
@@ -290,7 +302,13 @@ std::set<std::string> groups_for_case_alias(const std::vector<std::string>& alia
         else if (alias == "bubble_reinit" || alias == "shock_bubble_reinit" || alias == "rgfm_bubble_reinit") groups.insert("shock_bubble_2d_reinit");
         else if (alias == "water_air_bubble" || alias == "water_air_bubble_2d" || alias == "practical_case2") groups.insert("water_air_bubble_2d");
         else if (alias == "gorsse_tc9" || alias == "tc9_water_air_bubble" || alias == "water_air_bubble_gorsse") groups.insert("gorsse_tc9_water_air_bubble_2d");
-        else if (alias == "applsci_three_material" || alias == "three_material" || alias == "three_material_shock_bubble") groups.insert("applsci_three_material_shock_bubble_2d");
+        else if (alias == "he2023_three_material" || alias == "hu2023_three_material" || alias == "three_material" || alias == "three_material_he2023") {
+            groups.insert("he2023_three_material_1d");
+            groups.insert("he2023_three_material_triple_point_2d");
+        }
+        else if (alias == "he2023_three_material_1d" || alias == "hu2023_three_material_1d" || alias == "three_material_1d") groups.insert("he2023_three_material_1d");
+        else if (alias == "he2023_triple_point" || alias == "hu2023_triple_point" || alias == "he2023_three_material_2d" || alias == "three_material_2d") groups.insert("he2023_three_material_triple_point_2d");
+        else if (alias == "applsci_three_material" || alias == "three_material_shock_bubble") groups.insert("he2023_three_material_triple_point_2d");
         else if (alias == "applsci_translation" || alias == "three_material_translation" || alias == "coated_translation") groups.insert("applsci_three_material_translation_2d");
         else if (alias == "gorsse_tc9_3d" || alias == "tc9_water_air_bubble_3d" || alias == "water_air_bubble_gorsse_3d") groups.insert("gorsse_tc9_water_air_bubble_3d");
         else if (alias == "bubble_zero_velocity" || alias == "shock_bubble_zero_velocity" || alias == "rgfm_bubble_zero_velocity") groups.insert("shock_bubble_2d_zero_velocity");
@@ -313,7 +331,11 @@ bool is_specific_case_filter(const std::string& value)
         "bubble_reinit", "shock_bubble_reinit", "rgfm_bubble_reinit",
         "water_air_bubble", "water_air_bubble_2d", "practical_case2",
         "gorsse_tc9", "tc9_water_air_bubble", "water_air_bubble_gorsse",
-        "applsci_three_material", "three_material", "three_material_shock_bubble",
+        "he2023_three_material", "hu2023_three_material", "three_material",
+        "three_material_he2023", "he2023_three_material_1d", "hu2023_three_material_1d",
+        "three_material_1d", "he2023_triple_point", "hu2023_triple_point",
+        "he2023_three_material_2d", "three_material_2d",
+        "applsci_three_material", "three_material_shock_bubble",
         "applsci_translation", "three_material_translation", "coated_translation",
         "gorsse_tc9_3d", "tc9_water_air_bubble_3d", "water_air_bubble_gorsse_3d",
         "bubble_zero_velocity", "shock_bubble_zero_velocity", "rgfm_bubble_zero_velocity",
@@ -449,6 +471,13 @@ std::vector<RunSpec> build_normal_runs(const Args& args)
                 "quant_" + method_prefix(def.method) + "_" + def.label + "_" + resolution_label(resolution);
             if (def.method == "common") {
                 run.output_prefix = "quant_" + def.label + "_" + resolution_label(resolution);
+            }
+            if (def.group == "he2023_three_material_1d" &&
+                def.method == "DIM" &&
+                !resolution.empty()) {
+                std::ostringstream width;
+                width << (1.0 / static_cast<double>(resolution.front()));
+                run.overrides["interface_thickness"] = width.str();
             }
             run.run_id = make_run_id(def, resolution, args.omp_threads);
             runs.push_back(run);

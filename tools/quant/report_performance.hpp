@@ -53,6 +53,9 @@ inline PerformanceReportTables build_performance_reports(
     std::vector<std::map<std::string, std::string>> performance_report_rows;
     for (const auto& item : performance_groups) {
     const auto& stats = item.second;
+    const std::string common_throughput = median_text(
+        stats.throughput_by_method.count("common") ? stats.throughput_by_method.at("common") : std::vector<double>{}
+    );
     const std::string sim_throughput = median_text(
         stats.throughput_by_method.count("SIM") ? stats.throughput_by_method.at("SIM") : std::vector<double>{}
     );
@@ -67,9 +70,13 @@ inline PerformanceReportTables build_performance_reports(
     performance_report_rows.push_back({
         {"case", stats.case_label},
         {"resolution", stats.resolution},
+        {"common_cell_updates_per_second_median", common_throughput},
         {"SIM_cell_updates_per_second_median", sim_throughput},
         {"DIM_cell_updates_per_second_median", dim_throughput},
         {"SIM_over_DIM_speedup", speedup},
+        {"common_wall_time_seconds_median", median_text(
+            stats.wall_by_method.count("common") ? stats.wall_by_method.at("common") : std::vector<double>{}
+        )},
         {"SIM_wall_time_seconds_median", median_text(
             stats.wall_by_method.count("SIM") ? stats.wall_by_method.at("SIM") : std::vector<double>{}
         )},
@@ -81,6 +88,9 @@ inline PerformanceReportTables build_performance_reports(
         )},
         {"DIM_cost_per_cell_update_seconds_median", median_text(
             stats.cost_per_cell_by_method.count("DIM") ? stats.cost_per_cell_by_method.at("DIM") : std::vector<double>{}
+        )},
+        {"common_repeat_count", std::to_string(
+            stats.repeat_count_by_method.count("common") ? stats.repeat_count_by_method.at("common") : 0
         )},
         {"SIM_repeat_count", std::to_string(
             stats.repeat_count_by_method.count("SIM") ? stats.repeat_count_by_method.at("SIM") : 0

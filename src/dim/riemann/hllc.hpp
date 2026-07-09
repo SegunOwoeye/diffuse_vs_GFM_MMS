@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <string>
 
 #include "src/dim/flux.hpp"
 #include "src/math/numerical_safety.hpp"
@@ -64,6 +65,7 @@ namespace dim {
         const State<DIM>& UR,
         const EOSParams& params,
         const std::array<double, DIM>& normal,
+        const std::string& lambda_model = "kapila",
         double tol = 1e-10
     )
     {
@@ -91,8 +93,22 @@ namespace dim {
         const double unL = dot<DIM>(PL.vel, n);
         const double unR = dot<DIM>(PR.vel, n);
 
-        const double cL = IdealGasEOS::mixture_sound_speed(rhoL, pL, PL.alpha, PL.rho, params);
-        const double cR = IdealGasEOS::mixture_sound_speed(rhoR, pR, PR.alpha, PR.rho, params);
+        const double cL = IdealGasEOS::generic_mixture_sound_speed(
+            rhoL,
+            pL,
+            PL.alpha,
+            PL.rho,
+            params,
+            lambda_model
+        );
+        const double cR = IdealGasEOS::generic_mixture_sound_speed(
+            rhoR,
+            pR,
+            PR.alpha,
+            PR.rho,
+            params,
+            lambda_model
+        );
 
         const double sL = std::min(unL - cL, unR - cR);
         const double sR = std::max(unL + cL, unR + cR);

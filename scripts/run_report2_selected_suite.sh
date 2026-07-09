@@ -207,6 +207,12 @@ run_quant_with_conservation "FedkiwD2 1D SIM versus DIM" \
     --resolutions 100,200,400,800 \
     --result-root "$result_root_base/report_selected_fedkiw_d2_1d"
 
+run_quant_with_conservation "He 2023 three-material 1D convergence" \
+    --case he2023_three_material_1d \
+    --methods sim,dim \
+    --resolutions 100,200,400,800,2000 \
+    --result-root "$result_root_base/report_selected_he2023_three_material_1d"
+
 run_quant_with_conservation "2D contaminated helium shock-bubble" \
     --case bubble \
     --methods sim,dim \
@@ -227,11 +233,11 @@ run_quant_with_timeout_and_conservation "2D Gorsse TC9 water-air bubble" \
     --resolutions 240x200,480x400 \
     --result-root "$result_root_base/report_selected_gorsse_tc9_water_air_2d"
 
-run_quant_with_timeout_and_conservation "2D Appl Sci 2021 three-material shock-bubble" \
-    --case applsci_three_material \
+run_quant_with_timeout_and_conservation "He 2023 three-material triple-point 2D" \
+    --case he2023_triple_point \
     --methods sim,dim \
-    --resolutions 200x100,400x200,800x400 \
-    --result-root "$result_root_base/report_selected_applsci_three_material_2d"
+    --resolutions 1400x600 \
+    --result-root "$result_root_base/report_selected_he2023_three_material_triple_point_2d"
 
 if [[ "$skip_3d" != true ]]; then
     run_quant_with_timeout_and_conservation "3D Gorsse TC9 water-air bubble" \

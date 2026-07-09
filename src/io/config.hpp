@@ -113,6 +113,7 @@ struct Config {
     std::string level_set_reinit_method = "sussman";
     std::string level_set_advection = "normal_speed";
     std::string level_set_spatial_derivative = "tvd";
+    std::string level_set_component_policy = "largest_overlap";
     bool rgfm_diagnostics = false;
     int rgfm_diagnostics_interval = 1;
     std::string rgfm_star_velocity_mode = "input_mean";
@@ -120,6 +121,8 @@ struct Config {
     // [3.6] Diffuse interface (DIM only)
     double interface_thickness = 0.0;
     double interface_sharpness_alpha = 2.0;
+    double dim_alpha_source_floor = 0.0;
+    std::string dim_lambda_model = "kapila";
     int barton_solid_material = -1;
     double barton_temperature = 300.0;
 

@@ -245,6 +245,29 @@ inline void validate_config(const Config<DIM>& cfg)
         throw std::runtime_error("No materials defined");
     }
 
+    std::vector<bool> material_id_seen(cfg.materials.size(), false);
+    for (const auto& material : cfg.materials) {
+        if (material.id < 0 || material.id >= static_cast<int>(cfg.materials.size())) {
+            throw std::runtime_error(
+                "material ids must be contiguous and zero-based: expected ids 0.."
+                + std::to_string(cfg.materials.size() - 1)
+            );
+        }
+        if (material_id_seen[material.id]) {
+            throw std::runtime_error(
+                "duplicate material id: " + std::to_string(material.id)
+            );
+        }
+        material_id_seen[material.id] = true;
+    }
+    for (std::size_t id = 0; id < material_id_seen.size(); ++id) {
+        if (!material_id_seen[id]) {
+            throw std::runtime_error(
+                "missing material id in contiguous material set: " + std::to_string(id)
+            );
+        }
+    }
+
     if (cfg.N_list.empty()) {
         throw std::runtime_error("No grid resolution specified");
     }
@@ -306,6 +329,11 @@ inline void validate_config(const Config<DIM>& cfg)
         cfg.level_set_spatial_derivative != "second_order" &&
         cfg.level_set_spatial_derivative != "first_order") {
         throw std::runtime_error("level_set_spatial_derivative must be tvd, second_order, or first_order");
+    }
+
+    if (cfg.level_set_component_policy != "largest_overlap" &&
+        cfg.level_set_component_policy != "all_overlapping") {
+        throw std::runtime_error("level_set_component_policy must be largest_overlap or all_overlapping");
     }
 
     if (cfg.reinit_interval < 0) {
@@ -509,6 +537,7 @@ inline Config<DIM> load_config(const std::string& filename)
         else if (key == "level_set_reinit_method") cfg.level_set_reinit_method = to_lower(value);
         else if (key == "level_set_advection") cfg.level_set_advection = to_lower(value);
         else if (key == "level_set_spatial_derivative") cfg.level_set_spatial_derivative = to_lower(value);
+        else if (key == "level_set_component_policy") cfg.level_set_component_policy = to_lower(value);
         else if (key == "rgfm_diagnostics") cfg.rgfm_diagnostics = parse_bool(value);
         else if (key == "rgfm_diagnostics_interval") cfg.rgfm_diagnostics_interval = std::stoi(value);
         else if (key == "rgfm_star_velocity_mode") cfg.rgfm_star_velocity_mode = to_lower(value);
@@ -518,6 +547,8 @@ inline Config<DIM> load_config(const std::string& filename)
                  key == "alpha") {
             cfg.interface_sharpness_alpha = std::stod(value);
         }
+        else if (key == "dim_alpha_source_floor") cfg.dim_alpha_source_floor = std::stod(value);
+        else if (key == "dim_lambda_model") cfg.dim_lambda_model = to_lower(value);
         else if (key == "barton_solid_material") cfg.barton_solid_material = std::stoi(value);
         else if (key == "barton_temperature") cfg.barton_temperature = std::stod(value);
         else if (key == "bc_lo") cfg.bc_lo = parse_string_array<DIM>(value);

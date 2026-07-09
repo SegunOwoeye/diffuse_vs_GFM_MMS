@@ -129,6 +129,24 @@ def raw_to_plot(raw_x0_mm: float, raw_x1_mm: float, grid: GridData) -> tuple[flo
     return float(plot_x_mm_from_left), float(plot_y_mm_from_bottom)
 
 
+def physical_to_image_pixel(
+    raw_x0_mm: float,
+    raw_x1_mm: float,
+    grid: GridData,
+    bounds: tuple[int, int, int, int],
+) -> tuple[float, float, float]:
+    """Map physical solver coordinates onto PNG pixels for visual overlays."""
+
+    left, right, top, bottom = bounds
+    plot_x_mm_from_left, plot_y_mm_from_bottom = raw_to_plot(raw_x0_mm, raw_x1_mm, grid)
+    full_width_mm = 2.0 * grid.x1_half_width
+    full_height_mm = grid.x0_max - grid.x0_min
+    col = left + plot_x_mm_from_left / full_width_mm * (right - left)
+    row_from_bottom = plot_y_mm_from_bottom / full_height_mm * (bottom - top)
+    row_from_top = bottom - row_from_bottom
+    return float(col), float(row_from_top), float(row_from_bottom)
+
+
 def contour_to_physical(contour_rc: np.ndarray, grid: GridData) -> np.ndarray:
     rows = contour_rc[:, 0]
     cols = contour_rc[:, 1]

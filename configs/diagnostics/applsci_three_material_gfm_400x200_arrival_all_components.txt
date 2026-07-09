@@ -1,27 +1,17 @@
-# ========================
-# Problem
-# ========================
+# [0] Problem
 dimension = 2
 
-# ========================
-# Domain
-# ========================
+# [1] Domain
 domain_min = [0.0, 0.0]
 domain_max = [1.0, 0.5]
+N = [400, 200]
 
-N = [800, 400]
-
-# ========================
-# Time
-# ========================
-# Paper frame mapping: 0.1 code time = 100 us.
-tfinal = 0.6
-output_times = [0.0, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6]
+# [2] Time
+tfinal = 0.1
+output_times = [0.0, 0.04, 0.1]
 cfl = 0.3
 
-# ========================
-# Interface method
-# ========================
+# [3] Interface Method
 interface_method = GFM
 time_update = split
 use_level_set = true
@@ -30,25 +20,19 @@ reinit_iterations = 2
 level_set_reinit_method = redistance
 level_set_advection = normal_speed
 level_set_spatial_derivative = tvd
+level_set_component_policy = all_overlapping
 rgfm_star_velocity_mode = input_mean
 
-# ========================
-# Boundary conditions
-# ========================
+# [4] Boundary Conditions
 bc_lo = [reflective, reflective]
 bc_hi = [reflective, reflective]
 
-# ========================
-# Materials
-# ========================
+# [5] Materials
 material = 0, ideal_gas, gamma=1.4
 material = 1, ideal_gas, gamma=1.648
 material = 2, stiffened_gas, gamma=2.0, p_inf=100.0
 
-# ========================
-# Initial condition
-# Appl. Sci. 2021, 11, 12107, Section 7
-# ========================
+# [6] Initial Condition
 initial_condition = coated_shock_bubble
 shock_axis = 0
 shock_position = 0.3
@@ -76,8 +60,6 @@ vel_film = [0.0, 0.0]
 p_film = 0.1
 material_film = 1
 
-# ========================
-# Output
-# ========================
-output_prefix = gfm_applsci_2021_three_material_shock_bubble
-output_dir = data/csv/gfm/MM_2D_validation
+# [7] Output
+output_prefix = diag_gfm_applsci_three_material_400x200_arrival_all_components
+output_dir = data/csv/diagnostics/applsci_three_material_400x200_arrival_all_components/gfm

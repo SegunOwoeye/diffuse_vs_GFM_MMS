@@ -73,7 +73,11 @@ inline std::string non_monotonic_any_refinement(
 {
     bool has_pair = false;
     bool increased = false;
-    for (const auto& pair : {std::pair<int, int>{100, 200}, std::pair<int, int>{200, 400}}) {
+    for (const auto& pair : {
+             std::pair<int, int>{100, 200},
+             std::pair<int, int>{200, 400},
+             std::pair<int, int>{400, 800}
+         }) {
         if (!rows.count(pair.first) || !rows.count(pair.second)) continue;
         has_pair = true;
         const double coarse = std::stod(rows.at(pair.first).at("normalized_error"));
@@ -240,11 +244,14 @@ inline ErrorReportTables build_error_reports(
             {"normalized_error_100", normalized_error_at(rows, 100)},
             {"normalized_error_200", normalized_error_at(rows, 200)},
             {"normalized_error_400", normalized_error_at(rows, 400)},
+            {"normalized_error_800", normalized_error_at(rows, 800)},
             {"raw_error_100", raw_error_at(rows, 100)},
             {"raw_error_200", raw_error_at(rows, 200)},
             {"raw_error_400", raw_error_at(rows, 400)},
+            {"raw_error_800", raw_error_at(rows, 800)},
             {"order_100_200", compact_order(rows, 100, 200)},
             {"order_200_400", compact_order(rows, 200, 400)},
+            {"order_400_800", compact_order(rows, 400, 800)},
             {"order_100_400", compact_order(rows, 100, 400)},
             {"non_monotonic_100_400", non_monotonic_100_400(rows)},
             {"non_monotonic_any_refinement", non_monotonic_any_refinement(rows)},
@@ -262,6 +269,7 @@ inline ErrorReportTables build_error_reports(
                 {"normalized_error_100", row.at("normalized_error_100")},
                 {"normalized_error_200", row.at("normalized_error_200")},
                 {"normalized_error_400", row.at("normalized_error_400")},
+                {"normalized_error_800", row.at("normalized_error_800")},
                 {"non_monotonic_100_400", row.at("non_monotonic_100_400")},
                 {"non_monotonic_any_refinement", row.at("non_monotonic_any_refinement")},
             });
@@ -272,6 +280,7 @@ inline ErrorReportTables build_error_reports(
                 {"norm", row.at("norm")},
                 {"order_100_200", row.at("order_100_200")},
                 {"order_200_400", row.at("order_200_400")},
+                {"order_400_800", row.at("order_400_800")},
                 {"order_100_400", row.at("order_100_400")},
                 {"non_monotonic_100_400", row.at("non_monotonic_100_400")},
                 {"non_monotonic_any_refinement", row.at("non_monotonic_any_refinement")},
@@ -286,8 +295,10 @@ inline ErrorReportTables build_error_reports(
                 {"normalized_error_100", row.at("normalized_error_100")},
                 {"normalized_error_200", row.at("normalized_error_200")},
                 {"normalized_error_400", row.at("normalized_error_400")},
+                {"normalized_error_800", row.at("normalized_error_800")},
                 {"order_100_200", row.at("order_100_200")},
                 {"order_200_400", row.at("order_200_400")},
+                {"order_400_800", row.at("order_400_800")},
                 {"order_100_400", row.at("order_100_400")},
                 {"non_monotonic_100_400", row.at("non_monotonic_100_400")},
                 {"non_monotonic_any_refinement", row.at("non_monotonic_any_refinement")},

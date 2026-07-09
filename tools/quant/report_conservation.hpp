@@ -50,17 +50,48 @@ inline ConservationReportTables build_conservation_reports(
     return std::string{};
     };
 
+    auto conservation_drift_value_for_row = [](
+    const std::map<std::string, std::string>& row
+    ) {
+    double value = 0.0;
+    bool found = false;
+    for (const auto& item : row) {
+        if (item.first.rfind("eps_", 0) != 0 ||
+            item.first.find("momentum") != std::string::npos) {
+            continue;
+        }
+        try {
+            value = std::max(value, std::abs(std::stod(item.second)));
+            found = true;
+        }
+        catch (...) {}
+    }
+    if (found) return double_text(value);
+    if (row.count("reportable_max_relative_drift")) {
+        return row.at("reportable_max_relative_drift");
+    }
+    return std::string{};
+    };
+
     std::vector<std::map<std::string, std::string>> conservation_drift_report_rows;
     for (const auto& item : conservation_groups) {
     const auto& rows = item.second;
     if (rows.empty()) continue;
     const auto& first = rows.begin()->second;
+    std::string finest_resolution;
+    std::string finest_drift;
+    for (const auto& row_item : rows) {
+        finest_resolution = row_item.second.at("resolution");
+        finest_drift = conservation_drift_value_for_row(row_item.second);
+    }
     conservation_drift_report_rows.push_back({
         {"case", first.at("case_label")},
         {"method", first.at("method")},
         {"drift_100", conservation_drift_value(rows, 100)},
         {"drift_200", conservation_drift_value(rows, 200)},
         {"drift_400", conservation_drift_value(rows, 400)},
+        {"finest_resolution", finest_resolution},
+        {"finest_reportable_drift", finest_drift},
     });
     }
 
