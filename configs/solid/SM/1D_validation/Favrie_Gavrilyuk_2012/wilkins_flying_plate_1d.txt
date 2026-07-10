@@ -1,0 +1,27 @@
+# Favrie & Gavrilyuk (2012), Section 6.1 inspired Wilkins flying plate test.
+#
+# Paper setup: a 5 mm aluminium flyer impacts an aluminium half-space at
+# 800 m/s. The sharp Barton run uses the existing moving-free-surface boundary
+# instead of explicitly resolving the slow air wave at the flyer rear surface.
+model_type = elastoplastic_solid
+model = barton
+dimension = 1
+
+domain_min = [0.0]
+domain_max = [0.05]
+N = [2000]
+tfinal = 5.0e-6
+cfl = 0.60
+moving_free_surface = true
+free_surface_position = [0.0]
+output_times = [0.5e-6], [1.0e-6], [3.0e-6], [5.0e-6]
+
+material = eos=eq49, rho0=2700.0, G=24.8e9, sigma0=0.2976e9, tau0=1.0e-5, n=100.0, p01=72.0e9, p02=172.0e9, p03=40.0e9
+
+region = [0.0], [0.005], rho=2700.0, u=800.0
+region = [0.005], [0.05], rho=2700.0, u=0.0
+
+bc_lo = free_surface
+bc_hi = transmissive
+output_prefix = favrie_gavrilyuk_2012_wilkins_flying_plate_1d
+output_dir = data/csv/solid/SM/1D_validation/Favrie_Gavrilyuk_2012

@@ -10,6 +10,7 @@
 #include "src/euler/primitives.hpp"
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
+//#include "scr/euler/conservative.hpp"
 
 
 // [0] Compute cell centre 
@@ -29,6 +30,23 @@ inline std::array<double, DIM> compute_cell_center_csv(
     return x;
 }
 
+template<int DIM>
+inline std::array<int, DIM> unflatten_raw_index_csv(
+    int linear,
+    const std::array<int, DIM>& N
+)
+{
+    std::array<int, DIM> idx{};
+    int stride = 1;
+
+    for (int d = 0; d < DIM; ++d) {
+        idx[d] = (linear / stride) % N[d];
+        stride *= N[d];
+    }
+
+    return idx;
+}
+
 
 // [1] Write CSV
 template<int DIM, typename EOS>
@@ -39,7 +57,8 @@ inline void write_csv(
     const std::array<int, DIM>& N,
     const std::array<double, DIM>& domain_min,
     const std::array<double, DIM>& domain_max,
-    const std::vector<EOSParams>& material_params
+    const std::vector<EOSParams>& material_params,
+    const std::vector<std::vector<double>>* phi_list = nullptr
 )
 {
     std::ofstream file(filename);
@@ -64,7 +83,15 @@ inline void write_csv(
         file << "u" << d << ",";
     }
 
-    file << "p,e,mat\n";
+    file << "p,e,mat";
+
+    if (phi_list != nullptr) {
+        for (int k = 0; k < static_cast<int>(phi_list->size()); ++k) {
+            file << ",phi" << k;
+        }
+    }
+
+    file << "\n";
 
     // loop over cells
     std::array<int, DIM> idx{};
@@ -73,12 +100,7 @@ inline void write_csv(
 
     for (int linear = 0; linear < total_cells; ++linear) {
 
-        // unflatten
-        int tmp = linear;
-        for (int d = DIM - 1; d >= 0; --d) {
-            idx[d] = tmp % N[d];
-            tmp /= N[d];
-        }
+        idx = unflatten_raw_index_csv<DIM>(linear, N);
 
         // detail position
         const auto x = compute_cell_center_csv<DIM>(idx, domain_min, dx);
@@ -87,8 +109,7 @@ inline void write_csv(
         const int mat = material_id.empty() ? 0 : material_id[linear];
         const EOSParams& params = material_params[mat];
 
-        const Primitive<DIM> P =
-            cons_to_prim<DIM, EOS>(U[linear], params);
+        const Primitive<DIM> P = cons_to_prim<DIM, EOS>(U[linear], params);
 
 
         // write row
@@ -102,16 +123,27 @@ inline void write_csv(
             file << P.vel[d] << ",";
         }
 
-        double kinetic = 0.0;
-        for (int d = 0; d < DIM; ++d) {
-            kinetic += 0.5 * P.vel[d] * P.vel[d];
-        }
-
-        double e = (U[linear].E / P.rho) - kinetic;
+        double e = EOS::internal_energy(
+            P.rho,
+            P.p,
+            params
+        );
 
         file << P.p << ",";
         file << e << ",";
-        file << mat << "\n";
+        file << mat;
+
+        if (phi_list != nullptr) {
+            for (const auto& phi : *phi_list) {
+                if (static_cast<int>(phi.size()) != total_cells) {
+                    throw std::runtime_error("write_csv: phi field size mismatch");
+                }
+
+                file << "," << phi[linear];
+            }
+        }
+
+        file << "\n";
     }
 }
 

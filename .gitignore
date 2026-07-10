@@ -10,11 +10,34 @@ __pycache__/
 .venv/
 
 # [data + outputs]
-data/
-*.png
-*.csv
+data/csv
+data/plots
+results/quantitative/
+!data/
+!data/exact/
+!data/exact/fedkiw/
+!data/exact/fedkiw/*.csv
 
 # [misc]
 *.log
 *.exe
 gfm_main_3D
+mm_main_1d
+mm_main_2d
+mm_dim_1d
+sm_main_2d
+sm_main_1d
+sm_main_3d
+/data/bubble_collapse_validation/GFM
+/whitepaper_real_fluid_model_risk
+solid_main
+tools/quant_suite
+/results
+*.Identifier
+/data/exact
+mm_main_3d
+/tmp
+/docs
+/tools/diagnostics
+multimaterial_main_2d
+multimaterial_main_1d

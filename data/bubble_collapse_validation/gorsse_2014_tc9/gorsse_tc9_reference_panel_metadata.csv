@@ -1,0 +1,7 @@
+time_us,source_page,panel_file,mask_overlay_file,left_px,right_px,top_px,bottom_px,detected_right_px,red_pixel_count
+106,page-21.png,gorsse_tc9_reference_t106us_schlieren.png,gorsse_tc9_reference_t106us_red_contour_overlay.png,157,828,256,815,829,817
+204,page-21.png,gorsse_tc9_reference_t204us_schlieren.png,gorsse_tc9_reference_t204us_red_contour_overlay.png,157,828,835,1394,942,621
+301,page-21.png,gorsse_tc9_reference_t301us_schlieren.png,gorsse_tc9_reference_t301us_red_contour_overlay.png,157,827,1413,1971,942,511
+358,page-22.png,gorsse_tc9_reference_t358us_schlieren.png,gorsse_tc9_reference_t358us_red_contour_overlay.png,143,815,254,814,816,278
+406,page-22.png,gorsse_tc9_reference_t406us_schlieren.png,gorsse_tc9_reference_t406us_red_contour_overlay.png,143,815,832,1392,816,349
+500,page-22.png,gorsse_tc9_reference_t500us_schlieren.png,gorsse_tc9_reference_t500us_red_contour_overlay.png,143,815,1413,1973,942,368

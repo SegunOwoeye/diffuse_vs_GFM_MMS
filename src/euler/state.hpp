@@ -74,5 +74,21 @@ inline Conserved<DIM> operator*(
     return R;
 }
 
+// [5] Scalar Division
+template<int DIM>
+inline Conserved<DIM> operator/(
+    const Conserved<DIM>& U, 
+    double s)
+{
+    Conserved<DIM> R;
+    R.rho = U.rho / s;
 
+    for (int d = 0; d < DIM; ++d) {
+        R.mom[d] = U.mom[d] / s;
+    }
+
+    R.E = U.E / s;
+
+    return R;
+}
 

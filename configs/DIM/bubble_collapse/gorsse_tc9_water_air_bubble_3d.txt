@@ -1,0 +1,59 @@
+# [0] Problem
+dimension = 3
+
+# [1] Domain
+# Gorsse, Iollo, Milcent, and Telib TC9 extended to 3D by extruding the
+# transverse direction. The shock and material states match the 2D case.
+domain_min = [-0.2, 0.0, 0.0]
+domain_max = [1.0, 1.0, 1.0]
+N = [240, 200, 200]
+
+# [2] Time
+tfinal = 5.0e-4
+output_times = [1.06e-4, 2.04e-4, 3.01e-4, 3.58e-4, 4.06e-4, 5.0e-4]
+cfl = 0.45
+
+# Homogeneous Neumann at inlet/outlet, reflective transverse boundaries.
+bc_lo = [zero_gradient, reflective, reflective]
+bc_hi = [zero_gradient, reflective, reflective]
+
+# [3] Interface method
+interface_method = DIM
+use_level_set = false
+interface_thickness = 0.015
+
+# [4] Materials
+# Table 5 uses stiffened-gas water with p_inf = 6.0e8 Pa.
+# The air bubble is approximated with Noble-Abel covolume because the current
+# solver does not include the Van der Waals attraction term a = 5.
+material = 0, stiffened_gas, gamma=4.4, p_inf=6.0e8
+material = 1, noble_abel, gamma=1.4, b=1.0e-3
+
+# [5] Initial condition
+initial_condition = shock_bubble
+shock_axis = 0
+shock_position = 0.75
+
+# Water pre-shock state to the left of the shock.
+rho_left = 1000.0
+vel_left = [0.0, 0.0, 0.0]
+p_left = 1.0e5
+material_left = 0
+
+# Water post-shock state to the right of the shock.
+rho_right = 1230.0
+vel_right = [-432.69, 0.0, 0.0]
+p_right = 1.0e9
+material_right = 0
+
+# Air bubble.
+bubble_center = [0.5, 0.5, 0.5]
+bubble_radius = 0.2
+rho_bubble = 1.2
+vel_bubble = [0.0, 0.0, 0.0]
+p_bubble = 1.0e5
+material_bubble = 1
+
+# [6] Output
+output_prefix = dim_gorsse_tc9_water_air_bubble_3d
+output_dir = data/csv/dim/gorsse_2014

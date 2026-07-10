@@ -1,0 +1,46 @@
+# ========================
+# Problem
+# ========================
+dimension = 1
+
+# ========================
+# Domain
+# ========================
+domain_min = [0.0]
+domain_max = [1.0]
+
+N = [100]
+N = [200]
+N = [400]
+
+# ========================
+# Time
+# ========================
+tfinal = 0.0012
+cfl = 0.3
+
+# ========================
+# Interface method
+# ========================
+interface_method = GFM
+use_level_set = true
+reinit_interval = 0
+
+# ========================
+# Materials (different EOS)
+# ========================
+material = 0, ideal_gas, gamma=1.4
+material = 1, ideal_gas, gamma=1.67
+
+# ========================
+# Initial condition 
+# ========================
+region = [0.0], [0.05], rho=1.333, vel=[111.78651528695221], p=150000.0, material=0
+region = [0.05], [0.5], rho=1.0, vel=[0.0], p=100000.0, material=0
+region = [0.5], [1.0], rho=0.1379, vel=[0.0], p=100000.0, material=1
+
+# ========================
+# Output
+# ========================
+output_prefix = gfm_FedkiwB
+output_dir = data/csv/gfm/MM_1D_validation

@@ -1,0 +1,34 @@
+# Favrie & Gavrilyuk (2012), Section 6.1 inspired Wilkins flying plate test.
+#
+# Paper setup:
+#   5 mm aluminium flyer plate impacts an aluminium half-space at 800 m/s.
+#   Domain length is 0.05 m, impact interface is initially at x = 0.005 m,
+#   and the plotted times are 0.5, 1, 3 and 5 microseconds.
+#
+# The paper includes air at the left free surface. This sharp-interface Barton
+# config uses the existing moving free-surface boundary, which isolates the
+# elastic precursor, plastic shock and release-wave structure without adding the
+# slow air-wave peak discussed in the paper text.
+model_type = elastoplastic_solid
+model = barton
+dimension = 1
+
+domain_min = [0.0]
+domain_max = [0.05]
+N = [2000]
+tfinal = 5.0e-6
+cfl = 0.60
+moving_free_surface = true
+free_surface_position = [0.0]
+output_times = [0.5e-6], [1.0e-6], [3.0e-6], [5.0e-6]
+
+# Aluminium parameters matching the Wilkins/Barton validation family.
+material = eos=eq49, rho0=2700.0, G=24.8e9, sigma0=0.2976e9, tau0=1.0e-5, n=100.0, p01=72.0e9, p02=172.0e9, p03=40.0e9
+
+region = [0.0], [0.005], rho=2700.0, u=800.0
+region = [0.005], [0.05], rho=2700.0, u=0.0
+
+bc_lo = free_surface
+bc_hi = transmissive
+output_prefix = favrie_gavrilyuk_2012_wilkins_flying_plate_1d
+output_dir = data/csv/solid/Favrie_Gavrilyuk_2012/SM_1D_validation

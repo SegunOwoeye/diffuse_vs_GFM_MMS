@@ -1,0 +1,35 @@
+# Gorsse, Iollo, Milcent & Telib (2014) inspired TC7.
+#
+# One-dimensional shock tube using a Mie-Gruneisen fluid equation of state.
+# This validates EOS generality in the Euler layer. The paper case is a
+# single-fluid EOS test, so this config intentionally uses SM rather than
+# creating an artificial material interface.
+model_type = single_material_euler
+dimension = 1
+
+domain_min = [0.0]
+domain_max = [1.0]
+
+N = [100]
+N = [200]
+N = [400]
+
+tfinal = 5.0e-5
+output_times = [5.0e-5]
+cfl = 0.3
+
+interface_method = SM
+use_level_set = false
+reinit_interval = 0
+
+# Paper TC7 material parameters.
+material = 0, mie_gruneisen, gamma=2.19, rho_ref=1134.0, A1=0.819181e9, A2=1.50835e9, E1=4.52969, E2=1.42144
+
+region = [0.0], [0.6], rho=1134.0, vel=[0.0], p=20.0e9, material=0
+region = [0.6], [1.0], rho=1200.0, vel=[0.0], p=0.2e6, material=0
+
+bc_lo = [transmissive]
+bc_hi = [transmissive]
+
+output_prefix = gorsse_2014_tc7_mie_gruneisen_fluid_1d
+output_dir = data/csv/sm/SM_1D_validation

@@ -41,7 +41,7 @@ inline void write_exact_csv(
         file << "u" << d << ",";
     }
 
-    file << "p,e\n";
+    file << "p,e,gamma,material_id\n";
 
     // [0.2] Loop over all cells
     std::array<int, DIM> idx{};
@@ -70,7 +70,10 @@ inline void write_exact_csv(
         }
 
 
-        file << exact[linear].p << "," << exact[linear].e << "\n";
+        file << exact[linear].p << ","
+             << exact[linear].e << ","
+             << exact[linear].gamma << ","
+             << exact[linear].material_id << "\n";
     }
 }
 

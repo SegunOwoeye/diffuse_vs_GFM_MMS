@@ -1,0 +1,27 @@
+# Liu, Chowdhury & Khoo (2011), Case 4.2 reduced to the 1D normal direction.
+# The paper runs this as a 2D Navier calculation on a 2200x10 grid; this driver
+# exercises the equivalent 1D water-solid interface problem.
+model_type = fluid_solid
+model = fluid_solid_rgfm
+dimension = 1
+domain_min = [0.0]
+domain_max = [10.0]
+interface = [5.0]
+N = [2200]
+tfinal = 4.45e-3
+cfl = 0.80
+output_times = [4.45e-3]
+
+# Paper water EOS: rho e = (p + gamma B)/(gamma - 1), gamma=7.15, B=3300 nondim.
+fluid = eos=stiffened_gas, gamma=7.15, p_inf=3300.0
+fluid_state = rho=1.0, u=30.0, p=25000.0
+
+# AISI 431 stainless steel scaled by p_ref=1e5 Pa from the paper.
+# Plastic flow is disabled for this elastic paper case by using a very high yield.
+solid = eos=eq49, rho0=7.7, G=8.383e5, sigma0=1.0e30, tau0=1.0e30, n=100.0, p01=1.651e6, p02=0.0, p03=0.0
+solid_state = rho=7.7, u=-30.0, p=1.0
+
+bc_lo = transmissive
+bc_hi = transmissive
+output_prefix = case4_2_water_solid_rgfm
+output_dir = data/csv/fluid_solid

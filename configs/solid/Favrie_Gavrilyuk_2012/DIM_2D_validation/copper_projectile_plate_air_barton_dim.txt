@@ -1,0 +1,18 @@
+# Matched diffuse-interface counterpart of the Favrie-Gavrilyuk rGFM analysis run.
+model = barton_dim
+dimension = 2
+domain_min = [0.0,0.0]
+domain_max = [0.7,0.7]
+N = [180,180]
+tfinal = 8.3e-5
+cfl = 0.35
+output_times = [8.3e-5]
+fluid = eos=ideal_gas,gamma=1.4,p_inf=0.0
+solid = rho0=8900.0,c0=4764.778964105159,b0=2205.7127055275905,cv=390.0,T0=300.0,alpha=1.0,beta=3.0,gamma=4.22,tau0=1.0e-5,sigma0=0.6e9,n=100.0
+region = lower=[0.10,0.30],upper=[0.20,0.40],alpha_solid=1.0,rho_solid=8900.0,p_solid=1.0e5,vel=[800.0,0.0]
+region = lower=[0.205,0.10],upper=[0.305,0.60],alpha_solid=1.0,rho_solid=8900.0,p_solid=1.0e5,vel=[0.0,0.0]
+region = lower=[0.0,0.0],upper=[0.7,0.7],alpha_solid=0.0,rho_fluid=1.0,p_fluid=1.0e5,vel=[0.0,0.0]
+bc_lo = [transmissive,transmissive]
+bc_hi = [transmissive,transmissive]
+output_prefix = favrie_gavrilyuk_2012_copper_projectile_plate_air_barton_dim
+output_dir = data/csv/fluid_solid/Favrie_Gavrilyuk_2012/DIM_2D_validation

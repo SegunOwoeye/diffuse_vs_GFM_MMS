@@ -1,0 +1,19 @@
+# Fast primary SM member of the Favrie-Gavrilyuk Wilkins comparison pair.
+model_type = elastoplastic_solid
+model = barton
+dimension = 1
+domain_min = [0.0]
+domain_max = [0.05]
+N = [200]
+tfinal = 5.0e-7
+cfl = 0.60
+moving_free_surface = true
+free_surface_position = [0.0]
+output_times = [5.0e-7]
+material = eos=eq49,rho0=2700.0,G=24.8e9,sigma0=0.2976e9,tau0=1.0e-5,n=100.0,p01=72.0e9,p02=172.0e9,p03=40.0e9
+region = [0.0],[0.005],rho=2700.0,u=800.0
+region = [0.005],[0.05],rho=2700.0,u=0.0
+bc_lo = free_surface
+bc_hi = transmissive
+output_prefix = favrie_gavrilyuk_2012_wilkins_sm_pair
+output_dir = data/csv/solid/Favrie_Gavrilyuk_2012/Comparison_1D_validation

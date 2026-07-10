@@ -1,0 +1,62 @@
+# [0] Problem
+dimension = 2
+
+# [1] Domain
+# Xu, Feng, and Liu Case 2: water shock interacting with an air bubble.
+# Figure 17 gives a 12 by 12 domain, shock at x = 2.4, bubble radius 3,
+# and bubble center 6 units from the right boundary.
+domain_min = [0.0, 0.0]
+domain_max = [12.0, 12.0]
+N = [601, 601]
+
+# [2] Time
+# Figure 18 reports the density contours at these times.
+tfinal = 0.0328
+output_times = [0.00479, 0.00958, 0.0144, 0.0191, 0.0236, 0.0278, 0.0315, 0.0328]
+cfl = 0.45
+
+# Nonreflective outside boundaries from the paper.
+bc_lo = [nonreflective, nonreflective]
+bc_hi = [nonreflective, nonreflective]
+
+# [3] Interface method
+interface_method = DIM
+use_level_set = false
+interface_thickness = 0.12
+
+# [4] Materials
+# Paper Table 11 uses B = 3309.0 for water. The solver's stiffened-gas
+# parameter p_inf corresponds to this pressure shift.
+material = 0, stiffened_gas, gamma=7.15, p_inf=3309.0
+material = 1, ideal_gas, gamma=1.4
+
+# [5] Initial condition
+initial_condition = shock_bubble
+
+# Water shock moves to the right from x = 2.4.
+shock_axis = 0
+shock_position = 2.4
+
+# Water(I): shocked water on the left of the shock.
+rho_left = 1.31
+vel_left = [67.32, 0.0]
+p_left = 19000.0
+material_left = 0
+
+# Water(II): ambient water on the right of the shock.
+rho_right = 1.0
+vel_right = [0.0, 0.0]
+p_right = 1.0
+material_right = 0
+
+# Air bubble from Figure 17 and Table 11.
+bubble_center = [6.0, 6.0]
+bubble_radius = 3.0
+rho_bubble = 0.0012
+vel_bubble = [0.0, 0.0]
+p_bubble = 1.0
+material_bubble = 1
+
+# [6] Output
+output_prefix = dim_practical_case2_water_air_bubble_2d
+output_dir = data/csv/dim/practical_gfm

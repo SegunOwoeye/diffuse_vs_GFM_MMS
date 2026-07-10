@@ -1,0 +1,78 @@
+# ========================
+# Problem
+# ========================
+dimension = 3
+
+# ========================
+# Domain
+# ========================
+# Three-dimensional Haas-Sturtevant helium bubble setup.
+# The y and z directions use symmetry planes, so this is the quarter-domain
+# analogue of the 2D top-half calculation. Coordinates are in mm.
+domain_min = [0.0, 0.0, 0.0]
+domain_max = [325, 44.5, 44.5]
+
+# Coarse default for setup/smoke testing. Use command-line overrides for final
+# 3D studies; a 0.5 mm grid would be N = [650, 89, 89].
+N = [325, 45, 45]
+
+# ========================
+# Time
+# ========================
+tfinal = 141.1
+output_times = [7.055, 14.110, 21.165, 28.220, 35.275, 42.330, 49.385, 56.440, 63.495, 70.550, 77.605, 84.660, 91.715, 98.770, 105.825, 112.880, 119.935, 126.990, 134.045, 141.1]
+cfl = 0.8
+
+# Left/right: zero-gradient. Symmetry/wall boundaries in y and z: reflection.
+bc_lo = [transmissive, reflective, reflective]
+bc_hi = [transmissive, reflective, reflective]
+
+# ========================
+# Interface method
+# ========================
+interface_method = GFM
+use_level_set = true
+reinit_interval = 0
+level_set_advection = normal_speed
+
+# ========================
+# Materials
+# ========================
+material = 0, ideal_gas, gamma=1.4
+material = 1, ideal_gas, gamma=1.648
+
+# ========================
+# Initial condition
+# ========================
+initial_condition = shock_bubble
+
+# Post-shocked air is prescribed for x > 225 mm.
+shock_axis = 0
+shock_position = 225
+
+# Pre-shocked air
+rho_left = 1.0
+vel_left = [0.0, 0.0, 0.0]
+p_left = 1
+material_left = 0
+
+# Post-shocked air. The z velocity is intentionally zero for the 3D setup.
+rho_right = 1.3764
+vel_right = [-0.394, 0.0, 0.0]
+p_right = 1.5698
+material_right = 0
+
+# Helium bubble: phi = -25 + sqrt((x - 175)^2 + y^2 + z^2).
+# phi <= 0 is helium and phi > 0 is air.
+bubble_center = [175, 0.0, 0.0]
+bubble_radius = 25
+rho_bubble = 0.182
+vel_bubble = [0.0, 0.0, 0.0]
+p_bubble = 1
+material_bubble = 1
+
+# ========================
+# Output
+# ========================
+output_prefix = gfm_helium_bubble_3d
+output_dir = data/csv/gfm/MM_3D_validation

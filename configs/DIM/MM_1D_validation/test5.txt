@@ -1,0 +1,49 @@
+# ========================
+# Problem
+# ========================
+dimension = 1
+
+# ========================
+# Domain
+# ========================
+domain_min = [0.0]
+domain_max = [1.0]
+
+N = [100]
+N = [200]
+N = [400]
+#N = [800]
+#N = [1600]
+#N = [3200]
+
+# ========================
+# Time
+# ========================
+tfinal = 0.0007
+cfl = 0.3
+
+# ========================
+# Interface method
+# ========================
+interface_method = DIM
+use_level_set = false
+interface_thickness = 0.02
+
+# ========================
+# Materials (different EOS)
+# ========================
+material = 0, ideal_gas, gamma=1.4
+material = 1, ideal_gas, gamma=1.249
+
+# ========================
+# Initial condition 
+# ========================
+region = [0.0], [0.05], rho=4.3333, vel=[1037.6], p=1500000.0, material=0
+region = [0.05], [0.5], rho=1.0, vel=[0.0], p=100000.0, material=0
+region = [0.5], [1.0], rho=3.1538, vel=[0.0], p=100000.0, material=1
+
+# ========================
+# Output
+# ========================
+output_prefix = dim_FedkiwD2
+output_dir = data/csv/dim/MM_1D_validation

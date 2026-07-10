@@ -1,0 +1,34 @@
+# Barton-Drikakis-Romenski Section 6.3 spherical pressure benchmark.
+# Paper setup:
+#   domain [0:10,0:10,0:10] cm with symmetry on x=0, y=0, z=0
+#   r > 2 cm: p = 10 GPa, T = 600 K
+#   r <= 2 cm: ambient, F = I, T = 300 K
+#   Cartesian grid dx = dy = dz = 1/10 cm, CFL = 0.6, t = 10 us
+#   spherical reference dr = 1/50 cm
+model_type = elastoplastic_solid
+model = barton
+formulation = tensor_3d
+dimension = 3
+test_case = spherical_pressure
+
+domain_min = [0.0], [0.0], [0.0]
+domain_max = [0.10], [0.10], [0.10]
+N = [100], [100], [100]
+radial_cells = 500
+tfinal = 10.0e-6
+cfl = 0.60
+
+hot_radius = 0.02
+hot_pressure = 10.0e9
+cold_temperature = 300.0
+hot_temperature = 600.0
+
+material = eos=eq51_copper, rho0=8900.0, c0=4651.0, b0=2141.0, cv=390.0, T0=300.0, alpha=1.0, beta=3.0, gamma=2.0, tau0=0.92, sigma0=0.045e9, n=10.1
+
+bc_lo = symmetric, symmetric, symmetric
+bc_hi = transmissive, transmissive, transmissive
+material_points = false
+material_point_stride = 4
+material_point_output_interval = 0
+output_prefix = barton_test1_tensor_spherical_pressure_3d
+output_dir = data/csv/solid

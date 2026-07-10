@@ -1,0 +1,47 @@
+# ========================
+# Problem
+# ========================
+dimension = 2
+
+# ========================
+# Domain
+# ========================
+domain_min = [-1.0, -1.0]
+domain_max = [2.0, 2.0]
+
+N = [200, 200]
+
+# ========================
+# Time
+# ========================
+tfinal = 0.0005
+cfl = 0.3
+
+# ========================
+# Interface method
+# ========================
+interface_method = GFM
+use_level_set = true
+reinit_interval = 0
+
+# ========================
+# Materials (different EOS)
+# ========================
+material = 0, ideal_gas, gamma=1.4
+material = 1, ideal_gas, gamma=1.67
+
+# ========================
+# Initial condition
+# ========================
+initial_condition = planar_regions
+planar_normal = [1.0, 1.0]
+
+region = [-2.0, -1.0], [0.05, 4.0], rho=4.3333, vel=[733.850428460001, 733.850428460001], p=1500000.0, material=0
+region = [0.05, -1.0], [0.5, 4.0], rho=1.0, vel=[0.0, 0.0], p=100000.0, material=0
+region = [0.5, -1.0], [4.0, 4.0], rho=0.1379, vel=[0.0, 0.0], p=100000.0, material=1
+
+# ========================
+# Output
+# ========================
+output_prefix = gfm_FedkiwD145
+output_dir = data/csv/gfm/MM_2D_validation

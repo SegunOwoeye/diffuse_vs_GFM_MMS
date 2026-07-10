@@ -2,13 +2,17 @@
 #include <vector>
 #include <string>
 #include <filesystem>
+#include <chrono>
+#include <optional>
 
 #include "src/app/dimension.hpp"
+#include "src/app/io/conservation_report.hpp"
+#include "src/app/io/runtime_report.hpp"
 #include "src/io/config.hpp"
 #include "src/io/config_loader.hpp"
 #include "src/setup/initial_conditions.hpp"
-#include "src/euler/solver/advance_step.hpp"
-#include "src/euler/solver/solver_context.hpp"
+#include "src/sim/solver/advance_step.hpp"
+#include "src/sim/solver/solver_context.hpp"
 #include "src/io/write_csv.hpp"
 #include "src/io/compute_exact_solution.hpp"
 #include "src/io/write_exact_csv.hpp"
@@ -114,19 +118,43 @@ int main(int argc, char** argv)
             }
 
             ctx.cfl = cfg.cfl;
+            ctx.time_update = cfg.time_update;
 
             ctx.material_id = material_id;
             ctx.material_params = material_params;
+            ctx.background_material_id = material_id.empty() ? 0 : material_id[0];
 
+            ctx.initialise_level_set_grid();
+            ctx.initialise_boundary_conditions();
+
+            ctx.advect_level_set = false;
+            ctx.reassign_material_from_phi = false;
+            ctx.reinit_enabled = false;
             ctx.reinit_iterations = 5;
-
-            // dummy phi (Sod)
-            std::vector<double> phi(U.size(), 1.0);
 
             
             // [3.3] Time loop
             double time = 0.0;
             int step = 0;
+            const auto wall_start = std::chrono::steady_clock::now();
+            const bool track_conservation =
+                app_io::conservation_tracking_enabled();
+            const int conservation_interval =
+                app_io::conservation_tracking_interval();
+            std::optional<app_io::ConservationReport<DIM_>> conservation_report;
+
+            if (track_conservation) {
+                const auto initial_totals =
+                    app_io::compute_sharp_conservation_totals<DIM_>(
+                        U,
+                        ctx.material_id,
+                        ctx.dx,
+                        static_cast<int>(ctx.material_params.size())
+                    );
+
+                conservation_report.emplace(cfg, N, initial_totals);
+                conservation_report->write(step, time, initial_totals);
+            }
 
             while (time < cfg.tfinal - 1e-14) {
 
@@ -134,12 +162,10 @@ int main(int argc, char** argv)
 
                 auto result = advance_one_step<DIM_, EOS>(
                     U,
-                    phi,
                     ctx
                 );
 
                 U = result.U_new;
-                phi = result.phi_new;
 
                 time += result.dt;
                 step++;
@@ -148,12 +174,41 @@ int main(int argc, char** argv)
                     throw std::runtime_error("Non-positive timestep");
                 }
 
-                if (step % 25 == 0 || time >= cfg.tfinal - 1e-14) {
-                    std::cout << "step=" << step
-                            << " time=" << time
-                            << " dt=" << result.dt << "\n";
+                if (conservation_report.has_value()) {
+                    const auto boundary_flux =
+                        app_io::compute_sharp_boundary_flux<DIM_, EOS>(
+                            U,
+                            ctx.material_id,
+                            N,
+                            ctx.dx,
+                            ctx.material_params
+                        );
+                    conservation_report->accumulate_fluxes(
+                        result.dt,
+                        boundary_flux
+                    );
+                }
+
+                if (conservation_report.has_value() &&
+                    (step % conservation_interval == 0 ||
+                     time >= cfg.tfinal - 1e-14))
+                {
+                    conservation_report->write(
+                        step,
+                        time,
+                        app_io::compute_sharp_conservation_totals<DIM_>(
+                            U,
+                            ctx.material_id,
+                            ctx.dx,
+                            static_cast<int>(ctx.material_params.size())
+                        )
+                    );
                 }
             }
+
+            const auto wall_end = std::chrono::steady_clock::now();
+            const double wall_seconds =
+                std::chrono::duration<double>(wall_end - wall_start).count();
 
             
             // [3.4] Write numerical
@@ -177,7 +232,7 @@ int main(int argc, char** argv)
             write_csv<DIM_, EOS>(
                 filename,
                 U,
-                material_id,
+                ctx.material_id,
                 N,
                 cfg.domain_min,
                 cfg.domain_max,
@@ -185,6 +240,8 @@ int main(int argc, char** argv)
             );
 
             std::cout << "Written: " << filename << "\n";
+
+            app_io::write_runtime_report<DIM_>(cfg, N, step, time, wall_seconds);
 
             
             #if APP_DIM == 1 // Loads this codeonly for 1D simulations

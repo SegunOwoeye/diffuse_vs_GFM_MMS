@@ -20,6 +20,8 @@ struct ExactState {
     std::array<double, DIM> vel{};
     double p = 0.0;
     double e = 0.0;
+    double gamma = 0.0;
+    int material_id = -1;
 };
 
 
@@ -41,14 +43,21 @@ inline EOSParams build_exact_material_params(
 {
     EOSParams params{};
 
-    if (mat.type == "ideal_gas") {
+    if (mat.type == "ideal_gas" || mat.type == "stiffened_gas") {
         auto it = mat.params.find("gamma");
 
         if (it == mat.params.end()) {
             throw std::runtime_error("compute_exact_solution: missing gamma in material");
         }
 
+        params.kind = eos_kind_from_string(mat.type);
         params.gamma = it->second;
+
+        if (mat.type == "stiffened_gas") {
+            auto p_inf = mat.params.find("p_inf");
+            params.p_inf = (p_inf == mat.params.end()) ? 0.0 : p_inf->second;
+        }
+
         return params;
     }
 
@@ -102,15 +111,12 @@ inline void compute_exact_solution(
     const MaterialConfig& materialL = cfg.materials[matL];
     const MaterialConfig& materialR = cfg.materials[matR];
 
-    if (materialL.type != materialR.type) {
-        throw std::runtime_error("compute_exact_solution: mixed EOS exact solve not supported");
-    }
-
     const EOSParams paramsL = build_exact_material_params(materialL);
     const EOSParams paramsR = build_exact_material_params(materialR);
 
-    if (std::abs(paramsL.gamma - paramsR.gamma) > 1e-14) {
-        throw std::runtime_error("compute_exact_solution: exact solver currently assumes one gamma across both states");
+    if (!eos_has_stiffened_gas_wave_curve(paramsL) ||
+        !eos_has_stiffened_gas_wave_curve(paramsR)) {
+        throw std::runtime_error("compute_exact_solution: unsupported EOS for exact wave curves");
     }
 
     const Primitive<1> PL = primitive_from_region_1d(left_region);
@@ -119,7 +125,7 @@ inline void compute_exact_solution(
     const Conserved<1> UL = prim_to_cons<1, EOS>(PL, paramsL);
     const Conserved<1> UR = prim_to_cons<1, EOS>(PR, paramsR);
 
-    ExactRiemannSolver1D<EOS> solver(paramsL);
+    ExactRiemannSolver1D<EOS> solver(paramsL, paramsR);
 
     const ExactStarState1D star = solver.star_solver(UL, UR);
 
@@ -139,11 +145,14 @@ inline void compute_exact_solution(
             exact[i].rho = (x < x0) ? PL.rho : PR.rho;
             exact[i].vel[0] = (x < x0) ? PL.vel[0] : PR.vel[0];
             exact[i].p = (x < x0) ? PL.p : PR.p;
+            exact[i].gamma = (x < x0) ? paramsL.gamma : paramsR.gamma;
+            exact[i].material_id = (x < x0) ? matL : matR;
 
             const double rho = exact[i].rho;
             const double p = exact[i].p;
+            const EOSParams& params = (x < x0) ? paramsL : paramsR;
 
-            exact[i].e = EOS::internal_energy(rho, p, paramsL);
+            exact[i].e = EOS::internal_energy(rho, p, params);
         }
         else {
             const double xi = (x - x0) / time;
@@ -155,6 +164,8 @@ inline void compute_exact_solution(
             exact[i].vel[0] = S.primitive.vel[0];
             exact[i].p = S.primitive.p;
             exact[i].e = S.e;
+            exact[i].gamma = S.gamma;
+            exact[i].material_id = (S.material_id == 0) ? matL : matR;
         }
     }
 }

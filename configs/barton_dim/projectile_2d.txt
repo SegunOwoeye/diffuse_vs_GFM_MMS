@@ -1,0 +1,16 @@
+model = barton_dim
+dimension = 2
+domain_min = [0.0,0.0]
+domain_max = [0.06,0.03]
+N = [16,8]
+tfinal = 2.0e-8
+cfl = 0.25
+output_times = [1.0e-8,2.0e-8]
+fluid = eos=ideal_gas,gamma=1.4,p_inf=0.0
+solid = rho0=2700.0,c0=5200.0,b0=3000.0,cv=900.0,T0=300.0,gamma=2.0,sigma0=2.976e8,tau0=1.0e-5,n=20.0
+region = shape=circle,center=[0.012,0.015],radius=0.004,alpha_solid=1.0,rho_solid=2700.0,temperature=300.0,vel=[450.0,0.0]
+region = lower=[0.0,0.0],upper=[0.06,0.03],alpha_solid=0.0,rho_fluid=1.225,p_fluid=101325.0,vel=[0.0,0.0]
+bc_lo = [transmissive,reflective]
+bc_hi = [transmissive,reflective]
+output_prefix = projectile_2d
+output_dir = results/barton_dim

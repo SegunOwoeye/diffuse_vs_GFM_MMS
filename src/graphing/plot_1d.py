@@ -3,8 +3,61 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from plot_style import (
+    configure_profile_axis,
+    plot_profile,
+    save_figure,
+    sort_by_resolution,
+)
+from exact_reference import (
+    infer_fedkiw_test_name,
+    load_optional_exact_reference,
+)
+
+FEDKIW_GAMMAS = {
+    "fedkiwa": (1.4, 1.2),
+    "fedkiwb": (1.4, 1.67),
+    "fedkiwc": (1.4, 1.249),
+    "fedkiwd1": (1.4, 1.67),
+    "fedkiwd2": (1.4, 1.249),
+}
+
+FEDKIW_TEST_NAMES = ("FedkiwA", "FedkiwB", "FedkiwC", "FedkiwD1", "FedkiwD2")
+
 
 # [1] Load solution from CSV written by C++
+def infer_fedkiw_gammas(filename):
+    lower = str(filename).lower()
+
+    for key, gammas in FEDKIW_GAMMAS.items():
+        if key in lower:
+            return gammas
+
+    return None
+
+
+def compute_entropy(df, filename):
+    gammas = infer_fedkiw_gammas(filename)
+
+    if gammas is None:
+        return df["e"].to_numpy(), "e"
+
+    if "mat" in df.columns:
+        material_ids = df["mat"].round().astype(int).to_numpy()
+        gamma = pd.Series(material_ids).map(lambda mat: gammas[int(mat)]).to_numpy()
+    elif any(column.startswith("alpha") for column in df.columns):
+        alpha_columns = sorted([
+            column for column in df.columns
+            if column.startswith("alpha")
+        ])
+        material_ids = df[alpha_columns].to_numpy().argmax(axis=1)
+        gamma = pd.Series(material_ids).map(lambda mat: gammas[int(mat)]).to_numpy()
+    else:
+        gamma = gammas[0]
+
+    return df["p"].to_numpy() / (df["rho"].to_numpy() ** gamma), "entropy"
+
+
 def load_solution_csv(filename):
     data_path = Path("data/csv") / filename
 
@@ -17,49 +70,53 @@ def load_solution_csv(filename):
     rho = df["rho"].to_numpy()
     u = df["u0"].to_numpy()
     p = df["p"].to_numpy()
-    e = df["e"].to_numpy()
+    fourth, fourth_key = compute_entropy(df, filename)
 
-    return x, rho, u, p, e
+    return x, rho, u, p, fourth, fourth_key
+
+
+def is_solution_csv(csv_path):
+    with csv_path.open("r", encoding="utf-8") as f:
+        header = f.readline().strip().split(",")
+
+    required = {"x0", "rho", "u0", "p", "e"}
+
+    return required.issubset(set(header))
 
 
 # [2] Plot 1D 
-def plot_1d(xs, fields_list, labels, title="", exact=None, save_path=None):
-    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+def plot_1d(xs, fields_list, labels, title="", save_path=None, exact_fields=None):
+    fig, axes = plt.subplots(2, 2, figsize=(7.2, 5.2))
     axes = axes.flatten()
 
-    names = [
-        "Density",
-        "Velocity",
-        "Pressure",
-        "Specific internal energy"
-    ]
+    fourth_key = "e"
+    for fields in fields_list:
+        if len(fields) >= 5:
+            fourth_key = fields[4]
+            break
 
-    for x, fields, label in zip(xs, fields_list, labels):
-        rho, u, p, e = fields
-        field_vars = [rho, u, p, e]
+    field_keys = ["rho", "u0", "p", fourth_key]
 
-        for ax, field, name in zip(axes, field_vars, names):
-            ax.plot(x, field, label=label)
-            ax.set_xlabel("Position x")
-            ax.set_ylabel(name)
-            ax.grid(True)
+    plotted_items = sort_by_resolution(list(zip(xs, fields_list, labels)))
 
-    if exact is not None:
-        for ax, key in zip(axes, ["rho", "u", "p", "e"]):
-            ax.plot(exact["x"], exact[key], "k--", linewidth=1.2, label="Exact")
+    if exact_fields:
+        for ax, field_key in zip(axes, field_keys):
+            if field_key in exact_fields:
+                exact_x, exact_y = exact_fields[field_key]
+                plot_profile(ax, exact_x, exact_y, "Exact", index=0)
 
-    for ax in axes:
-        ax.legend()
+    for index, (x, fields, label) in enumerate(plotted_items):
+        rho, u, p, fourth = fields[:4]
+        field_vars = [rho, u, p, fourth]
 
-    #fig.suptitle(title)
+        for ax, field in zip(axes, field_vars):
+            plot_profile(ax, x, field, label, index=index)
+
+    for ax, field_key in zip(axes, field_keys):
+        configure_profile_axis(ax, field_key, show_title=False)
+
     plt.tight_layout()
-
-    if save_path is not None:
-        plt.savefig(save_path, dpi=300)
-        print(f"Saved figure to {save_path}")
-        plt.close()
-    else:
-        plt.show()
+    save_figure(fig, save_path)
 
 
 # [2.1] Constructing plot names
@@ -70,16 +127,28 @@ def build_output_name(folder_path: str) -> str:
 
 
 # [3.1] Plot multiple C++ outputs together
-def plot_multiple_cpp_solutions(filenames, title="1D Euler Solution", exact=None, save_path=None):
+def plot_multiple_cpp_solutions(
+    filenames,
+    title="1D Euler Solution",
+    save_path=None,
+    exact_root=Path("data/exact/fedkiw"),
+):
     xs = []
     fields_list = []
     labels = []
 
+    test_name = infer_fedkiw_test_name(" ".join([title, *map(str, filenames)]))
+    exact_fields = load_optional_exact_reference(
+        exact_root,
+        test_name,
+        context=title,
+    )
+
     for fname in filenames:
-        x, rho, u, p, e = load_solution_csv(fname)
+        x, rho, u, p, fourth, fourth_key = load_solution_csv(fname)
 
         xs.append(x)
-        fields_list.append((rho, u, p, e))
+        fields_list.append((rho, u, p, fourth, fourth_key))
 
         name = Path(fname).name.lower()
         if "exact" in name:
@@ -92,7 +161,14 @@ def plot_multiple_cpp_solutions(filenames, title="1D Euler Solution", exact=None
         else:
             labels.append(name)
 
-    plot_1d(xs, fields_list, labels, title=title, exact=exact, save_path=save_path)
+    plot_1d(
+        xs,
+        fields_list,
+        labels,
+        title=title,
+        save_path=save_path,
+        exact_fields=exact_fields,
+    )
 
 
 
@@ -115,10 +191,13 @@ if __name__ == "__main__":
         path_arg = data_root / args[0]
 
         if path_arg.is_dir():
-            csv_files = sorted([f.name for f in path_arg.glob("*.csv")])
+            csv_files = sorted([
+                f.name for f in path_arg.glob("*.csv")
+                if is_solution_csv(f)
+            ])
 
             if not csv_files:
-                raise FileNotFoundError(f"No CSV files found in {path_arg}")
+                raise FileNotFoundError(f"No solution CSV files found in {path_arg}")
 
             filenames = [str(Path(args[0]) / f) for f in csv_files]
 

@@ -40,7 +40,6 @@ inline std::array<double, DIM> add(
 
 
 // [2] Vector Subtraction
-
 template<int DIM>
 inline std::array<double, DIM> sub(
     const std::array<double, DIM>& a,

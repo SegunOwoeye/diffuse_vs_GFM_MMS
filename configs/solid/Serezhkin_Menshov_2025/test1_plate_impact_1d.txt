@@ -1,0 +1,35 @@
+# Serezhkin & Menshov (2025), Section 5.1 inspired 1D plate impact.
+#
+# Paper setup:
+#   x in [0, 1], copper on [0, 0.25], aluminium on [0.25, 1]
+#   copper initially stationary, aluminium velocity = (-100, -2, -0.5) m/s
+#   outputs at 4, 10, and 15 microseconds.
+#
+# This repo uses the existing Barton/GPR tensor material machinery, so the
+# material constants below preserve the paper density, longitudinal speed scale,
+# shear modulus via b0=sqrt(mu/rho0), and yield stress. It is a sharp-interface
+# benchmark scaffold for the paper test, not the paper's diffuse-interface
+# Wilkins/Mie-Gruneisen method.
+model_type = elastoplastic_solid
+model = barton
+formulation = tensor
+dimension = 1
+test_case = plate_impact_1d
+
+domain_min = [0.0]
+domain_max = [1.0]
+interface = [0.25]
+N = [1000]
+tfinal = 15.0e-6
+cfl = 0.50
+
+left_material = eos=eq51_copper, rho0=8930.0, c0=3899.0, b0=2237.3196249403745, cv=390.0, T0=300.0, alpha=1.0, beta=3.0, gamma=2.0, tau0=1.0e-5, sigma0=0.9e9, n=100.0
+right_material = eos=eq51_aluminium, rho0=2730.0, c0=5330.0, b0=3086.0669992418384, cv=900.0, T0=300.0, alpha=1.0, beta=3.0, gamma=2.13, tau0=1.0e-5, sigma0=0.42e9, n=100.0
+
+left_state = rho=8930.0, u=0.0, v=0.0, w=0.0, T=300.0
+right_state = rho=2730.0, u=-100.0, v=-2.0, w=-0.5, T=300.0
+
+bc_lo = reflective
+bc_hi = transmissive
+output_prefix = serezhkin_menshov_2025_plate_impact_1d
+output_dir = data/csv/solid

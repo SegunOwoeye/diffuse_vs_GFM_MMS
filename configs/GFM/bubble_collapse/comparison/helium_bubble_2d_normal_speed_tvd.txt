@@ -1,0 +1,79 @@
+# ========================
+# Problem
+# ========================
+dimension = 2
+
+# ========================
+# Domain
+# ========================
+# Haas-Sturtevant helium bubble case, top half of the physical domain.
+# Paper-style nondimensional flow states with coordinates in mm.
+domain_min = [0.0, 0.0]
+domain_max = [325, 44.5]
+
+N = [1300, 178]
+
+# ========================
+# Time
+# ========================
+# Fedkiw Fig. 30 is t = 427 microseconds after shock-bubble encounter.
+# With mm coordinates and nondimensional velocities, that corresponds to
+# code time about 141.2 from this initial shock position.
+tfinal = 141.2
+output_times = [23.5333, 47.0667, 70.6, 94.1333, 117.667, 141.2]
+cfl = 0.8
+
+# Left/right: zero-gradient. Symmetry/wall boundaries in y: reflection.
+bc_lo = [transmissive, reflective]
+bc_hi = [transmissive, reflective]
+
+# ========================
+# Interface method
+# ========================
+interface_method = GFM
+use_level_set = true
+reinit_interval = 0
+level_set_advection = normal_speed
+level_set_spatial_derivative = tvd
+
+# ========================
+# Materials
+# ========================
+material = 0, ideal_gas, gamma=1.4
+material = 1, ideal_gas, gamma=1.67
+
+# ========================
+# Initial condition
+# ========================
+initial_condition = shock_bubble
+
+# Post-shocked air is prescribed for x > 225 mm.
+shock_axis = 0
+shock_position = 225
+
+# Pre-shocked air
+rho_left = 1.0
+vel_left = [0.0, 0.0]
+p_left = 1
+material_left = 0
+
+# Post-shocked air
+rho_right = 1.3764
+vel_right = [-0.394, 0.0]
+p_right = 1.5698
+material_right = 0
+
+# Helium bubble: phi = -25 + sqrt((x - 175)^2 + y^2).
+# phi <= 0 is helium and phi > 0 is air.
+bubble_center = [175, 0.0]
+bubble_radius = 25
+rho_bubble = 0.138
+vel_bubble = [0.0, 0.0]
+p_bubble = 1
+material_bubble = 1
+
+# ========================
+# Output
+# ========================
+output_prefix = gfm_helium_bubble_2d_normal_speed_tvd
+output_dir = data/csv/gfm/bubble_levelset_advection_comparison

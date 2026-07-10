@@ -11,8 +11,7 @@
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
 #include "src/euler/flux.hpp"
-#include "src/euler/reconstruction/limiter.hpp"
-
+#include "src/core/fv/limiters.hpp"
 
 // [0] Primitive slope container
 template<int DIM>
@@ -21,7 +20,6 @@ struct PrimitiveSlope {
     std::array<double, DIM> vel{};
     double p = 0.0;
 };
-
 
 // [1] Apply positivity floor to a primitive state
 template<int DIM>
@@ -34,7 +32,6 @@ inline void enforce_positive_primitive(
     P.rho = std::max(P.rho, rho_floor);
     P.p = std::max(P.p, p_floor);
 }
-
 
 // [2] Apply positivity floor to a conservative state via primitive projection
 template<int DIM, typename EOS>
@@ -50,8 +47,7 @@ inline void enforce_positive_conserved(
     U = prim_to_cons<DIM, EOS>(P, params);
 }
 
-
-// [3] Compute limited primitive slope from left, centre, right states
+// [3] Compute TVD limited primitive slope from left, centre, right states
 template<int DIM>
 inline PrimitiveSlope<DIM> compute_limited_slope(
     const Primitive<DIM>& PL,
@@ -61,11 +57,11 @@ inline PrimitiveSlope<DIM> compute_limited_slope(
 {
     PrimitiveSlope<DIM> slope;
 
-    slope.rho = mc_limiter(PC.rho - PL.rho, PR.rho - PC.rho);
-    slope.p = mc_limiter(PC.p - PL.p, PR.p - PC.p);
+    slope.rho = core::fv::minmod(PC.rho - PL.rho, PR.rho - PC.rho);
+    slope.p = core::fv::minmod(PC.p - PL.p, PR.p - PC.p);
 
     for (int d = 0; d < DIM; ++d) {
-        slope.vel[d] = mc_limiter(
+        slope.vel[d] = core::fv::minmod(
             PC.vel[d] - PL.vel[d],
             PR.vel[d] - PC.vel[d]
         );
@@ -74,37 +70,18 @@ inline PrimitiveSlope<DIM> compute_limited_slope(
     return slope;
 }
 
-
 // [4] Reconstruct left and right primitive states inside one cell
-template<int DIM, typename EOS>
-inline void reconstruct_cell_faces_material_aware(
-    const Conserved<DIM>& U_left,
-    const Conserved<DIM>& U_centre,
-    const Conserved<DIM>& U_right,
-    const EOSParams& params_left,
-    const EOSParams& params_centre,
-    const EOSParams& params_right,
-    bool allow_second_order,
+template<int DIM>
+inline void reconstruct_cell_faces(
+    const Primitive<DIM>& PL,
+    const Primitive<DIM>& PC,
+    const Primitive<DIM>& PR,
     Primitive<DIM>& P_left_face,
     Primitive<DIM>& P_right_face,
     double rho_floor = 1e-10,
     double p_floor = 1e-10
 )
 {
-    const Primitive<DIM> PC = cons_to_prim<DIM, EOS>(U_centre, params_centre);
-
-    if (!allow_second_order) {
-        P_left_face = PC;
-        P_right_face = PC;
-
-        enforce_positive_primitive(P_left_face, rho_floor, p_floor);
-        enforce_positive_primitive(P_right_face, rho_floor, p_floor);
-        return;
-    }
-
-    const Primitive<DIM> PL = cons_to_prim<DIM, EOS>(U_left, params_left);
-    const Primitive<DIM> PR = cons_to_prim<DIM, EOS>(U_right, params_right);
-
     const PrimitiveSlope<DIM> slope = compute_limited_slope<DIM>(PL, PC, PR);
 
     P_left_face.rho = PC.rho - 0.5 * slope.rho;
@@ -121,7 +98,6 @@ inline void reconstruct_cell_faces_material_aware(
     enforce_positive_primitive(P_left_face, rho_floor, p_floor);
     enforce_positive_primitive(P_right_face, rho_floor, p_floor);
 }
-
 
 // [5] MUSCL-Hancock half-step predictor for one sweep direction
 template<int DIM, int DIR, typename EOS>
@@ -154,22 +130,21 @@ inline Conserved<DIM> hancock_predict(
     return U_centre - factor * (F_right - F_left);
 }
 
-
 /*
 [6] Reconstruct interface states for a 1D line in direction DIR
-    U_line has N cell-centred states.
-    mat_line has N material ids, one per cell.
+    U_line has N cell-centred conservative states.
+    cell_params has N EOS parameter objects, one per cell.
     UL_face and UR_face are returned with size N-1, one state per interface.
 */
 template<int DIM, int DIR, typename EOS>
-inline void reconstruct_line_interfaces_material_aware(
+inline void reconstruct_line_interfaces(
     const std::vector<Conserved<DIM>>& U_line,
-    const std::vector<int>& mat_line,
-    const std::vector<EOSParams>& material_params,
+    const std::vector<EOSParams>& cell_params,
     double dt,
     double dx,
     std::vector<Conserved<DIM>>& UL_face,
     std::vector<Conserved<DIM>>& UR_face,
+    const std::vector<int>* material_line = nullptr,
     double rho_floor = 1e-10,
     double p_floor = 1e-10
 )
@@ -177,147 +152,148 @@ inline void reconstruct_line_interfaces_material_aware(
     const int N = static_cast<int>(U_line.size());
 
     if (N < 3) {
-        throw std::runtime_error("reconstruct_line_interfaces_material_aware: need at least 3 cells");
+        throw std::runtime_error("reconstruct_line_interfaces: need at least 3 cells");
     }
 
-    if (static_cast<int>(mat_line.size()) != N) {
-        throw std::runtime_error("reconstruct_line_interfaces_material_aware: mat_line size mismatch");
+    if (static_cast<int>(cell_params.size()) != N) {
+        throw std::runtime_error("reconstruct_line_interfaces: cell_params size mismatch");
+    }
+
+    if (material_line != nullptr && static_cast<int>(material_line->size()) != N) {
+        throw std::runtime_error("reconstruct_line_interfaces: material_line size mismatch");
     }
 
     UL_face.assign(N - 1, Conserved<DIM>{});
     UR_face.assign(N - 1, Conserved<DIM>{});
 
-    std::vector<Conserved<DIM>> U_half(N);
-    U_half[0] = U_line[0];
-    U_half[N - 1] = U_line[N - 1];
-
-    // [6.1] Half-step predictor at cell centres
-    for (int i = 1; i < N - 1; ++i) {
-        const int mat_left = mat_line[i - 1];
-        const int mat_centre = mat_line[i];
-        const int mat_right = mat_line[i + 1];
-
-        if (mat_left < 0 || mat_left >= static_cast<int>(material_params.size()) ||
-            mat_centre < 0 || mat_centre >= static_cast<int>(material_params.size()) ||
-            mat_right < 0 || mat_right >= static_cast<int>(material_params.size())) {
-            throw std::runtime_error("reconstruct_line_interfaces_material_aware: invalid material id");
+    bool use_first_order_faces = false;
+    for (const EOSParams& params : cell_params) {
+        if (params.kind == EOSKind::mie_gruneisen) {
+            use_first_order_faces = true;
+            break;
         }
+    }
 
-        const EOSParams& params_left = material_params[mat_left];
-        const EOSParams& params_centre = material_params[mat_centre];
-        const EOSParams& params_right = material_params[mat_right];
+    if (use_first_order_faces) {
+        for (int i = 0; i < N - 1; ++i) {
+            UL_face[i] = U_line[i];
+            UR_face[i] = U_line[i + 1];
+            enforce_positive_conserved<DIM, EOS>(UL_face[i], cell_params[i], rho_floor, p_floor);
+            enforce_positive_conserved<DIM, EOS>(UR_face[i], cell_params[i + 1], rho_floor, p_floor);
+        }
+        return;
+    }
 
-        const bool allow_second_order =
-            (mat_left == mat_centre) && (mat_centre == mat_right);
+    std::vector<Primitive<DIM>> P_line(N);
+    for (int i = 0; i < N; ++i) {
+        P_line[i] = cons_to_prim<DIM, EOS>(U_line[i], cell_params[i]);
+        enforce_positive_primitive(P_line[i], rho_floor, p_floor);
+    }
 
+    std::vector<Conserved<DIM>> U_left_n(N);
+    std::vector<Conserved<DIM>> U_right_n(N);
+
+    U_left_n[0] = U_line[0];
+    U_right_n[0] = U_line[0];
+    U_left_n[N - 1] = U_line[N - 1];
+    U_right_n[N - 1] = U_line[N - 1];
+
+    for (int i = 1; i < N - 1; ++i) {
         Primitive<DIM> P_left_face{};
         Primitive<DIM> P_right_face{};
+        const bool left_same_material =
+            material_line == nullptr || (*material_line)[i - 1] == (*material_line)[i];
+        const bool right_same_material =
+            material_line == nullptr || (*material_line)[i + 1] == (*material_line)[i];
 
-        reconstruct_cell_faces_material_aware<DIM, EOS>(
-            U_line[i - 1],
-            U_line[i],
-            U_line[i + 1],
-            params_left,
-            params_centre,
-            params_right,
-            allow_second_order,
+        const Primitive<DIM>& P_stencil_left =
+            left_same_material ? P_line[i - 1] : P_line[i];
+        const Primitive<DIM>& P_stencil_right =
+            right_same_material ? P_line[i + 1] : P_line[i];
+
+        reconstruct_cell_faces<DIM>(
+            P_stencil_left,
+            P_line[i],
+            P_stencil_right,
             P_left_face,
             P_right_face,
             rho_floor,
             p_floor
         );
 
-        const Conserved<DIM> U_left_face =
-            prim_to_cons<DIM, EOS>(P_left_face, params_centre);
+        U_left_n[i] = prim_to_cons<DIM, EOS>(P_left_face, cell_params[i]);
+        U_right_n[i] = prim_to_cons<DIM, EOS>(P_right_face, cell_params[i]);
 
-        const Conserved<DIM> U_right_face =
-            prim_to_cons<DIM, EOS>(P_right_face, params_centre);
+        enforce_positive_conserved<DIM, EOS>(U_left_n[i], cell_params[i], rho_floor, p_floor);
+        enforce_positive_conserved<DIM, EOS>(U_right_n[i], cell_params[i], rho_floor, p_floor);
+    }
 
+    std::vector<Conserved<DIM>> U_half(N);
+
+    U_half[0] = U_line[0];
+    U_half[N - 1] = U_line[N - 1];
+
+    for (int i = 1; i < N - 1; ++i) {
         U_half[i] = hancock_predict<DIM, DIR, EOS>(
             U_line[i],
-            U_left_face,
-            U_right_face,
+            U_left_n[i],
+            U_right_n[i],
             dt,
             dx,
-            params_centre
+            cell_params[i]
         );
 
-        enforce_positive_conserved<DIM, EOS>(
-            U_half[i],
-            params_centre,
-            rho_floor,
-            p_floor
-        );
+        enforce_positive_conserved<DIM, EOS>(U_half[i], cell_params[i], rho_floor, p_floor);
     }
 
-    // [6.2] Reconstruct predicted interface states
+    std::vector<Primitive<DIM>> P_half(N);
+    for (int i = 0; i < N; ++i) {
+        P_half[i] = cons_to_prim<DIM, EOS>(U_half[i], cell_params[i]);
+        enforce_positive_primitive(P_half[i], rho_floor, p_floor);
+    }
+
+    std::vector<Conserved<DIM>> U_left_half(N);
+    std::vector<Conserved<DIM>> U_right_half(N);
+
+    U_left_half[0] = U_half[0];
+    U_right_half[0] = U_half[0];
+    U_left_half[N - 1] = U_half[N - 1];
+    U_right_half[N - 1] = U_half[N - 1];
+
+    for (int i = 1; i < N - 1; ++i) {
+        Primitive<DIM> P_left_face{};
+        Primitive<DIM> P_right_face{};
+        const bool left_same_material =
+            material_line == nullptr || (*material_line)[i - 1] == (*material_line)[i];
+        const bool right_same_material =
+            material_line == nullptr || (*material_line)[i + 1] == (*material_line)[i];
+
+        const Primitive<DIM>& P_stencil_left =
+            left_same_material ? P_half[i - 1] : P_half[i];
+        const Primitive<DIM>& P_stencil_right =
+            right_same_material ? P_half[i + 1] : P_half[i];
+
+        reconstruct_cell_faces<DIM>(
+            P_stencil_left,
+            P_half[i],
+            P_stencil_right,
+            P_left_face,
+            P_right_face,
+            rho_floor,
+            p_floor
+        );
+
+        U_left_half[i] = prim_to_cons<DIM, EOS>(P_left_face, cell_params[i]);
+        U_right_half[i] = prim_to_cons<DIM, EOS>(P_right_face, cell_params[i]);
+
+        enforce_positive_conserved<DIM, EOS>(U_left_half[i], cell_params[i], rho_floor, p_floor);
+        enforce_positive_conserved<DIM, EOS>(U_right_half[i], cell_params[i], rho_floor, p_floor);
+    }
+
     for (int i = 0; i < N - 1; ++i) {
-        if (i == 0 || i == N - 2) {
-            UL_face[i] = U_half[i];
-            UR_face[i] = U_half[i + 1];
-            continue;
-        }
-
-        const int mat_im1 = mat_line[i - 1];
-        const int mat_i = mat_line[i];
-        const int mat_ip1 = mat_line[i + 1];
-        const int mat_ip2 = mat_line[i + 2];
-
-        if (mat_im1 < 0 || mat_im1 >= static_cast<int>(material_params.size()) ||
-            mat_i < 0 || mat_i >= static_cast<int>(material_params.size()) ||
-            mat_ip1 < 0 || mat_ip1 >= static_cast<int>(material_params.size()) ||
-            mat_ip2 < 0 || mat_ip2 >= static_cast<int>(material_params.size())) {
-            throw std::runtime_error("reconstruct_line_interfaces_material_aware: invalid material id");
-        }
-
-        const EOSParams& params_im1 = material_params[mat_im1];
-        const EOSParams& params_i = material_params[mat_i];
-        const EOSParams& params_ip1 = material_params[mat_ip1];
-        const EOSParams& params_ip2 = material_params[mat_ip2];
-
-        const bool allow_second_order_i =
-            (mat_im1 == mat_i) && (mat_i == mat_ip1);
-
-        const bool allow_second_order_ip1 =
-            (mat_i == mat_ip1) && (mat_ip1 == mat_ip2);
-
-        Primitive<DIM> P_left_i{};
-        Primitive<DIM> P_right_i{};
-        Primitive<DIM> P_left_ip1{};
-        Primitive<DIM> P_right_ip1{};
-
-        reconstruct_cell_faces_material_aware<DIM, EOS>(
-            U_half[i - 1],
-            U_half[i],
-            U_half[i + 1],
-            params_im1,
-            params_i,
-            params_ip1,
-            allow_second_order_i,
-            P_left_i,
-            P_right_i,
-            rho_floor,
-            p_floor
-        );
-
-        reconstruct_cell_faces_material_aware<DIM, EOS>(
-            U_half[i],
-            U_half[i + 1],
-            U_half[i + 2],
-            params_i,
-            params_ip1,
-            params_ip2,
-            allow_second_order_ip1,
-            P_left_ip1,
-            P_right_ip1,
-            rho_floor,
-            p_floor
-        );
-
-        UL_face[i] = prim_to_cons<DIM, EOS>(P_right_i, params_i);
-        UR_face[i] = prim_to_cons<DIM, EOS>(P_left_ip1, params_ip1);
+        UL_face[i] = U_right_half[i];
+        UR_face[i] = U_left_half[i + 1];
     }
 }
-
 
 
