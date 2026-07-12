@@ -75,7 +75,7 @@ Args parse_args(int argc, char** argv)
                 << "  --method/--methods DIM SIM common (comma lists accepted)\n"
                 << "  --resolutions 100 200 400, or 100,200,400, or 325x45,650x89\n"
                 << "  --sensitivity dim_epsilon|dim_alpha|sim_reinit (DIM: 1D D2 + bubble; SIM: oblique + bubble)\n"
-                << "  --scaling openmp_threads (bubble DIM/SIM at 1,2,4,8,16 threads)\n"
+                << "  --scaling openmp_threads (bubble DIM/SIM at 1,2,4,8,16,32 threads)\n"
                 << "  --omp-threads N\n"
                 << "  --benchmark-mode NAME (default standard; use clean for controlled timing)\n"
                 << "  --benchmark-warmups N (default 0)\n"

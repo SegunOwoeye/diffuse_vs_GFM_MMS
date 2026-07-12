@@ -240,7 +240,7 @@ if [[ "$skip_3d" != true ]]; then
     run_quant_with_conservation "3D contaminated helium shock-bubble" \
         --case bubble3d \
         --methods sim,dim \
-        --resolutions 650x89x89 \
+        --resolutions 325x45x45 \
         --result-root "$result_root_base/report_selected_helium_bubble_3d"
 fi
 

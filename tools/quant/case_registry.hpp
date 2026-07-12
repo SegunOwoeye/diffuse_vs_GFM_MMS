@@ -273,13 +273,13 @@ std::vector<CaseDef> case_registry()
         "shock_bubble_3d", "test6", "helium_bubble_3d", "SIM", 3,
         "mm_3d", "mm_main_3d", mm3,
         "configs/GFM/MM_3D_validation/test6.txt",
-        {{650, 89, 89}}
+        {{325, 45, 45}}
     });
     cases.push_back({
         "shock_bubble_3d", "test6", "helium_bubble_3d", "DIM", 3,
         "mm_3d", "mm_main_3d", mm3,
         "configs/DIM/MM_3D_validation/test6.txt",
-        {{650, 89, 89}}
+        {{325, 45, 45}}
     });
 
     return cases;
@@ -677,7 +677,7 @@ std::vector<RunSpec> build_scaling_runs(const Args& args)
     };
     for (const auto& target : targets) {
         const auto def = find_case(std::get<0>(target), std::get<1>(target), std::get<2>(target)).value();
-        for (int threads : {1, 2, 4, 8, 16}) {
+        for (int threads : {1, 2, 4, 8, 16, 32}) {
             RunSpec run;
             run.case_def = def;
             run.resolution = std::get<3>(target);
