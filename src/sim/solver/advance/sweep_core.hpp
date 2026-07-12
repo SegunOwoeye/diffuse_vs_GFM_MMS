@@ -4,6 +4,7 @@
 #include <omp.h>
 #endif
 
+#include <algorithm>
 #include <vector>
 #include <array>
 #include <stdexcept>
@@ -64,6 +65,54 @@ inline void advance_line(
         return;
     }
 
+    if (material_states == nullptr &&
+        phi_list.empty() &&
+        static_cast<int>(ctx.material_params.size()) == 1)
+    {
+        const EOSParams& params = ctx.material_params[0];
+        thread_local std::vector<EOSParams> cell_params;
+        thread_local std::vector<Conserved<DIM>> UL_face;
+        thread_local std::vector<Conserved<DIM>> UR_face;
+        cell_params.assign(L, params);
+
+        reconstruct_line_interfaces_dispatch<DIM, EOS>(
+            dir,
+            U_line,
+            cell_params,
+            dt,
+            ctx.dx[dir],
+            UL_face,
+            UR_face,
+            nullptr
+        );
+
+        thread_local std::vector<Conserved<DIM>> flux;
+        flux.resize(L - 1);
+        const std::array<double, DIM> n_axis = axis_normal<DIM>(dir);
+
+        for (int i = 0; i < L - 1; ++i) {
+            enforce_positive_conserved<DIM, EOS>(UL_face[i], params);
+            enforce_positive_conserved<DIM, EOS>(UR_face[i], params);
+            flux[i] = sharp_interface_flux_normal<DIM, EOS>(
+                UL_face[i],
+                UR_face[i],
+                n_axis,
+                params,
+                params
+            );
+        }
+
+        const double factor = dt / ctx.dx[dir];
+        for (int i = 1; i < L - 1; ++i) {
+            Conserved<DIM> U_next =
+                U_line[i] - factor * (flux[i] - flux[i - 1]);
+            enforce_positive_conserved<DIM, EOS>(U_next, params);
+            U_out[id_line[i]] = U_next;
+        }
+
+        return;
+    }
+
     if (material_states != nullptr) {
         const int nmat = static_cast<int>(ctx.material_params.size());
 
@@ -71,25 +120,29 @@ inline void advance_line(
             throw std::runtime_error("advance_line: material state count mismatch");
         }
 
-        std::vector<std::vector<Conserved<DIM>>> flux_by_material(
-            nmat,
-            std::vector<Conserved<DIM>>(L-1)
-        );
+        thread_local std::vector<std::vector<Conserved<DIM>>> flux_by_material;
+        thread_local std::vector<Conserved<DIM>> U_mat_line;
+        thread_local std::vector<EOSParams> mat_params;
+        thread_local std::vector<Conserved<DIM>> UL_face;
+        thread_local std::vector<Conserved<DIM>> UR_face;
+
+        flux_by_material.resize(nmat);
+        for (auto& flux_line : flux_by_material) {
+            flux_line.resize(L - 1);
+        }
+        U_mat_line.resize(L);
+        mat_params.resize(L);
 
         const std::array<double, DIM> n_axis = axis_normal<DIM>(dir);
 
         for (int mat = 0; mat < nmat; ++mat) {
-            std::vector<Conserved<DIM>> U_mat_line(L);
-            std::vector<EOSParams> mat_params(L, ctx.material_params[mat]);
+            std::fill(mat_params.begin(), mat_params.end(), ctx.material_params[mat]);
 
             for (int i = 0; i < L; ++i) {
                 U_mat_line[i] = (mat_line[i] == mat)
                     ? U_line[i]
                     : (*material_states)[mat][id_line[i]];
             }
-
-            std::vector<Conserved<DIM>> UL_face;
-            std::vector<Conserved<DIM>> UR_face;
 
             reconstruct_line_interfaces_dispatch<DIM, EOS>(
                 dir,
@@ -144,16 +197,21 @@ inline void advance_line(
         return;
     }
 
-    std::vector<EOSParams> cell_params(U_line.size());
+    thread_local std::vector<EOSParams> cell_params;
+    cell_params.resize(U_line.size());
 
     for (int i = 0; i < static_cast<int>(U_line.size()); ++i) {
         cell_params[i] = ctx.material_params[mat_line[i]];
     }
 
-    std::vector<Conserved<DIM>> U_rgfm = U_line;
-    std::vector<bool> is_interface(L - 1, false);
-    std::vector<RGFMInterfaceStates<DIM>> interface_states(L - 1);
-    std::vector<double> rgfm_state_score(L, std::numeric_limits<double>::max());
+    thread_local std::vector<Conserved<DIM>> U_rgfm;
+    thread_local std::vector<bool> is_interface;
+    thread_local std::vector<RGFMInterfaceStates<DIM>> interface_states;
+    thread_local std::vector<double> rgfm_state_score;
+    U_rgfm = U_line;
+    is_interface.assign(L - 1, false);
+    interface_states.resize(L - 1);
+    rgfm_state_score.assign(L, std::numeric_limits<double>::max());
 
     for (int i = 0; i < L - 1; ++i) {
         const int matL = mat_line[i];
@@ -265,8 +323,8 @@ inline void advance_line(
         is_interface[i] = true;
     }
 
-    std::vector<Conserved<DIM>> UL_face;
-    std::vector<Conserved<DIM>> UR_face;
+    thread_local std::vector<Conserved<DIM>> UL_face;
+    thread_local std::vector<Conserved<DIM>> UR_face;
 
     reconstruct_line_interfaces_dispatch<DIM, EOS>(
         dir,
@@ -312,9 +370,12 @@ inline void advance_line(
         }
     }
 
-    std::vector<Conserved<DIM>> F(L - 1);
-    std::vector<Conserved<DIM>> F_left_interface(L - 1);
-    std::vector<Conserved<DIM>> F_right_interface(L - 1);
+    thread_local std::vector<Conserved<DIM>> F;
+    thread_local std::vector<Conserved<DIM>> F_left_interface;
+    thread_local std::vector<Conserved<DIM>> F_right_interface;
+    F.resize(L - 1);
+    F_left_interface.resize(L - 1);
+    F_right_interface.resize(L - 1);
 
     for (int i = 0; i < L - 1; ++i) {
         const int idL = id_line[i];
@@ -412,40 +473,47 @@ inline void sweep_lines_flat(
 {
     const int num_lines = compute_num_lines<DIM>(dir, ctx.N);
 
-    #pragma omp parallel for
-    for (int line_id = 0; line_id < num_lines; ++line_id) {
-
-        std::array<int, DIM> base_idx{};
-        line_id_to_base_idx<DIM>(line_id, dir, ctx.N, base_idx);
-
+    #pragma omp parallel
+    {
         std::vector<Conserved<DIM>> U_line;
         std::vector<int> mat_line;
         std::vector<int> id_line;
 
-        extract_line_dispatch<DIM>(
-            dir,
-            U_in,
-            material_id,
-            ctx.N,
-            base_idx,
-            U_line,
-            mat_line,
-            id_line
-        );
+        U_line.reserve(ctx.N[dir]);
+        mat_line.reserve(ctx.N[dir]);
+        id_line.reserve(ctx.N[dir]);
 
-        advance_line<DIM, EOS>(
-            dir,
-            U_line,
-            mat_line,
-            id_line,
-            phi_list,
-            tracked_interfaces,
-            normals_list,
-            ctx,
-            dt,
-            U_out,
-            material_states
-        );
+        #pragma omp for schedule(static)
+        for (int line_id = 0; line_id < num_lines; ++line_id) {
+
+            std::array<int, DIM> base_idx{};
+            line_id_to_base_idx<DIM>(line_id, dir, ctx.N, base_idx);
+
+            extract_line_dispatch<DIM>(
+                dir,
+                U_in,
+                material_id,
+                ctx.N,
+                base_idx,
+                U_line,
+                mat_line,
+                id_line
+            );
+
+            advance_line<DIM, EOS>(
+                dir,
+                U_line,
+                mat_line,
+                id_line,
+                phi_list,
+                tracked_interfaces,
+                normals_list,
+                ctx,
+                dt,
+                U_out,
+                material_states
+            );
+        }
     }
 }
 

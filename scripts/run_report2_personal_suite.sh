@@ -4,7 +4,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-omp_threads=32
+omp_threads=1
+mpi_ranks=32
 result_root_base="results/quantitative"
 conservation_interval=10
 timeout_seconds=0
@@ -13,28 +14,30 @@ skip_scaling=true
 include_gorsse_3d=false
 skip_postprocess=false
 organized_output_dir="results/report2_organized"
-benchmark_repeats=3
-benchmark_warmups=1
+benchmark_repeats=1
+benchmark_warmups=0
 
 print_help() {
     cat <<'EOF'
 Run the personal Report 2 suite with your preferred defaults.
 
 This wrapper keeps the shared university runner intact, but defaults to:
-  - 32 OpenMP threads
+  - 32 MPI ranks
+  - 1 OpenMP thread per MPI rank
   - skipping the scaling study
 
 Usage:
   scripts/run_report2_personal_suite.sh [options]
 
 Options:
-  --omp-threads N              OpenMP thread count for non-scaling runs.
+  --omp-threads N              OpenMP thread count per MPI rank.
+  --mpi-ranks N                MPI rank count for MPI-backed runs.
   --result-root-base PATH      Root for report result directories.
   --conservation-interval N    Step interval for conservation CSV sampling.
   --timeout-seconds N          Timeout per solver run. Use 0 to disable.
   --no-overwrite               Do not clean per-run outputs before rerun.
-  --include-scaling            Include the OpenMP scaling study.
-  --skip-scaling               Explicitly skip OpenMP scaling.
+  --include-scaling            Include the MPI rank scaling study.
+  --skip-scaling               Explicitly skip MPI rank scaling.
   --include-gorsse-3d          Include optional 3D Gorsse TC9 water-air run.
   --skip-postprocess           Skip plotting, tracker update, and organizer.
   --organized-output-dir PATH  Destination for organized report outputs.
@@ -52,6 +55,14 @@ while [[ $# -gt 0 ]]; do
                 exit 2
             fi
             omp_threads="$2"
+            shift 2
+            ;;
+        --mpi-ranks)
+            if [[ $# -lt 2 ]]; then
+                echo "run_report2_personal_suite.sh: --mpi-ranks requires a value" >&2
+                exit 2
+            fi
+            mpi_ranks="$2"
             shift 2
             ;;
         --result-root-base)
@@ -136,6 +147,7 @@ done
 
 args=(
     --omp-threads "$omp_threads"
+    --mpi-ranks "$mpi_ranks"
     --result-root-base "$result_root_base"
     --conservation-interval "$conservation_interval"
     --timeout-seconds "$timeout_seconds"

@@ -101,6 +101,8 @@ def infer_method(run_id: str, path: Path) -> str:
         return "SIM"
     if "__dim__" in text or "quant_dim" in text or "_dim_" in text:
         return "DIM"
+    if "__sm_mpi__" in text or "quant_sm_mpi" in text or "_sm_mpi_" in text:
+        return "common"
     return "common"
 
 
@@ -1302,7 +1304,7 @@ def main() -> None:
         global_dir,
         schlieren_scale=helium_schlieren_scale,
     )
-    plot_performance(base / "report_selected_openmp_scaling", global_dir)
+    plot_performance(base / "report_selected_mpi_scaling", global_dir)
 
 
 if __name__ == "__main__":

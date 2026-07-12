@@ -152,7 +152,6 @@ inline void apply_boundary_conditions(
 )
 {
     const int Ntot = static_cast<int>(U.size());
-    const std::vector<Conserved<DIM>> U_old = U;
 
     #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
@@ -181,7 +180,7 @@ inline void apply_boundary_conditions(
 
         if (bc == BoundaryConditionType::nonreflective) {
             U[id] = local_nonreflective_state<DIM, EOS>(
-                U_old,
+                U,
                 idx,
                 src_idx,
                 ctx
@@ -189,7 +188,7 @@ inline void apply_boundary_conditions(
             continue;
         }
 
-        U[id] = U_old[src_id];
+        U[id] = U[src_id];
 
         for (int d = 0; d < DIM; ++d) {
             if (idx[d] == 0 && ctx.bc_lo[d] == BoundaryConditionType::reflective) {

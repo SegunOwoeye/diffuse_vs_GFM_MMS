@@ -172,7 +172,6 @@ namespace dim {
     {
         const int total = static_cast<int>(U.size());
         const auto stride = compute_strides<DIM>(N);
-        const std::vector<State<DIM>> U_old = U;
 
         #pragma omp parallel for
         for (int linear = 0; linear < total; ++linear) {
@@ -205,7 +204,7 @@ namespace dim {
 
             if (is_nonreflective_boundary_name(bc)) {
                 U[linear] = local_nonreflective_state<DIM>(
-                    U_old,
+                    U,
                     idx,
                     src_idx,
                     N,
@@ -215,7 +214,7 @@ namespace dim {
                 continue;
             }
 
-            U[linear] = U_old[src_linear];
+            U[linear] = U[src_linear];
 
             for (int d = 0; d < DIM; ++d) {
                 if ((idx[d] == 0 && cfg.bc_lo[d] == "reflective") ||

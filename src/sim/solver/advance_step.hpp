@@ -3,6 +3,7 @@
 #include <vector>
 #include <array>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -12,6 +13,7 @@
 #endif
 
 #include "src/euler/state.hpp"
+#include "src/core/phase_timings.hpp"
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
 #include "src/sim/solver/cfl.hpp"
@@ -39,6 +41,7 @@ struct StepResult {
     std::vector<std::vector<double>> phi_list_new;
     double dt;
     std::vector<RGFMDiagnosticRow<DIM>> rgfm_diagnostic_rows;
+    SolverPhaseTimings phase_timings;
 };
 
 
@@ -506,6 +509,7 @@ inline StepResult<DIM> advance_one_step(
     }
 
     ctx.validate(Ntot);
+    SolverPhaseTimings phase_timings{};
 
 
     // [2.1] Material map
@@ -531,6 +535,7 @@ inline StepResult<DIM> advance_one_step(
 
 
     // [2.2] CFL timestep
+    const auto cfl_start = std::chrono::steady_clock::now();
     const double dt = (ctx.time_update == "unsplit")
         ? compute_dt_cfl_materials_unsplit<DIM, EOS>(
             U,
@@ -548,6 +553,9 @@ inline StepResult<DIM> advance_one_step(
             ctx.cfl,
             ctx.dt_max
         );
+    const auto cfl_end = std::chrono::steady_clock::now();
+    phase_timings.cfl_seconds =
+        std::chrono::duration<double>(cfl_end - cfl_start).count();
 
 
     // [2.3] Working level sets
@@ -634,6 +642,7 @@ inline StepResult<DIM> advance_one_step(
 
         auto after_accumulation = [&](std::vector<Conserved<DIM>>& U_accum)
         {
+            const auto boundary_start = std::chrono::steady_clock::now();
             #pragma omp parallel for if(Ntot > 512)
             for (int id = 0; id < Ntot; ++id) {
                 const int mat = material_id_current[id];
@@ -644,12 +653,16 @@ inline StepResult<DIM> advance_one_step(
             }
 
             apply_boundary_conditions<DIM, EOS>(U_accum, ctx);
+            const auto boundary_end = std::chrono::steady_clock::now();
+            phase_timings.boundary_seconds +=
+                std::chrono::duration<double>(boundary_end - boundary_start).count();
             zero_roundoff_planar_transverse_momentum<DIM>(
                 U_accum,
                 planar_flow_axis
             );
         };
 
+        const auto sweep_start = std::chrono::steady_clock::now();
         fv::advance_unsplit_directions<DIM>(
             U_base,
             U_stage,
@@ -657,6 +670,10 @@ inline StepResult<DIM> advance_one_step(
             accumulate_delta,
             after_accumulation
         );
+        const auto sweep_end = std::chrono::steady_clock::now();
+        phase_timings.sweep_seconds =
+            std::chrono::duration<double>(sweep_end - sweep_start).count()
+            - phase_timings.boundary_seconds;
     }
     else {
         auto sweep = [&](int dir,
@@ -689,21 +706,31 @@ inline StepResult<DIM> advance_one_step(
 
         auto after_direction = [&](int, std::vector<Conserved<DIM>>& U_next)
         {
+            const auto boundary_start = std::chrono::steady_clock::now();
             apply_boundary_conditions<DIM, EOS>(U_next, ctx);
+            const auto boundary_end = std::chrono::steady_clock::now();
+            phase_timings.boundary_seconds +=
+                std::chrono::duration<double>(boundary_end - boundary_start).count();
             zero_roundoff_planar_transverse_momentum<DIM>(
                 U_next,
                 planar_flow_axis
             );
         };
 
+        const auto sweep_start = std::chrono::steady_clock::now();
         fv::advance_split_directions<DIM>(
             U_stage,
             sweep,
             after_direction
         );
+        const auto sweep_end = std::chrono::steady_clock::now();
+        phase_timings.sweep_seconds =
+            std::chrono::duration<double>(sweep_end - sweep_start).count()
+            - phase_timings.boundary_seconds;
     }
 
     // [2.6] Level-set advection using the current-interface extension speed
+    const auto level_set_start = std::chrono::steady_clock::now();
     if (ctx.advect_level_set && !phi_list_work.empty()) {
         std::vector<std::array<double, DIM>> level_set_velocity_field;
         const bool use_vector_level_set_transport =
@@ -779,9 +806,13 @@ inline StepResult<DIM> advance_one_step(
             );
         }
     }
+    const auto level_set_end = std::chrono::steady_clock::now();
+    phase_timings.level_set_seconds =
+        std::chrono::duration<double>(level_set_end - level_set_start).count();
 
 
     // [2.8] Updated material map and state transfer after the interface move
+    const auto transfer_start = std::chrono::steady_clock::now();
     std::vector<int> material_id_work = material_id_current;
 
     if (ctx.reassign_material_from_phi) {
@@ -838,8 +869,11 @@ inline StepResult<DIM> advance_one_step(
         U_final,
         planar_flow_axis
     );
+    const auto transfer_end = std::chrono::steady_clock::now();
+    phase_timings.material_transfer_seconds =
+        std::chrono::duration<double>(transfer_end - transfer_start).count();
 
     ctx.completed_steps += 1;
 
-    return {U_final, phi_list_work, dt, rgfm_current.diagnostic_rows};
+    return {U_final, phi_list_work, dt, rgfm_current.diagnostic_rows, phase_timings};
 }

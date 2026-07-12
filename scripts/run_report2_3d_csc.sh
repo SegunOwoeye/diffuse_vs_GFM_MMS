@@ -3,8 +3,8 @@
 #SBATCH --partition=lsc
 #SBATCH --clusters=CSC
 #SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=32
+#SBATCH --ntasks=32
+#SBATCH --cpus-per-task=1
 #SBATCH --time=36:00:00
 #SBATCH --mem=128GB
 #SBATCH --account=oo338
@@ -14,7 +14,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-omp_threads=32
+omp_threads=1
+mpi_ranks=32
 result_root_base="results/quantitative"
 conservation_interval=10
 timeout_seconds=0
@@ -37,7 +38,8 @@ Usage:
   scripts/run_report2_3d_csc.sh [options]
 
 Options:
-  --omp-threads N              OpenMP thread count for solver runs.
+  --omp-threads N              OpenMP thread count per MPI rank.
+  --mpi-ranks N                MPI rank count for MPI-backed runs.
   --result-root-base PATH      Root for report result directories.
   --conservation-interval N    Step interval for conservation CSV sampling.
   --timeout-seconds N          Timeout per solver run. Use 0 to disable.
@@ -58,6 +60,14 @@ while [[ $# -gt 0 ]]; do
                 exit 2
             fi
             omp_threads="$2"
+            shift 2
+            ;;
+        --mpi-ranks)
+            if [[ $# -lt 2 ]]; then
+                echo "run_report2_3d_csc.sh: --mpi-ranks requires a value" >&2
+                exit 2
+            fi
+            mpi_ranks="$2"
             shift 2
             ;;
         --result-root-base)
@@ -128,7 +138,7 @@ fi
 export OMP_PROC_BIND="${OMP_PROC_BIND:-spread}"
 export OMP_PLACES="${OMP_PLACES:-cores}"
 
-common_flags=("--omp-threads" "$omp_threads")
+common_flags=("--omp-threads" "$omp_threads" "--mpi-ranks" "$mpi_ranks")
 if [[ "$overwrite" == true ]]; then
     common_flags+=("--overwrite")
 fi
@@ -148,7 +158,7 @@ run_quant() {
 
 run_quant "3D Euler explosion" \
     --case explosion3d \
-    --method common \
+    --method SM_MPI \
     --resolutions 50x50x50,100x100x100,200x200x200 \
     --result-root "$result_root_base/report_selected_explosion_3d"
 
@@ -163,7 +173,7 @@ fi
 
 run_quant "3D contaminated helium shock-bubble" \
     --case bubble3d \
-    --methods sim,dim \
+    --methods SIM_MPI,DIM_MPI \
     --resolutions 325x45x45 \
     --result-root "$result_root_base/report_selected_helium_bubble_3d" \
     "${conservation_flags[@]}" \
@@ -172,7 +182,7 @@ run_quant "3D contaminated helium shock-bubble" \
 if [[ "$run_gorsse_3d" == true ]]; then
     run_quant "3D Gorsse TC9 water-air bubble" \
         --case gorsse_tc9_3d \
-        --methods sim,dim \
+        --methods SIM_MPI,DIM_MPI \
         --resolutions 240x200x200 \
         --result-root "$result_root_base/report_selected_gorsse_tc9_water_air_3d" \
         "${conservation_flags[@]}"

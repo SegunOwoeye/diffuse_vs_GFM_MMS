@@ -11,7 +11,7 @@ inline void advance_split_directions(
     AfterDirectionFn&& after_direction)
 {
     for (int dir = 0; dir < DIM; ++dir) {
-        std::vector<State> next = stage;
+        std::vector<State> next(stage.size());
         sweep_direction(dir, stage, next);
         after_direction(dir, next);
         stage.swap(next);

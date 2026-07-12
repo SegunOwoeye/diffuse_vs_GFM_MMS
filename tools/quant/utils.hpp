@@ -191,13 +191,31 @@ std::string method_normalized(const std::string& method)
     if (text == "gfm" || text == "rgfm" || text == "sim") {
         return "SIM";
     }
+    if (text == "gfm_mpi" || text == "rgfm_mpi" || text == "sim_mpi") {
+        return "SIM_MPI";
+    }
     if (text == "allaire" || text == "dim") {
         return "DIM";
+    }
+    if (text == "dim_mpi" || text == "allaire_mpi") {
+        return "DIM_MPI";
     }
     if (text == "sm" || text == "common") {
         return "common";
     }
+    if (text == "sm_mpi" || text == "mpi" || text == "common_mpi") {
+        return "SM_MPI";
+    }
     return method;
+}
+
+std::string method_family(const std::string& method)
+{
+    const std::string normal = method_normalized(method);
+    if (normal == "SIM_MPI") return "SIM";
+    if (normal == "DIM_MPI") return "DIM";
+    if (normal == "SM_MPI") return "common";
+    return normal;
 }
 
 

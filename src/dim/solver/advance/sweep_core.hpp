@@ -42,14 +42,19 @@ namespace dim {
 
         const double lambda = dt / dx;
 
-        std::vector<Flux<DIM>> F(n + 1, make_flux<DIM>(nmat));
-        std::vector<double> face_velocity(n + 1, 0.0);
-        std::vector<Primitive<DIM>> primitive(n);
-        std::vector<std::vector<double>> alpha_full(n);
-        std::vector<State<DIM>> UL_face;
-        std::vector<State<DIM>> UR_face;
-        std::vector<Primitive<DIM>> PL_face;
-        std::vector<Primitive<DIM>> PR_face;
+        thread_local std::vector<Flux<DIM>> F;
+        thread_local std::vector<double> face_velocity;
+        thread_local std::vector<Primitive<DIM>> primitive;
+        thread_local std::vector<std::vector<double>> alpha_full;
+        thread_local std::vector<State<DIM>> UL_face;
+        thread_local std::vector<State<DIM>> UR_face;
+        thread_local std::vector<Primitive<DIM>> PL_face;
+        thread_local std::vector<Primitive<DIM>> PR_face;
+
+        F.assign(n + 1, make_flux<DIM>(nmat));
+        face_velocity.assign(n + 1, 0.0);
+        primitive.resize(n);
+        alpha_full.resize(n);
 
         std::array<double, DIM> normal{};
         normal[dir] = 1.0;
@@ -107,7 +112,11 @@ namespace dim {
         }
 
         // Non-conservative alpha update
-        std::vector<std::vector<double>> alpha_flux(n + 1, std::vector<double>(nmat, 0.0));
+        thread_local std::vector<std::vector<double>> alpha_flux;
+        alpha_flux.resize(n + 1);
+        for (auto& row : alpha_flux) {
+            row.assign(nmat, 0.0);
+        }
 
         for (int k = 0; k < nmat; ++k) {
             alpha_flux[0][k] = alpha_full[0][k] * face_velocity[0];
@@ -164,34 +173,40 @@ namespace dim {
         const auto stride = compute_strides<DIM>(N);
         const int total_lines = static_cast<int>(U_in.size()) / N[dir];
 
-        #pragma omp parallel for
-        for (int linear = 0; linear < total_lines; ++linear) {
-            std::array<int, DIM> idx{};
+        #pragma omp parallel
+        {
             std::vector<State<DIM>> line_in;
             std::vector<State<DIM>> line_out;
-            int tmp = linear;
+            line_in.reserve(N[dir]);
+            line_out.reserve(N[dir]);
 
-            for (int d = DIM - 1; d >= 0; --d) {
-                if (d == dir) {
-                    continue;
+            #pragma omp for schedule(static)
+            for (int linear = 0; linear < total_lines; ++linear) {
+                std::array<int, DIM> idx{};
+                int tmp = linear;
+
+                for (int d = DIM - 1; d >= 0; --d) {
+                    if (d == dir) {
+                        continue;
+                    }
+
+                    idx[d] = tmp % N[d];
+                    tmp /= N[d];
                 }
 
-                idx[d] = tmp % N[d];
-                tmp /= N[d];
+                extract_line<DIM>(U_in, N, stride, dir, idx, line_in);
+                solve_line<DIM>(
+                    line_in,
+                    line_out,
+                    dx[dir],
+                    dt,
+                    params,
+                    dir,
+                    alpha_source_floor,
+                    lambda_model
+                );
+                write_line<DIM>(U_out, N, stride, dir, idx, line_out);
             }
-
-            extract_line<DIM>(U_in, N, stride, dir, idx, line_in);
-            solve_line<DIM>(
-                line_in,
-                line_out,
-                dx[dir],
-                dt,
-                params,
-                dir,
-                alpha_source_floor,
-                lambda_model
-            );
-            write_line<DIM>(U_out, N, stride, dir, idx, line_out);
         }
     }
 

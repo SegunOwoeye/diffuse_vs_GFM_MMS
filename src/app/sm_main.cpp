@@ -137,6 +137,7 @@ int main(int argc, char** argv)
             double time = 0.0;
             int step = 0;
             const auto wall_start = std::chrono::steady_clock::now();
+            SolverPhaseTimings phase_timings{};
             const bool track_conservation =
                 app_io::conservation_tracking_enabled();
             const int conservation_interval =
@@ -144,6 +145,7 @@ int main(int argc, char** argv)
             std::optional<app_io::ConservationReport<DIM_>> conservation_report;
 
             if (track_conservation) {
+                const auto conservation_start = std::chrono::steady_clock::now();
                 const auto initial_totals =
                     app_io::compute_sharp_conservation_totals<DIM_>(
                         U,
@@ -154,6 +156,9 @@ int main(int argc, char** argv)
 
                 conservation_report.emplace(cfg, N, initial_totals);
                 conservation_report->write(step, time, initial_totals);
+                const auto conservation_end = std::chrono::steady_clock::now();
+                phase_timings.conservation_seconds +=
+                    std::chrono::duration<double>(conservation_end - conservation_start).count();
             }
 
             while (time < cfg.tfinal - 1e-14) {
@@ -164,6 +169,7 @@ int main(int argc, char** argv)
                     U,
                     ctx
                 );
+                phase_timings.add_step(result.phase_timings);
 
                 U = result.U_new;
 
@@ -175,6 +181,7 @@ int main(int argc, char** argv)
                 }
 
                 if (conservation_report.has_value()) {
+                    const auto conservation_start = std::chrono::steady_clock::now();
                     const auto boundary_flux =
                         app_io::compute_sharp_boundary_flux<DIM_, EOS>(
                             U,
@@ -187,12 +194,16 @@ int main(int argc, char** argv)
                         result.dt,
                         boundary_flux
                     );
+                    const auto conservation_end = std::chrono::steady_clock::now();
+                    phase_timings.conservation_seconds +=
+                        std::chrono::duration<double>(conservation_end - conservation_start).count();
                 }
 
                 if (conservation_report.has_value() &&
                     (step % conservation_interval == 0 ||
                      time >= cfg.tfinal - 1e-14))
                 {
+                    const auto conservation_start = std::chrono::steady_clock::now();
                     conservation_report->write(
                         step,
                         time,
@@ -203,6 +214,9 @@ int main(int argc, char** argv)
                             static_cast<int>(ctx.material_params.size())
                         )
                     );
+                    const auto conservation_end = std::chrono::steady_clock::now();
+                    phase_timings.conservation_seconds +=
+                        std::chrono::duration<double>(conservation_end - conservation_start).count();
                 }
             }
 
@@ -229,6 +243,7 @@ int main(int argc, char** argv)
             std::filesystem::path p(filename);
             ensure_directory(p.parent_path().string());
 
+            const auto output_start = std::chrono::steady_clock::now();
             write_csv<DIM_, EOS>(
                 filename,
                 U,
@@ -238,10 +253,20 @@ int main(int argc, char** argv)
                 cfg.domain_max,
                 material_params
             );
+            const auto output_end = std::chrono::steady_clock::now();
+            phase_timings.output_seconds +=
+                std::chrono::duration<double>(output_end - output_start).count();
 
             std::cout << "Written: " << filename << "\n";
 
-            app_io::write_runtime_report<DIM_>(cfg, N, step, time, wall_seconds);
+            app_io::write_runtime_report<DIM_>(
+                cfg,
+                N,
+                step,
+                time,
+                wall_seconds,
+                &phase_timings
+            );
 
             
             #if APP_DIM == 1 // Loads this codeonly for 1D simulations

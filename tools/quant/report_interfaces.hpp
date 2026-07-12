@@ -24,7 +24,13 @@ inline InterfaceReportTables build_interface_reports(
         interface_groups[group_key][n] = row;
 
         const std::string method_key = row.at("case_label") + "|" + std::to_string(n);
-        interface_case_resolution_method[method_key][row.at("method") == "SIM" ? 0 : 1] = row;
+        const std::string family = method_family(row.at("method"));
+        if (family == "SIM") {
+            interface_case_resolution_method[method_key][0] = row;
+        }
+        else if (family == "DIM") {
+            interface_case_resolution_method[method_key][1] = row;
+        }
     }
 
     auto interface_value = [](const std::map<int, std::map<std::string, std::string>>& rows,

@@ -1,9 +1,11 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <stdexcept>
 #include <vector>
 
+#include "src/core/phase_timings.hpp"
 #include "src/dim/solver/cfl.hpp"
 #include "src/dim/solver/advance/boundary.hpp"
 #include "src/dim/solver/advance/geometry.hpp"
@@ -18,6 +20,7 @@ namespace dim {
     struct StepResult {
         std::vector<State<DIM>> U_new;
         double dt = 0.0;
+        SolverPhaseTimings phase_timings;
     };
 
     // [1] Advance One Step (Diffuse Interface)
@@ -41,9 +44,14 @@ namespace dim {
             throw std::runtime_error("dim::advance_one_step: grid size mismatch");
         }
 
+        SolverPhaseTimings phase_timings{};
+        const auto cfl_start = std::chrono::steady_clock::now();
         const double dt = (cfg.time_update == "unsplit")
             ? compute_dt_cfl_unsplit<DIM>(U, dx, params, cfg.dim_lambda_model, cfl, dt_max)
             : compute_dt_cfl<DIM>(U, dx, params, cfg.dim_lambda_model, cfl, dt_max);
+        const auto cfl_end = std::chrono::steady_clock::now();
+        phase_timings.cfl_seconds =
+            std::chrono::duration<double>(cfl_end - cfl_start).count();
 
         std::vector<State<DIM>> U_stage = U;
 
@@ -93,9 +101,14 @@ namespace dim {
 
             auto after_accumulation = [&](std::vector<State<DIM>>& U_accum)
             {
+                const auto boundary_start = std::chrono::steady_clock::now();
                 apply_boundary_conditions<DIM>(U_accum, N, cfg, params);
+                const auto boundary_end = std::chrono::steady_clock::now();
+                phase_timings.boundary_seconds +=
+                    std::chrono::duration<double>(boundary_end - boundary_start).count();
             };
 
+            const auto sweep_start = std::chrono::steady_clock::now();
             fv::advance_unsplit_directions<DIM>(
                 U,
                 U_stage,
@@ -103,22 +116,35 @@ namespace dim {
                 accumulate_delta,
                 after_accumulation
             );
+            const auto sweep_end = std::chrono::steady_clock::now();
+            phase_timings.sweep_seconds =
+                std::chrono::duration<double>(sweep_end - sweep_start).count()
+                - phase_timings.boundary_seconds;
         }
         else {
             auto after_direction = [&](int, std::vector<State<DIM>>& U_next)
             {
+                const auto boundary_start = std::chrono::steady_clock::now();
                 apply_boundary_conditions<DIM>(U_next, N, cfg, params);
+                const auto boundary_end = std::chrono::steady_clock::now();
+                phase_timings.boundary_seconds +=
+                    std::chrono::duration<double>(boundary_end - boundary_start).count();
             };
 
+            const auto sweep_start = std::chrono::steady_clock::now();
             fv::advance_split_directions<DIM>(
                 U_stage,
                 sweep,
                 after_direction
             );
+            const auto sweep_end = std::chrono::steady_clock::now();
+            phase_timings.sweep_seconds =
+                std::chrono::duration<double>(sweep_end - sweep_start).count()
+                - phase_timings.boundary_seconds;
         }
 
         // Return result
-        return {U_stage, dt};
+        return {U_stage, dt, phase_timings};
     }
 
 } 

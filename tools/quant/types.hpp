@@ -44,6 +44,7 @@ struct RunSpec {
     std::vector<int> resolution;
     std::string output_prefix;
     int omp_threads = 6;
+    int mpi_ranks = 1;
     int repeat_id = 0;
     bool warmup = false;
     std::string benchmark_mode = "standard";
@@ -67,6 +68,7 @@ struct Args {
     std::string sensitivity;
     std::string scaling;
     int omp_threads = 6;
+    int mpi_ranks = 1;
     int timeout_seconds = 0;
     int conservation_interval = 25;
     int benchmark_repeats = 1;

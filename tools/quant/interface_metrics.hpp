@@ -33,8 +33,9 @@ std::map<std::string, double> interface_metrics(const fs::path& solution, const 
     const auto c = read_csv_columns(solution);
     if (!c.count("x0")) return metrics;
     const auto& x = c.at("x0");
+    const std::string family = method_family(method);
     double position = std::nan("");
-    if (method == "DIM") {
+    if (family == "DIM") {
         // DIM exposes a smeared material fraction; the 5%-95% crossings give a grid-independent interface-thickness estimate.
         const std::string key = c.count("alpha1") ? "alpha1" : (c.count("alpha0") ? "alpha0" : "");
         if (!key.empty()) {
@@ -45,7 +46,7 @@ std::map<std::string, double> interface_metrics(const fs::path& solution, const 
             if (!std::isnan(p05) && !std::isnan(p95)) metrics["interface_thickness"] = std::abs(p95 - p05);
         }
     }
-    else if (method == "SIM" && c.count("phi0")) {
+    else if (family == "SIM" && c.count("phi0")) {
         // SIM/rGFM keeps a sharp level set, so only the zero crossing is used.
         position = crossing_position(x, c.at("phi0"), 0.0);
         if (!std::isnan(position)) metrics["interface_position"] = position;

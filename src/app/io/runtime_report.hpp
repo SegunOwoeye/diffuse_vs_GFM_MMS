@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "src/core/phase_timings.hpp"
 #include "src/io/config.hpp"
 
 namespace app_io {
@@ -67,7 +68,8 @@ namespace app_io {
         const std::array<int, DIM>& N,
         int steps,
         double final_time,
-        double wall_seconds
+        double wall_seconds,
+        const SolverPhaseTimings* phase_timings = nullptr
     )
     {
         const std::filesystem::path filename =
@@ -106,10 +108,20 @@ namespace app_io {
         file << "wall_time_seconds = " << wall_seconds << "\n";
         file << "cost_per_cell_update_seconds = "
              << cost_per_cell_update << "\n";
+        if (phase_timings != nullptr) {
+            file << "phase_cfl_seconds = " << phase_timings->cfl_seconds << "\n";
+            file << "phase_sweep_seconds = " << phase_timings->sweep_seconds << "\n";
+            file << "phase_boundary_seconds = " << phase_timings->boundary_seconds << "\n";
+            file << "phase_level_set_seconds = " << phase_timings->level_set_seconds << "\n";
+            file << "phase_material_transfer_seconds = "
+                 << phase_timings->material_transfer_seconds << "\n";
+            file << "phase_conservation_seconds = "
+                 << phase_timings->conservation_seconds << "\n";
+            file << "phase_output_seconds = " << phase_timings->output_seconds << "\n";
+        }
     }
 
 }
-
 
 
 
