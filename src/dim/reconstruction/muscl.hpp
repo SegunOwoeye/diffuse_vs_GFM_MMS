@@ -225,16 +225,21 @@ namespace dim {
             return;
         }
 
-        std::vector<Primitive<DIM>> P_line(n);
+        thread_local std::vector<Primitive<DIM>> P_line;
+        P_line.resize(n);
         for (int i = 0; i < n; ++i) {
             P_line[i] = cons_to_prim<DIM>(U_line[i], params);
             enforce_positive_primitive(P_line[i]);
         }
 
-        std::vector<Primitive<DIM>> P_left(n);
-        std::vector<Primitive<DIM>> P_right(n);
-        std::vector<State<DIM>> U_left(n);
-        std::vector<State<DIM>> U_right(n);
+        thread_local std::vector<Primitive<DIM>> P_left;
+        thread_local std::vector<Primitive<DIM>> P_right;
+        thread_local std::vector<State<DIM>> U_left;
+        thread_local std::vector<State<DIM>> U_right;
+        P_left.resize(n);
+        P_right.resize(n);
+        U_left.resize(n);
+        U_right.resize(n);
 
         P_left[0] = P_line[0];
         P_right[0] = P_line[0];
@@ -261,7 +266,8 @@ namespace dim {
             repair_state<DIM>(U_right[i], params);
         }
 
-        std::vector<State<DIM>> U_half(n);
+        thread_local std::vector<State<DIM>> U_half;
+        U_half.resize(n);
         U_half[0] = U_line[0];
         U_half[n-1] = U_line[n-1];
 
@@ -282,14 +288,17 @@ namespace dim {
             );
         }
 
-        std::vector<Primitive<DIM>> P_half(n);
+        thread_local std::vector<Primitive<DIM>> P_half;
+        P_half.resize(n);
         for (int i = 0; i < n; ++i) {
             P_half[i] = cons_to_prim<DIM>(U_half[i], params);
             enforce_positive_primitive(P_half[i]);
         }
 
-        std::vector<State<DIM>> U_left_half(n);
-        std::vector<State<DIM>> U_right_half(n);
+        thread_local std::vector<State<DIM>> U_left_half;
+        thread_local std::vector<State<DIM>> U_right_half;
+        U_left_half.resize(n);
+        U_right_half.resize(n);
         U_left_half[0] = U_half[0];
         U_right_half[0] = U_half[0];
         U_left_half[n-1] = U_half[n-1];

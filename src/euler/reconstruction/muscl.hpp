@@ -184,14 +184,17 @@ inline void reconstruct_line_interfaces(
         return;
     }
 
-    std::vector<Primitive<DIM>> P_line(N);
+    thread_local std::vector<Primitive<DIM>> P_line;
+    P_line.resize(N);
     for (int i = 0; i < N; ++i) {
         P_line[i] = cons_to_prim<DIM, EOS>(U_line[i], cell_params[i]);
         enforce_positive_primitive(P_line[i], rho_floor, p_floor);
     }
 
-    std::vector<Conserved<DIM>> U_left_n(N);
-    std::vector<Conserved<DIM>> U_right_n(N);
+    thread_local std::vector<Conserved<DIM>> U_left_n;
+    thread_local std::vector<Conserved<DIM>> U_right_n;
+    U_left_n.resize(N);
+    U_right_n.resize(N);
 
     U_left_n[0] = U_line[0];
     U_right_n[0] = U_line[0];
@@ -228,7 +231,8 @@ inline void reconstruct_line_interfaces(
         enforce_positive_conserved<DIM, EOS>(U_right_n[i], cell_params[i], rho_floor, p_floor);
     }
 
-    std::vector<Conserved<DIM>> U_half(N);
+    thread_local std::vector<Conserved<DIM>> U_half;
+    U_half.resize(N);
 
     U_half[0] = U_line[0];
     U_half[N - 1] = U_line[N - 1];
@@ -246,14 +250,17 @@ inline void reconstruct_line_interfaces(
         enforce_positive_conserved<DIM, EOS>(U_half[i], cell_params[i], rho_floor, p_floor);
     }
 
-    std::vector<Primitive<DIM>> P_half(N);
+    thread_local std::vector<Primitive<DIM>> P_half;
+    P_half.resize(N);
     for (int i = 0; i < N; ++i) {
         P_half[i] = cons_to_prim<DIM, EOS>(U_half[i], cell_params[i]);
         enforce_positive_primitive(P_half[i], rho_floor, p_floor);
     }
 
-    std::vector<Conserved<DIM>> U_left_half(N);
-    std::vector<Conserved<DIM>> U_right_half(N);
+    thread_local std::vector<Conserved<DIM>> U_left_half;
+    thread_local std::vector<Conserved<DIM>> U_right_half;
+    U_left_half.resize(N);
+    U_right_half.resize(N);
 
     U_left_half[0] = U_half[0];
     U_right_half[0] = U_half[0];
@@ -295,5 +302,4 @@ inline void reconstruct_line_interfaces(
         UR_face[i] = U_left_half[i + 1];
     }
 }
-
 

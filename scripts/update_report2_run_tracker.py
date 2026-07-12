@@ -43,7 +43,7 @@ SENSITIVITY_ROWS = [
 ]
 
 PERFORMANCE_ROWS = [
-    RunRow("Performance Runs", "OpenMP shock-bubble scaling", "--scaling openmp_threads", "results/quantitative/report_selected_openmp_scaling", "performance summary and PNG output", "Main speedup evidence"),
+    RunRow("Performance Runs", "MPI rank scaling", "--scaling mpi_ranks", "results/quantitative/report_selected_mpi_scaling", "performance summary and PNG output", "Main speedup evidence"),
     RunRow("Performance Runs", "Additional scaling for long one-core cases", "To be selected after first runtime pass", "", "runtime files and performance summaries", "Add only for cases with one-core runtime above about 60 seconds", "Optional", "Optional"),
 ]
 
@@ -141,18 +141,18 @@ def render() -> str:
         "",
         "Status values: `Pending`, `Running`, `Complete`, `Blocked`, and `Optional`.",
         "",
-        "# [0] Threading",
+        "# [0] Parallel Execution",
         "",
-        "The one-stop runner currently defaults to six OpenMP threads:",
+        "The one-stop runner currently defaults to one MPI rank and one OpenMP thread per rank:",
         "",
         "```bash",
         "scripts/run_report2_selected_suite.sh",
         "```",
         "",
-        "On the university machine, increase the thread count with:",
+        "On the university machine, use MPI ranks for the production solver path:",
         "",
         "```bash",
-        "scripts/run_report2_selected_suite.sh --omp-threads 32",
+        "scripts/run_report2_selected_suite.sh --mpi-ranks 32 --omp-threads 1",
         "```",
         "",
         "For a faster partial run:",

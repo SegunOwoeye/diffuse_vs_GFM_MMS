@@ -199,11 +199,13 @@ inline void run_sharp_interface_case(
     int step = 0;
     std::size_t next_output_index = 0;
     const auto wall_start = std::chrono::steady_clock::now();
+    SolverPhaseTimings phase_timings{};
     const bool track_conservation = app_io::conservation_tracking_enabled();
     const int conservation_interval = app_io::conservation_tracking_interval();
     std::optional<app_io::ConservationReport<DIM>> conservation_report;
 
     if (track_conservation) {
+        const auto conservation_start = std::chrono::steady_clock::now();
         const auto initial_totals =
             app_io::compute_sharp_conservation_totals<DIM>(
                 U,
@@ -214,6 +216,9 @@ inline void run_sharp_interface_case(
 
         conservation_report.emplace(cfg, N, initial_totals);
         conservation_report->write(step, time, initial_totals);
+        const auto conservation_end = std::chrono::steady_clock::now();
+        phase_timings.conservation_seconds +=
+            std::chrono::duration<double>(conservation_end - conservation_start).count();
     }
 
     const auto* phi_output =
@@ -223,6 +228,7 @@ inline void run_sharp_interface_case(
 
     auto write_snapshot = [&](double snapshot_time) {
         const std::string suffix = format_time_tag(snapshot_time);
+        const auto output_start = std::chrono::steady_clock::now();
         write_numerical_output<DIM, EOS>(
             cfg,
             N,
@@ -232,6 +238,9 @@ inline void run_sharp_interface_case(
             phi_output,
             suffix
         );
+        const auto output_end = std::chrono::steady_clock::now();
+        phase_timings.output_seconds +=
+            std::chrono::duration<double>(output_end - output_start).count();
     };
 
     while (next_output_index < cfg.output_times.size() &&
@@ -250,6 +259,7 @@ inline void run_sharp_interface_case(
         ctx.dt_max = next_output_time - time;
 
         StepResult<DIM> result = advance_one_step<DIM, EOS>(U, ctx);
+        phase_timings.add_step(result.phase_timings);
 
         if (result.dt <= 0.0) {
             throw std::runtime_error("run_sharp_interface_case: non-positive timestep");
@@ -293,6 +303,7 @@ inline void run_sharp_interface_case(
         ++step;
 
         if (conservation_report.has_value()) {
+            const auto conservation_start = std::chrono::steady_clock::now();
             const auto boundary_flux =
                 app_io::compute_sharp_boundary_flux<DIM, EOS>(
                     U,
@@ -314,6 +325,9 @@ inline void run_sharp_interface_case(
                 boundary_flux,
                 &interface_flux_mismatch
             );
+            const auto conservation_end = std::chrono::steady_clock::now();
+            phase_timings.conservation_seconds +=
+                std::chrono::duration<double>(conservation_end - conservation_start).count();
         }
 
         phi_output = (cfg.interface_method == "GFM" && !ctx.phi_list.empty())
@@ -331,6 +345,7 @@ inline void run_sharp_interface_case(
             (step % conservation_interval == 0 ||
              time >= cfg.tfinal - 1e-14))
         {
+            const auto conservation_start = std::chrono::steady_clock::now();
             conservation_report->write(
                 step,
                 time,
@@ -341,6 +356,9 @@ inline void run_sharp_interface_case(
                     static_cast<int>(ctx.material_params.size())
                 )
             );
+            const auto conservation_end = std::chrono::steady_clock::now();
+            phase_timings.conservation_seconds +=
+                std::chrono::duration<double>(conservation_end - conservation_start).count();
         }
     }
 
@@ -349,6 +367,7 @@ inline void run_sharp_interface_case(
         std::chrono::duration<double>(wall_end - wall_start).count();
 
     if (cfg.output_times.empty()) {
+        const auto output_start = std::chrono::steady_clock::now();
         write_numerical_output<DIM, EOS>(
             cfg,
             N,
@@ -357,9 +376,19 @@ inline void run_sharp_interface_case(
             material_params,
             phi_output
         );
+        const auto output_end = std::chrono::steady_clock::now();
+        phase_timings.output_seconds +=
+            std::chrono::duration<double>(output_end - output_start).count();
     }
 
-    app_io::write_runtime_report<DIM>(cfg, N, step, time, wall_seconds);
+    app_io::write_runtime_report<DIM>(
+        cfg,
+        N,
+        step,
+        time,
+        wall_seconds,
+        &phase_timings
+    );
 
     #if APP_DIM == 1
     if constexpr (DIM == 1) {

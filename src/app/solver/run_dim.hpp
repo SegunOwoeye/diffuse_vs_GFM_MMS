@@ -41,11 +41,13 @@ inline void run_dim_case(
     int step = 0;
     std::size_t next_output_index = 0;
     const auto wall_start = std::chrono::steady_clock::now();
+    SolverPhaseTimings phase_timings{};
     const bool track_conservation = app_io::conservation_tracking_enabled();
     const int conservation_interval = app_io::conservation_tracking_interval();
     std::optional<app_io::ConservationReport<DIM>> conservation_report;
 
     if (track_conservation) {
+        const auto conservation_start = std::chrono::steady_clock::now();
         const auto initial_totals =
             app_io::compute_dim_conservation_totals<DIM>(
                 U,
@@ -55,9 +57,13 @@ inline void run_dim_case(
 
         conservation_report.emplace(cfg, N, initial_totals);
         conservation_report->write(step, time, initial_totals);
+        const auto conservation_end = std::chrono::steady_clock::now();
+        phase_timings.conservation_seconds +=
+            std::chrono::duration<double>(conservation_end - conservation_start).count();
     }
 
     auto write_snapshot = [&](double snapshot_time) {
+        const auto output_start = std::chrono::steady_clock::now();
         dim_app::write_numerical_output<DIM>(
             cfg,
             N,
@@ -65,6 +71,9 @@ inline void run_dim_case(
             active_material_params,
             dim_app::format_time_tag(snapshot_time)
         );
+        const auto output_end = std::chrono::steady_clock::now();
+        phase_timings.output_seconds +=
+            std::chrono::duration<double>(output_end - output_start).count();
     };
 
     while (next_output_index < cfg.output_times.size() &&
@@ -89,6 +98,7 @@ inline void run_dim_case(
             cfg.cfl,
             next_output_time - time
         );
+        phase_timings.add_step(result.phase_timings);
 
         if (result.dt <= 0.0) {
             throw std::runtime_error("run_dim_case: non-positive timestep");
@@ -99,6 +109,7 @@ inline void run_dim_case(
         ++step;
 
         if (conservation_report.has_value()) {
+            const auto conservation_start = std::chrono::steady_clock::now();
             conservation_report->accumulate_fluxes(
                 result.dt,
                 app_io::compute_dim_boundary_flux<DIM>(
@@ -108,6 +119,9 @@ inline void run_dim_case(
                     active_material_params
                 )
             );
+            const auto conservation_end = std::chrono::steady_clock::now();
+            phase_timings.conservation_seconds +=
+                std::chrono::duration<double>(conservation_end - conservation_start).count();
         }
 
         while (next_output_index < cfg.output_times.size() &&
@@ -121,6 +135,7 @@ inline void run_dim_case(
             (step % conservation_interval == 0 ||
              time >= cfg.tfinal - 1e-14))
         {
+            const auto conservation_start = std::chrono::steady_clock::now();
             conservation_report->write(
                 step,
                 time,
@@ -130,6 +145,9 @@ inline void run_dim_case(
                     active_material_params.nmat()
                 )
             );
+            const auto conservation_end = std::chrono::steady_clock::now();
+            phase_timings.conservation_seconds +=
+                std::chrono::duration<double>(conservation_end - conservation_start).count();
         }
     }
 
@@ -138,8 +156,19 @@ inline void run_dim_case(
         std::chrono::duration<double>(wall_end - wall_start).count();
 
     if (cfg.output_times.empty()) {
+        const auto output_start = std::chrono::steady_clock::now();
         dim_app::write_numerical_output<DIM>(cfg, N, U, active_material_params);
+        const auto output_end = std::chrono::steady_clock::now();
+        phase_timings.output_seconds +=
+            std::chrono::duration<double>(output_end - output_start).count();
     }
 
-    app_io::write_runtime_report<DIM>(cfg, N, step, time, wall_seconds);
+    app_io::write_runtime_report<DIM>(
+        cfg,
+        N,
+        step,
+        time,
+        wall_seconds,
+        &phase_timings
+    );
 }
