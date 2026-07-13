@@ -821,19 +821,44 @@ std::vector<RunSpec> build_scaling_runs(const Args& args)
         };
 
         const bool explicit_methods = !args.methods.empty();
-        const auto sm = find_case("toro_explosion_3d", "explosion2", "SM_MPI").value();
-        if (!explicit_methods || contains_method(args.methods, "SM_MPI")) {
+        const bool explicit_cases = !args.cases.empty();
+
+        if (explicit_cases) {
+            const auto groups = groups_for_case_alias(args.cases);
+            for (const auto& def : case_registry()) {
+                if (!case_allowed(def, args, groups) || !contains_method(args.methods, def.method)) {
+                    continue;
+                }
+                if (def.method != "SM_MPI" && def.method != "SIM_MPI" && def.method != "DIM_MPI") {
+                    continue;
+                }
+
+                std::vector<int> default_resolution;
+                if (def.group == "shock_bubble_2d") {
+                    default_resolution = {1300, 178};
+                }
+                else if (!def.default_resolutions.empty()) {
+                    default_resolution = def.default_resolutions.back();
+                }
+                if (!default_resolution.empty()) {
+                    add_mpi_scaling_target(def, default_resolution);
+                }
+            }
+            return runs;
+        }
+
+        const auto sim_bubble = find_case("shock_bubble_2d", "test6", "SIM_MPI").value();
+        const auto dim_bubble = find_case("shock_bubble_2d", "test6", "DIM_MPI").value();
+        if (!explicit_methods || contains_method(args.methods, "SIM_MPI")) {
+            add_mpi_scaling_target(sim_bubble, {1300, 178});
+        }
+        if (!explicit_methods || contains_method(args.methods, "DIM_MPI")) {
+            add_mpi_scaling_target(dim_bubble, {1300, 178});
+        }
+
+        if (explicit_methods && contains_method(args.methods, "SM_MPI")) {
+            const auto sm = find_case("toro_explosion_3d", "explosion2", "SM_MPI").value();
             add_mpi_scaling_target(sm, {50, 50, 50});
-        }
-
-        if (explicit_methods && contains_method(args.methods, "DIM_MPI")) {
-            const auto dim = find_case("shock_bubble_3d", "test6", "DIM_MPI").value();
-            add_mpi_scaling_target(dim, {325, 45, 45});
-        }
-
-        if (explicit_methods && contains_method(args.methods, "SIM_MPI")) {
-            const auto sim = find_case("shock_bubble_3d", "test6", "SIM_MPI").value();
-            add_mpi_scaling_target(sim, {325, 45, 45});
         }
         return runs;
     }

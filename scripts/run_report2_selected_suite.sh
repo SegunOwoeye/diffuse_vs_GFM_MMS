@@ -295,7 +295,9 @@ if [[ "$skip_scaling" != true ]]; then
     fi
     scripts/run_quant_suite.sh \
         --scaling mpi_ranks \
-        --methods SM_MPI,SIM_MPI,DIM_MPI \
+        --case bubble \
+        --methods SIM_MPI,DIM_MPI \
+        --resolutions 1300x178 \
         --omp-threads 1 \
         --benchmark-mode clean \
         --benchmark-warmups "$benchmark_warmups" \

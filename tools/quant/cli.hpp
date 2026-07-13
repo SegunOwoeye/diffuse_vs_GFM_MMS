@@ -77,7 +77,7 @@ Args parse_args(int argc, char** argv)
                 << "  --resolutions 100 200 400, or 100,200,400, or 325x45,650x89\n"
                 << "  --sensitivity dim_epsilon|dim_alpha|sim_reinit (DIM: 1D D2 + bubble; SIM: oblique + bubble)\n"
                 << "  --scaling openmp_threads (legacy bubble DIM/SIM at 1,2,4,8,16,32 threads)\n"
-                << "  --scaling mpi_ranks (SM_MPI, optionally SIM_MPI/DIM_MPI, at 1,2,4,8,16,32 ranks)\n"
+                << "  --scaling mpi_ranks (default: 2D helium bubble SIM_MPI/DIM_MPI at 1,2,4,8,16,32 ranks)\n"
                 << "  --omp-threads N\n"
                 << "  --mpi-ranks N (for MPI runs)\n"
                 << "  --benchmark-mode NAME (default standard; use clean for controlled timing)\n"
