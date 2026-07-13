@@ -88,9 +88,11 @@ std::vector<std::map<std::string, std::string>> build_bubble_velocity_fit_rows(
         const auto time = parse_double_field(row, "time_us_from_initial");
         const auto position = parse_double_field(row, "position_mm");
         if (!time || !position || !row.count("method") || !row.count("feature")) continue;
-        const std::string key = row.at("method") + "|" + row.at("feature");
+        const std::string family = method_family(row.at("method"));
+        const std::string key = family + "|" + row.at("feature");
         groups[key].push_back({time.value(), position.value()});
         metadata[key] = row;
+        metadata[key]["method_family"] = family;
     }
 
     std::vector<std::map<std::string, std::string>> out;
@@ -103,9 +105,13 @@ std::vector<std::map<std::string, std::string>> build_bubble_velocity_fit_rows(
 
         const auto& meta = metadata.at(item.first);
         const std::string feature = meta.at("feature");
+        const std::string method = meta.count("method_family")
+            ? meta.at("method_family")
+            : method_family(meta.at("method"));
         if (samples.size() < 6) {
             out.push_back({
-                {"method", meta.at("method")},
+                {"method", method},
+                {"source_method", meta.at("method")},
                 {"feature", feature},
                 {"n_points", std::to_string(samples.size())},
                 {"confidence_flag", "insufficient_samples"},
@@ -165,7 +171,8 @@ std::vector<std::map<std::string, std::string>> build_bubble_velocity_fit_rows(
             samples[selected.end].time_us - samples[selected.start].time_us;
 
         out.push_back({
-            {"method", meta.at("method")},
+            {"method", method},
+            {"source_method", meta.at("method")},
             {"feature", feature},
             {"start_time_us", double_text(samples[selected.start].time_us)},
             {"end_time_us", double_text(samples[selected.end].time_us)},
@@ -194,11 +201,13 @@ std::vector<std::map<std::string, std::string>> build_bubble_velocity_fit_rows(
     };
     for (const auto& row : bubble_rows) {
         if (!row.count("method")) continue;
+        const std::string method = method_family(row.at("method"));
         for (const auto& feature : expected_features) {
-            const std::string key = row.at("method") + "|" + feature;
+            const std::string key = method + "|" + feature;
             if (emitted[key]) continue;
             out.push_back({
-                {"method", row.at("method")},
+                {"method", method},
+                {"source_method", row.at("method")},
                 {"feature", feature},
                 {"n_points", "0"},
                 {"confidence_flag", "not_detected"},
@@ -229,7 +238,7 @@ std::vector<std::map<std::string, std::string>> build_bubble_velocity_comparison
     std::map<std::string, std::map<std::string, std::string>> by_key;
     for (const auto& row : fit_rows) {
         if (!row.count("method") || !row.count("feature")) continue;
-        by_key[row.at("method") + "|" + row.at("feature")] = row;
+        by_key[method_family(row.at("method")) + "|" + row.at("feature")] = row;
     }
 
     auto value = [&](const std::string& method, const std::string& feature) -> std::optional<double> {

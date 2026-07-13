@@ -210,6 +210,8 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
     std::vector<std::map<std::string, std::string>> bubble_timeseries_rows;
     std::vector<std::map<std::string, std::string>> gorsse_tc9_rows;
     std::vector<std::map<std::string, std::string>> gorsse_tc9_reference_rows;
+    std::vector<std::map<std::string, std::string>> gorsse_tc9_feature_rows;
+    std::vector<std::map<std::string, std::string>> gorsse_tc9_feature_reference_rows;
     std::vector<std::map<std::string, std::string>> error_rows;
 
     for (std::size_t i = 0; i < runs.size(); ++i) {
@@ -232,7 +234,7 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
         perf_row["benchmark_mode"] = run.benchmark_mode;
         perf_row["repeat_id"] = std::to_string(run.repeat_id);
         perf_row["warmup"] = run.warmup ? "true" : "false";
-        perf_row["output_enabled"] = "true";
+        perf_row["output_enabled"] = run.timing_only ? "false" : "true";
         perf_row["diagnostics_enabled"] = "true";
         perf_row["conservation_logging_enabled"] = "true";
         perf_row["plotting_enabled"] = "false";
@@ -252,7 +254,9 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
             performance.push_back(perf_row);
         }
 
-        const auto cons = final_conservation(conservation);
+        const auto cons = run.timing_only
+            ? std::map<std::string, double>{}
+            : final_conservation(conservation);
         if (!cons.empty()) {
             auto cons_row = row;
             for (const auto& item : cons) {
@@ -268,7 +272,9 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
             );
         }
 
-        const auto iface = interface_metrics(solution, run.case_def.method);
+        const auto iface = run.timing_only
+            ? std::map<std::string, double>{}
+            : interface_metrics(solution, run.case_def.method);
         if (!iface.empty()) {
             auto iface_row = row;
             for (const auto& item : iface) {
@@ -312,7 +318,7 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
         if (!run.sensitivity.empty()) {
             sensitivity_rows.push_back(row);
         }
-        if (uses_bubble_feature_diagnostics(run) && successes[i]) {
+        if (!run.timing_only && uses_bubble_feature_diagnostics(run) && successes[i]) {
             const auto features = bubble_features(result_root / "raw" / run.run_id, run.case_def.method, result_root / "runs" / run.run_id / "bubble_features.json");
             if (!features.summary.empty()) {
                 std::map<std::string, std::string> bubble_row = {
@@ -344,7 +350,7 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
                 bubble_timeseries_rows.push_back(bubble_time_row);
             }
         }
-        if (uses_gorsse_tc9_diagnostics(run) && successes[i]) {
+        if (!run.timing_only && uses_gorsse_tc9_diagnostics(run) && successes[i]) {
             auto tc9_rows = tc9_model_summary_rows(
                 result_root / "raw" / run.run_id,
                 run.case_def.method
@@ -382,9 +388,24 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
                 comparison_rows.begin(),
                 comparison_rows.end()
             );
+            const auto feature_rows = tc9_feature_timeseries_rows(tc9_rows);
+            const auto feature_reference_rows =
+                tc9_feature_reference_comparison_rows(comparison_rows);
+            gorsse_tc9_feature_rows.insert(
+                gorsse_tc9_feature_rows.end(),
+                feature_rows.begin(),
+                feature_rows.end()
+            );
+            gorsse_tc9_feature_reference_rows.insert(
+                gorsse_tc9_feature_reference_rows.end(),
+                feature_reference_rows.begin(),
+                feature_reference_rows.end()
+            );
         }
-        const auto errors = error_rows_for(run, solution, case_dir);
-        error_rows.insert(error_rows.end(), errors.begin(), errors.end());
+        if (!run.timing_only) {
+            const auto errors = error_rows_for(run, solution, case_dir);
+            error_rows.insert(error_rows.end(), errors.begin(), errors.end());
+        }
         summary.push_back(row);
     }
     const auto self_reference_errors =
@@ -596,6 +617,73 @@ void collect(const fs::path& result_root, const std::vector<RunSpec>& runs, cons
             "x1_max_m_error_m",
             "centroid_x0_m_error_m",
             "centroid_x1_m_error_m",
+        }
+    );
+    write_csv_ordered(
+        summaries_dir / "gorsse_tc9_feature_timeseries.csv",
+        gorsse_tc9_feature_rows,
+        {
+            "case",
+            "case_label",
+            "method",
+            "resolution",
+            "run_id",
+            "success",
+            "time_us",
+            "feature",
+            "feature_label",
+            "value",
+            "unit",
+            "previous_time_us",
+            "finite_difference_rate",
+            "rate_unit",
+            "interface_label",
+            "extraction_mode",
+            "csv_file",
+        }
+    );
+    write_csv_ordered(
+        summaries_dir / "gorsse_tc9_feature_reference_comparison.csv",
+        gorsse_tc9_feature_reference_rows,
+        {
+            "case",
+            "case_label",
+            "method",
+            "resolution",
+            "run_id",
+            "success",
+            "time_us",
+            "reference_time_us",
+            "time_delta_us",
+            "feature",
+            "feature_label",
+            "value",
+            "reference_value",
+            "error",
+            "relative_error",
+            "unit",
+            "reference_x_offset_m",
+            "interface_label",
+            "extraction_mode",
+            "csv_file",
+        }
+    );
+    write_csv_ordered(
+        report_dir / "gorsse_tc9_feature_reference_comparison_summary.csv",
+        gorsse_tc9_feature_reference_rows,
+        {
+            "case_label",
+            "method",
+            "resolution",
+            "time_us",
+            "reference_time_us",
+            "feature",
+            "feature_label",
+            "value",
+            "reference_value",
+            "error",
+            "relative_error",
+            "unit",
         }
     );
     write_csv_ordered(

@@ -23,6 +23,7 @@ skip_scaling=false
 include_gorsse_3d=false
 skip_3d=false
 skip_postprocess=false
+clean_results=false
 organized_output_dir="results/report2_organized"
 benchmark_repeats=1
 benchmark_warmups=0
@@ -53,6 +54,7 @@ Options:
   --skip-3d                    Skip the 3D report cases.
   --include-gorsse-3d          Legacy option retained for compatibility.
   --skip-postprocess           Skip plotting, tracker update, and organizer.
+  --clean-results              Remove selected quantitative result roots before running.
   --organized-output-dir PATH  Destination for organized report outputs.
   --benchmark-repeats N        Measured repeats for scaling.
   --benchmark-warmups N        Warmup repeats for scaling.
@@ -128,6 +130,10 @@ while [[ $# -gt 0 ]]; do
             skip_postprocess=true
             shift
             ;;
+        --clean-results)
+            clean_results=true
+            shift
+            ;;
         --organized-output-dir)
             if [[ $# -lt 2 ]]; then
                 echo "run_report2_csc.sh: --organized-output-dir requires a path" >&2
@@ -201,6 +207,10 @@ fi
 
 if [[ "$skip_postprocess" == true ]]; then
     args+=("--skip-plots" "--skip-organize")
+fi
+
+if [[ "$clean_results" == true ]]; then
+    args+=("--clean-results")
 fi
 
 if [[ "$include_gorsse_3d" == true ]]; then

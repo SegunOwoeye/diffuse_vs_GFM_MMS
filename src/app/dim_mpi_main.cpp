@@ -4,6 +4,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -621,7 +622,8 @@ int run_mpi_dim(int argc, char** argv, const MpiRuntime& mpi)
         }
     }
 
-    Config<DIM> cfg = load_config<DIM>(config_file);
+        Config<DIM> cfg = load_config<DIM>(config_file);
+        const bool timing_only = std::getenv("QUANT_TIMING_ONLY") != nullptr;
     if (cfg.interface_method != "DIM") {
         throw std::runtime_error("dim_mpi_main supports only interface_method = DIM");
     }
@@ -698,6 +700,9 @@ int run_mpi_dim(int argc, char** argv, const MpiRuntime& mpi)
         const auto wall_start = std::chrono::steady_clock::now();
 
         auto write_snapshot = [&](double output_time) {
+            if (timing_only) {
+                return;
+            }
             const auto output_start = std::chrono::steady_clock::now();
             const std::filesystem::path rank_file =
                 output_root /
@@ -810,23 +815,25 @@ int run_mpi_dim(int argc, char** argv, const MpiRuntime& mpi)
         double max_wall = local_wall;
         MPI_Reduce(&local_wall, &max_wall, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
-        const auto output_start = std::chrono::steady_clock::now();
-        const std::filesystem::path rank_file =
-            output_root /
-            ("rank_" + std::to_string(mpi.rank) + "_" + cfg.output_prefix + ".csv");
-        write_rank_csv<DIM>(
-            rank_file,
-            U,
-            local_N,
-            cfg.domain_min,
-            dx,
-            slab,
-            mpi,
-            decomp_axis,
-            material_params
-        );
-        const auto output_end = std::chrono::steady_clock::now();
-        timings.output_seconds += std::chrono::duration<double>(output_end - output_start).count();
+        if (!timing_only) {
+            const auto output_start = std::chrono::steady_clock::now();
+            const std::filesystem::path rank_file =
+                output_root /
+                ("rank_" + std::to_string(mpi.rank) + "_" + cfg.output_prefix + ".csv");
+            write_rank_csv<DIM>(
+                rank_file,
+                U,
+                local_N,
+                cfg.domain_min,
+                dx,
+                slab,
+                mpi,
+                decomp_axis,
+                material_params
+            );
+            const auto output_end = std::chrono::steady_clock::now();
+            timings.output_seconds += std::chrono::duration<double>(output_end - output_start).count();
+        }
 
         SolverPhaseTimings reduced_timings{};
         MPI_Reduce(&timings.cfl_seconds, &reduced_timings.cfl_seconds, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);

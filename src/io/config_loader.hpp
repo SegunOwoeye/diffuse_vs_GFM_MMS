@@ -102,6 +102,9 @@ inline bool parse_bool(const std::string& s)
 inline std::vector<double> parse_double_list(const std::string& s)
 {
     auto inner = strip_brackets(s);
+    if (trim(inner).empty()) {
+        return {};
+    }
     auto tokens = split_top_level(inner, ',');
 
     std::vector<double> out;

@@ -18,9 +18,11 @@ skip_reinit_sensitivity=false
 skip_alpha_sensitivity=false
 skip_plots=false
 skip_organize=false
+clean_results=false
 organized_output_dir="results/report2_organized"
 benchmark_repeats=1
 benchmark_warmups=0
+dry_run=false
 
 print_help() {
     cat <<'EOF'
@@ -44,10 +46,12 @@ Options:
   --skip-alpha-sensitivity   Skip DIM interface-thickness sensitivity.
   --skip-plots               Skip report PNG generation after solver runs.
   --skip-organize            Skip final report output organization.
+  --clean-results            Remove the selected quantitative result roots before running.
   --organized-output-dir PATH
                               Destination for organized report outputs.
   --benchmark-repeats N      Measured repeats for speedup study.
   --benchmark-warmups N      Warmup repeats for speedup study.
+  --dry-run                  Print the selected commands without running them.
   --help, -h                 Show this help.
 EOF
 }
@@ -130,6 +134,10 @@ while [[ $# -gt 0 ]]; do
             skip_organize=true
             shift
             ;;
+        --clean-results)
+            clean_results=true
+            shift
+            ;;
         --organized-output-dir)
             if [[ $# -lt 2 ]]; then
                 echo "run_report2_selected_suite.sh: --organized-output-dir requires a path" >&2
@@ -154,6 +162,10 @@ while [[ $# -gt 0 ]]; do
             benchmark_warmups="$2"
             shift 2
             ;;
+        --dry-run)
+            dry_run=true
+            shift
+            ;;
         --help|-h)
             print_help
             exit 0
@@ -176,15 +188,42 @@ if [[ "$overwrite" == true ]]; then
     common_flags+=("--overwrite")
 fi
 
+rank1_flags=("--omp-threads" "$omp_threads" "--mpi-ranks" "1")
+if [[ "$overwrite" == true ]]; then
+    rank1_flags+=("--overwrite")
+fi
+
 conservation_flags=("--conservation-interval" "$conservation_interval")
 timeout_flags=("--timeout-seconds" "$timeout_seconds")
+
+print_command() {
+    printf '  '
+    printf '%q ' "$@"
+    printf '\n'
+}
 
 run_quant() {
     local label="$1"
     shift
     echo
     echo "[report2] $label"
-    scripts/run_quant_suite.sh "$@" "${common_flags[@]}"
+    if [[ "$dry_run" == true ]]; then
+        print_command scripts/run_quant_suite.sh "$@" "${common_flags[@]}"
+    else
+        scripts/run_quant_suite.sh "$@" "${common_flags[@]}"
+    fi
+}
+
+run_quant_rank1() {
+    local label="$1"
+    shift
+    echo
+    echo "[report2] $label"
+    if [[ "$dry_run" == true ]]; then
+        print_command scripts/run_quant_suite.sh "$@" "${rank1_flags[@]}"
+    else
+        scripts/run_quant_suite.sh "$@" "${rank1_flags[@]}"
+    fi
 }
 
 run_quant_with_conservation() {
@@ -193,22 +232,45 @@ run_quant_with_conservation() {
     run_quant "$label" "$@" "${conservation_flags[@]}"
 }
 
+run_quant_rank1_with_conservation() {
+    local label="$1"
+    shift
+    run_quant_rank1 "$label" "$@" "${conservation_flags[@]}"
+}
+
 run_quant_with_timeout_and_conservation() {
     local label="$1"
     shift
     run_quant "$label" "$@" "${timeout_flags[@]}" "${conservation_flags[@]}"
 }
 
+if [[ "$clean_results" == true ]]; then
+    if [[ -z "$result_root_base" || "$result_root_base" == "/" ]]; then
+        echo "run_report2_selected_suite.sh: refusing unsafe --clean-results path: '$result_root_base'" >&2
+        exit 2
+    fi
+    echo "[report2] Cleaning $result_root_base and $organized_output_dir"
+    if [[ "$dry_run" == true ]]; then
+        print_command rm -rf "$result_root_base" "$organized_output_dir"
+    else
+        rm -rf "$result_root_base" "$organized_output_dir"
+    fi
+fi
+
 if [[ "$skip_exact_refs" != true ]]; then
     if [[ -f tools/generate_fedkiw_exact_references.py ]]; then
         echo "[report2] Generating Fedkiw exact references"
-        "$python_bin" tools/generate_fedkiw_exact_references.py
+        if [[ "$dry_run" == true ]]; then
+            print_command "$python_bin" tools/generate_fedkiw_exact_references.py
+        else
+            "$python_bin" tools/generate_fedkiw_exact_references.py
+        fi
     else
         echo "[report2] Skipping exact references because tools/generate_fedkiw_exact_references.py is missing" >&2
     fi
 fi
 
-run_quant "Toro test 5 1D Euler check" \
+run_quant_rank1 "Toro test 5 1D Euler check" \
     --case toro_1d,test5 \
     --method SM_MPI \
     --resolutions 100,200,400,800 \
@@ -228,13 +290,13 @@ if [[ "$skip_3d" != true ]]; then
         --result-root "$result_root_base/report_selected_explosion_3d"
 fi
 
-run_quant_with_conservation "FedkiwD2 1D SIM versus DIM" \
+run_quant_rank1_with_conservation "FedkiwD2 1D SIM versus DIM" \
     --case fedkiw_1d,test5 \
     --methods SIM_MPI,DIM_MPI \
     --resolutions 100,200,400,800 \
     --result-root "$result_root_base/report_selected_fedkiw_d2_1d"
 
-run_quant_with_conservation "He 2023 three-material 1D convergence" \
+run_quant_rank1_with_conservation "He 2023 three-material 1D convergence" \
     --case he2023_three_material_1d \
     --methods SIM_MPI,DIM_MPI \
     --resolutions 100,200,400,800,2000 \
@@ -276,13 +338,13 @@ fi
 
 if [[ "$skip_sensitivity" != true && "$skip_reinit_sensitivity" != true ]]; then
     run_quant_with_conservation "rGFM reinitialisation sensitivity" \
-        --sensitivity sim_reinit \
+        --sensitivity sim_reinit_bubble \
         --result-root "$result_root_base/report_selected_sim_reinit_sensitivity"
 fi
 
 if [[ "$skip_sensitivity" != true && "$skip_alpha_sensitivity" != true ]]; then
     run_quant_with_conservation "DIM interface-thickness sensitivity" \
-        --sensitivity dim_epsilon \
+        --sensitivity dim_epsilon_bubble \
         --result-root "$result_root_base/report_selected_dim_alpha_sensitivity"
 fi
 
@@ -293,7 +355,7 @@ if [[ "$skip_scaling" != true ]]; then
     if [[ "$overwrite" == true ]]; then
         scaling_flags+=("--overwrite")
     fi
-    scripts/run_quant_suite.sh \
+    scaling_cmd=(scripts/run_quant_suite.sh
         --scaling mpi_ranks \
         --case bubble \
         --methods SIM_MPI,DIM_MPI \
@@ -302,27 +364,45 @@ if [[ "$skip_scaling" != true ]]; then
         --benchmark-mode clean \
         --benchmark-warmups "$benchmark_warmups" \
         --benchmark-repeats "$benchmark_repeats" \
-        --result-root "$result_root_base/report_selected_mpi_scaling" \
-        "${scaling_flags[@]}"
+        --result-root "$result_root_base/report_selected_mpi_scaling"
+        "${scaling_flags[@]}")
+    if [[ "$dry_run" == true ]]; then
+        print_command "${scaling_cmd[@]}"
+    else
+        "${scaling_cmd[@]}"
+    fi
 fi
 
 if [[ "$skip_plots" != true ]]; then
     echo
     echo "[report2] Generating report PNG figures"
     plot_args=("--result-root-base" "$result_root_base")
-    scripts/plot_report2_selected_suite.sh "${plot_args[@]}"
+    if [[ "$dry_run" == true ]]; then
+        print_command scripts/plot_report2_selected_suite.sh "${plot_args[@]}"
+    else
+        scripts/plot_report2_selected_suite.sh "${plot_args[@]}"
+    fi
 fi
 
 echo
 echo "[report2] Updating run tracker"
-"$python_bin" scripts/update_report2_run_tracker.py
+if [[ "$dry_run" == true ]]; then
+    print_command "$python_bin" scripts/update_report2_run_tracker.py
+else
+    "$python_bin" scripts/update_report2_run_tracker.py
+fi
 
 if [[ "$skip_organize" != true ]]; then
     echo
     echo "[report2] Organizing report outputs"
-    "$python_bin" scripts/organize_report2_outputs.py \
-        --output-dir "$organized_output_dir" \
-        --clean
+    organize_cmd=("$python_bin" scripts/organize_report2_outputs.py
+        --output-dir "$organized_output_dir"
+        --clean)
+    if [[ "$dry_run" == true ]]; then
+        print_command "${organize_cmd[@]}"
+    else
+        "${organize_cmd[@]}"
+    fi
 fi
 
 echo
