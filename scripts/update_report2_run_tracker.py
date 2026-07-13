@@ -43,7 +43,7 @@ SENSITIVITY_ROWS = [
 ]
 
 PERFORMANCE_ROWS = [
-    RunRow("Performance Runs", "MPI rank scaling", "--scaling mpi_ranks", "results/quantitative/report_selected_mpi_scaling", "performance summary and PNG output", "Main speedup evidence"),
+    RunRow("Performance Runs", "2D helium bubble MPI rank scaling", "--scaling mpi_ranks --case bubble --methods SIM_MPI,DIM_MPI", "results/quantitative/report_selected_mpi_scaling", "performance summary and PNG output", "Main speedup evidence"),
     RunRow("Performance Runs", "Additional scaling for long one-core cases", "To be selected after first runtime pass", "", "runtime files and performance summaries", "Add only for cases with one-core runtime above about 60 seconds", "Optional", "Optional"),
 ]
 
