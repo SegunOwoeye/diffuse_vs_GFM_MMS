@@ -111,7 +111,7 @@ double shock_bubble_helium_value(
     if (c.count("alpha0")) {
         return std::max(0.0, std::min(1.0, 1.0 - c.at("alpha0")[i]));
     }
-    if (method == "SIM" && c.count("phi0")) {
+    if (method_family(method) == "SIM" && c.count("phi0")) {
         return c.at("phi0")[i] <= 0.0 ? 1.0 : 0.0;
     }
     return std::nan("");

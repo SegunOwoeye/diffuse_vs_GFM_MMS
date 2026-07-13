@@ -19,6 +19,7 @@ std::string generated_config_text(const RunSpec& run, const fs::path& raw_dir)
         if (key == "N") return render_resolution(run.resolution);
         if (key == "output_dir") return raw_dir.generic_string();
         if (key == "output_prefix") return run.output_prefix;
+        if (key == "output_times" && run.timing_only) return "[]";
         const auto it = run.overrides.find(key);
         if (it != run.overrides.end()) return it->second;
         return std::nullopt;
@@ -101,6 +102,7 @@ void write_manifest(const fs::path& path, const std::vector<RunSpec>& runs)
              << ", \"mpi_ranks\": " << run.mpi_ranks
              << ", \"repeat_id\": " << run.repeat_id
              << ", \"warmup\": " << (run.warmup ? "true" : "false")
+             << ", \"timing_only\": " << (run.timing_only ? "true" : "false")
              << ", \"benchmark_mode\": \"" << json_escape(run.benchmark_mode) << "\"}";
     }
     json << "\n  ]\n}\n";
@@ -121,6 +123,7 @@ std::map<std::string, std::string> base_row(const RunSpec& run, bool success)
         {"mpi_ranks", std::to_string(run.mpi_ranks)},
         {"repeat_id", std::to_string(run.repeat_id)},
         {"warmup", run.warmup ? "true" : "false"},
+        {"timing_only", run.timing_only ? "true" : "false"},
         {"benchmark_mode", run.benchmark_mode},
         {"success", success ? "true" : "false"},
         {"sensitivity", run.sensitivity},
@@ -276,6 +279,7 @@ bool run_one(const RunSpec& run, const Args& args)
                  << "  \"mpi_ranks\": " << run.mpi_ranks << ",\n"
                  << "  \"repeat_id\": " << run.repeat_id << ",\n"
                  << "  \"warmup\": " << (run.warmup ? "true" : "false") << ",\n"
+                 << "  \"timing_only\": " << (run.timing_only ? "true" : "false") << ",\n"
                  << "  \"benchmark_mode\": \"" << json_escape(run.benchmark_mode) << "\",\n"
                  << "  \"omp_schedule\": \"dynamic\",\n"
                  << "  \"conservation_interval\": " << args.conservation_interval << ",\n"
@@ -306,6 +310,7 @@ bool run_one(const RunSpec& run, const Args& args)
     if (is_mpi_method(run)) {
         command =
             "env OMP_NUM_THREADS=" + std::to_string(run.omp_threads) +
+            (run.timing_only ? " QUANT_TIMING_ONLY=1" : "") +
             " OMP_PROC_BIND=close OMP_PLACES=cores mpirun -np " +
             std::to_string(run.mpi_ranks) + " " +
             shell_quote(executable_for(run.case_def)) + " " +
@@ -336,7 +341,9 @@ bool run_one(const RunSpec& run, const Args& args)
     const double wall = std::chrono::duration<double>(end - start).count();
     const bool success = (rc == 0);
     if (success && is_mpi_method(run)) {
-        merge_mpi_rank_outputs(case_dir, run.output_prefix, solution, run.resolution);
+        if (!run.timing_only) {
+            merge_mpi_rank_outputs(case_dir, run.output_prefix, solution, run.resolution);
+        }
         normalize_mpi_runtime_report(case_dir, run.output_prefix, runtime);
     }
     std::string status = success ? "completed" : "failed";

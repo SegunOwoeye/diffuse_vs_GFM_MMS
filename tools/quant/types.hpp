@@ -19,6 +19,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -47,6 +48,7 @@ struct RunSpec {
     int mpi_ranks = 1;
     int repeat_id = 0;
     bool warmup = false;
+    bool timing_only = false;
     std::string benchmark_mode = "standard";
     std::string sensitivity;
     std::string scaling;

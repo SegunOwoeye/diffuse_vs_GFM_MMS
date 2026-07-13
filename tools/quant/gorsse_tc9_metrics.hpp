@@ -399,4 +399,167 @@ std::vector<std::map<std::string, std::string>> tc9_reference_comparison_rows(
     return out;
 }
 
+std::map<std::string, double> tc9_geometry_feature_values(
+    const std::map<std::string, std::string>& row,
+    const std::string& prefix = ""
+)
+{
+    std::map<std::string, double> values;
+    const auto x0_min = parse_double_field(row, prefix + "x0_min_m");
+    const auto x0_max = parse_double_field(row, prefix + "x0_max_m");
+    const auto x1_min = parse_double_field(row, prefix + "x1_min_m");
+    const auto x1_max = parse_double_field(row, prefix + "x1_max_m");
+    const auto centroid_x0 = parse_double_field(row, prefix + "centroid_x0_m");
+    const auto centroid_x1 = parse_double_field(row, prefix + "centroid_x1_m");
+
+    if (x0_min) values["left_edge_x0_m"] = x0_min.value();
+    if (x0_max) values["right_edge_x0_m"] = x0_max.value();
+    if (x1_min) values["lower_edge_x1_m"] = x1_min.value();
+    if (x1_max) values["upper_edge_x1_m"] = x1_max.value();
+    if (centroid_x0) values["centroid_x0_m"] = centroid_x0.value();
+    if (centroid_x1) values["centroid_x1_m"] = centroid_x1.value();
+    if (x0_min && x0_max) values["axial_width_m"] = x0_max.value() - x0_min.value();
+    if (x1_min && x1_max) values["transverse_height_m"] = x1_max.value() - x1_min.value();
+    if (x0_min && x0_max && x1_min && x1_max) {
+        const double height = x1_max.value() - x1_min.value();
+        if (height != 0.0) {
+            values["aspect_ratio_width_over_height"] = (x0_max.value() - x0_min.value()) / height;
+        }
+    }
+    return values;
+}
+
+std::string tc9_feature_label(const std::string& feature)
+{
+    if (feature == "left_edge_x0_m") return "left interface edge";
+    if (feature == "right_edge_x0_m") return "right interface edge";
+    if (feature == "lower_edge_x1_m") return "lower interface edge";
+    if (feature == "upper_edge_x1_m") return "upper interface edge";
+    if (feature == "centroid_x0_m") return "interface centroid x";
+    if (feature == "centroid_x1_m") return "interface centroid y";
+    if (feature == "axial_width_m") return "axial bubble width";
+    if (feature == "transverse_height_m") return "transverse bubble height";
+    if (feature == "aspect_ratio_width_over_height") return "bubble aspect ratio";
+    return feature;
+}
+
+std::vector<std::map<std::string, std::string>> tc9_feature_timeseries_rows(
+    const std::vector<std::map<std::string, std::string>>& model_rows
+)
+{
+    std::vector<std::map<std::string, std::string>> out;
+    for (const auto& row : model_rows) {
+        const auto features = tc9_geometry_feature_values(row);
+        for (const auto& feature : features) {
+            std::map<std::string, std::string> item;
+            for (const auto& key : {
+                     "case",
+                     "case_label",
+                     "method",
+                     "resolution",
+                     "run_id",
+                     "success",
+                     "time_s",
+                     "time_us",
+                     "interface_label",
+                     "extraction_mode",
+                     "csv_file"}) {
+                if (row.count(key)) item[key] = row.at(key);
+            }
+            item["feature"] = feature.first;
+            item["feature_label"] = tc9_feature_label(feature.first);
+            item["value"] = double_text(feature.second);
+            item["unit"] = feature.first.find("_m") != std::string::npos ? "m" : "dimensionless";
+            out.push_back(item);
+        }
+    }
+    std::sort(out.begin(), out.end(), [](const auto& lhs, const auto& rhs) {
+        const auto key = [](const auto& row) {
+            return std::make_tuple(
+                row.count("method") ? row.at("method") : std::string{},
+                row.count("resolution") ? row.at("resolution") : std::string{},
+                row.count("run_id") ? row.at("run_id") : std::string{},
+                row.count("feature") ? row.at("feature") : std::string{},
+                parse_double_field(row, "time_us").value_or(std::numeric_limits<double>::infinity())
+            );
+        };
+        return key(lhs) < key(rhs);
+    });
+
+    struct PreviousFeature {
+        double time_us = std::nan("");
+        double value = std::nan("");
+    };
+    std::map<std::string, PreviousFeature> previous;
+    for (auto& row : out) {
+        if (!row.count("method") || !row.count("resolution") ||
+            !row.count("run_id") || !row.count("feature")) {
+            continue;
+        }
+        const auto time_us = parse_double_field(row, "time_us");
+        const auto value = parse_double_field(row, "value");
+        if (!time_us || !value) continue;
+        const std::string key =
+            row.at("method") + "|" + row.at("resolution") + "|" +
+            row.at("run_id") + "|" + row.at("feature");
+        if (previous.count(key)) {
+            const double dt_s = (time_us.value() - previous.at(key).time_us) * 1.0e-6;
+            if (dt_s > 0.0) {
+                row["previous_time_us"] = double_text(previous.at(key).time_us);
+                row["finite_difference_rate"] =
+                    double_text((value.value() - previous.at(key).value) / dt_s);
+                row["rate_unit"] = row.count("unit") && row.at("unit") == "m"
+                    ? "m/s"
+                    : "1/s";
+            }
+        }
+        previous[key] = {time_us.value(), value.value()};
+    }
+    return out;
+}
+
+std::vector<std::map<std::string, std::string>> tc9_feature_reference_comparison_rows(
+    const std::vector<std::map<std::string, std::string>>& comparison_rows
+)
+{
+    std::vector<std::map<std::string, std::string>> out;
+    for (const auto& row : comparison_rows) {
+        const auto model_features = tc9_geometry_feature_values(row);
+        const auto reference_features = tc9_geometry_feature_values(row, "reference_");
+        for (const auto& feature : model_features) {
+            if (!reference_features.count(feature.first)) continue;
+            const double reference_value = reference_features.at(feature.first);
+            const double error = feature.second - reference_value;
+            std::map<std::string, std::string> item;
+            for (const auto& key : {
+                     "case",
+                     "case_label",
+                     "method",
+                     "resolution",
+                     "run_id",
+                     "success",
+                     "time_us",
+                     "reference_time_us",
+                     "time_delta_us",
+                     "reference_x_offset_m",
+                     "interface_label",
+                     "extraction_mode",
+                     "csv_file"}) {
+                if (row.count(key)) item[key] = row.at(key);
+            }
+            item["feature"] = feature.first;
+            item["feature_label"] = tc9_feature_label(feature.first);
+            item["value"] = double_text(feature.second);
+            item["reference_value"] = double_text(reference_value);
+            item["error"] = double_text(error);
+            if (std::abs(reference_value) > 1.0e-14) {
+                item["relative_error"] = double_text(error / reference_value);
+            }
+            item["unit"] = feature.first.find("_m") != std::string::npos ? "m" : "dimensionless";
+            out.push_back(item);
+        }
+    }
+    return out;
+}
+
 } // namespace quant

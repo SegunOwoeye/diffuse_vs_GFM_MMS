@@ -579,6 +579,16 @@ std::string make_mpi_run_id(
     return out.str();
 }
 
+void apply_storage_limited_3d_output_times(RunSpec& run)
+{
+    if (run.case_def.group == "shock_bubble_3d") {
+        run.overrides["output_times"] = "[35.275, 84.660, 141.1]";
+    }
+    else if (run.case_def.group == "gorsse_tc9_water_air_bubble_3d") {
+        run.overrides["output_times"] = "[1.06e-4, 3.01e-4, 5.0e-4]";
+    }
+}
+
 std::vector<RunSpec> build_normal_runs(const Args& args)
 {
     std::vector<RunSpec> runs;
@@ -607,6 +617,7 @@ std::vector<RunSpec> build_normal_runs(const Args& args)
                 width << (1.0 / static_cast<double>(resolution.front()));
                 run.overrides["interface_thickness"] = width.str();
             }
+            apply_storage_limited_3d_output_times(run);
             run.run_id = (def.method == "SM_MPI" ||
                           def.method == "DIM_MPI" ||
                           def.method == "SIM_MPI")
@@ -691,11 +702,14 @@ std::optional<CaseDef> find_case(const std::string& group, const std::string& na
 std::vector<RunSpec> build_sensitivity_runs(const Args& args)
 {
     std::vector<RunSpec> runs;
-    if (args.sensitivity == "dim_epsilon") {
+    const std::string helium_bubble_final_output_times = "[141.1]";
+    if (args.sensitivity == "dim_epsilon" || args.sensitivity == "dim_epsilon_bubble") {
+        const bool bubble_only = args.sensitivity == "dim_epsilon_bubble";
         const auto add_dim_epsilon_run = [&](const CaseDef& def,
                                              const std::vector<int>& resolution,
                                              int dx_units,
-                                             double physical_width) {
+                                             double physical_width,
+                                             bool final_output_only) {
             RunSpec run;
             run.case_def = def;
             run.resolution = resolution;
@@ -707,20 +721,25 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             std::ostringstream width;
             width << physical_width;
             run.overrides["interface_thickness"] = width.str();
+            if (final_output_only) {
+                run.overrides["output_times"] = helium_bubble_final_output_times;
+            }
             run.output_prefix =
                 "quant_" + method_prefix(def.method) + "_" + def.label + "_epsilon_alpha_" + std::to_string(dx_units) + "dx";
             run.run_id = make_mpi_run_id(def, run.resolution, args.mpi_ranks, run.parameter_name, run.parameter_value);
             runs.push_back(run);
         };
 
-        const auto fedkiw = find_case("fedkiw_1d", "test5", "DIM_MPI").value();
-        for (int dx_units : {1, 2, 3, 4, 6}) {
-            add_dim_epsilon_run(fedkiw, {400}, dx_units, static_cast<double>(dx_units) / 400.0);
+        if (!bubble_only) {
+            const auto fedkiw = find_case("fedkiw_1d", "test5", "DIM_MPI").value();
+            for (int dx_units : {1, 2, 3, 4, 6}) {
+                add_dim_epsilon_run(fedkiw, {400}, dx_units, static_cast<double>(dx_units) / 400.0, false);
+            }
         }
 
         const auto bubble = find_case("shock_bubble_2d", "test6", "DIM_MPI").value();
         for (int dx_units : {1, 2, 3, 4, 6}) {
-            add_dim_epsilon_run(bubble, {1300, 178}, dx_units, 0.25 * static_cast<double>(dx_units));
+            add_dim_epsilon_run(bubble, {1300, 178}, dx_units, 0.25 * static_cast<double>(dx_units), true);
         }
     }
     else if (args.sensitivity == "dim_alpha") {
@@ -758,11 +777,13 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             add_dim_alpha_run(bubble, {1300, 178}, item.first, item.second);
         }
     }
-    else if (args.sensitivity == "sim_reinit") {
+    else if (args.sensitivity == "sim_reinit" || args.sensitivity == "sim_reinit_bubble") {
+        const bool bubble_only = args.sensitivity == "sim_reinit_bubble";
         const auto add_sim_reinit_run = [&](const CaseDef& def,
                                             const std::vector<int>& resolution,
                                             const std::string& interval_label,
-                                            int interval) {
+                                            int interval,
+                                            bool final_output_only) {
             RunSpec run;
             run.case_def = def;
             run.resolution = resolution;
@@ -772,19 +793,24 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             run.parameter_name = "reinit_interval";
             run.parameter_value = interval_label;
             run.overrides["reinit_interval"] = std::to_string(interval);
+            if (final_output_only) {
+                run.overrides["output_times"] = helium_bubble_final_output_times;
+            }
             run.output_prefix =
                 "quant_" + method_prefix(def.method) + "_" + def.label + "_reinit_" + sanitize_value(interval_label);
             run.run_id = make_mpi_run_id(def, run.resolution, args.mpi_ranks, run.parameter_name, run.parameter_value);
             runs.push_back(run);
         };
 
-        const auto oblique = find_case("fedkiw_2d_oblique", "test5", "SIM_MPI").value();
         const auto bubble = find_case("shock_bubble_2d", "test6", "SIM_MPI").value();
         for (const auto& item : std::vector<std::pair<std::string, int>>{
                  {"1", 1}, {"2", 2}, {"5", 5}, {"10", 10}, {"20", 20}, {"never", 0}
-             }) {
-            add_sim_reinit_run(oblique, {200, 200}, item.first, item.second);
-            add_sim_reinit_run(bubble, {1300, 178}, item.first, item.second);
+            }) {
+            if (!bubble_only) {
+                const auto oblique = find_case("fedkiw_2d_oblique", "test5", "SIM_MPI").value();
+                add_sim_reinit_run(oblique, {200, 200}, item.first, item.second, false);
+            }
+            add_sim_reinit_run(bubble, {1300, 178}, item.first, item.second, true);
         }
     }
     return runs;
@@ -808,6 +834,7 @@ std::vector<RunSpec> build_scaling_runs(const Args& args)
                     run.resolution = resolution;
                     run.omp_threads = args.omp_threads;
                     run.mpi_ranks = ranks;
+                    run.timing_only = true;
                     run.scaling = args.scaling;
                     run.parameter_name = "mpi_ranks";
                     run.parameter_value = std::to_string(ranks);
@@ -879,6 +906,7 @@ std::vector<RunSpec> build_scaling_runs(const Args& args)
             run.resolution = std::get<3>(target);
             run.omp_threads = threads;
             run.mpi_ranks = args.mpi_ranks;
+            run.timing_only = true;
             run.scaling = args.scaling;
             run.parameter_name = "omp_threads";
             run.parameter_value = std::to_string(threads);
