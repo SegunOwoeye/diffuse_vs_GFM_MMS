@@ -118,7 +118,6 @@ inline void sweep_direction(
     std::vector<State<DIM>> next = old;
 
     const int cell_count = total_cells<DIM>(cells);
-    #pragma omp parallel for if(cell_count > 256)
     for (int linear = 0; linear < cell_count; ++linear) {
         const auto index = unflatten<DIM>(linear, cells);
         auto left_index = index;

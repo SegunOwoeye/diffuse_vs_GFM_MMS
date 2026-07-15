@@ -1,9 +1,5 @@
 #pragma once
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -122,7 +118,6 @@ inline std::vector<Conserved<DIM>> transfer_reassigned_material_states(
         }
     }
 
-    #pragma omp parallel for
     for (int id = 0; id < static_cast<int>(U.size()); ++id) {
         const int old_mat = material_before[id];
         const int new_mat = material_after[id];

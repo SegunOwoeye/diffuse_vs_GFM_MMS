@@ -6,7 +6,7 @@ dimension = 3
 # transverse direction. The shock and material states match the 2D case.
 domain_min = [-0.2, 0.0, 0.0]
 domain_max = [1.0, 1.0, 1.0]
-N = [240, 200, 200]
+N = [120, 100, 100]
 
 # [2] Time
 tfinal = 5.0e-4

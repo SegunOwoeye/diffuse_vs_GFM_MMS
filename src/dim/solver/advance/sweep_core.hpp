@@ -1,9 +1,5 @@
 #pragma once
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 #include <array>
 #include <string>
 #include <vector>
@@ -13,6 +9,7 @@
 #include "src/dim/riemann/hllc.hpp"
 #include "src/dim/solver/advance/geometry.hpp"
 #include "src/dim/solver/advance/line_ops.hpp"
+#include "src/core/openmp_policy.hpp"
 
 namespace dim {
     // DIM sweep a split five-equation update
@@ -59,7 +56,6 @@ namespace dim {
         std::array<double, DIM> normal{};
         normal[dir] = 1.0;
 
-        #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int i = 0; i < n; ++i) {
             primitive[i] = cons_to_prim<DIM>(U_in[i], params);
             alpha_full[i] = primitive[i].alpha;
@@ -79,14 +75,12 @@ namespace dim {
 
         PL_face.resize(n - 1);
         PR_face.resize(n - 1);
-        #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int face = 0; face < n - 1; ++face) {
             PL_face[face] = cons_to_prim<DIM>(UL_face[face], params);
             PR_face[face] = cons_to_prim<DIM>(UR_face[face], params);
         }
 
         // MUSCL-Hancock predicted HLLC interface fluxes
-        #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int i = 0; i < n - 1; ++i) {
             const RiemannResult<DIM> result = hllc_flux_normal<DIM>(
                 UL_face[i],
@@ -105,7 +99,6 @@ namespace dim {
         face_velocity[n] = face_velocity[n - 1];
 
         U_out = U_in;
-        #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int i = 0; i < n; ++i) {
             U_out[i] = conservative_update<DIM>(U_in[i], F[i], F[i + 1], lambda);
             repair_state<DIM>(U_out[i], params);
@@ -123,7 +116,6 @@ namespace dim {
             alpha_flux[n][k] = alpha_full[n - 1][k] * face_velocity[n];
         }
 
-        #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int face = 1; face < n; ++face) {
             const int iface = face - 1;
             const std::vector<double>& alpha_upwind =
@@ -134,7 +126,6 @@ namespace dim {
             }
         }
 
-        #pragma omp parallel for if(!omp_in_parallel() && n > 256)
         for (int i = 0; i < n; ++i) {
             std::vector<double> alpha_new = alpha_full[i];
             const std::vector<double> rhs = alpha_rhs_coefficients<DIM>(
@@ -173,14 +164,14 @@ namespace dim {
         const auto stride = compute_strides<DIM>(N);
         const int total_lines = static_cast<int>(U_in.size()) / N[dir];
 
-        #pragma omp parallel
+        #pragma omp parallel if(runtime::openmp_should_parallelize_lines(total_lines))
         {
             std::vector<State<DIM>> line_in;
             std::vector<State<DIM>> line_out;
             line_in.reserve(N[dir]);
             line_out.reserve(N[dir]);
 
-            #pragma omp for schedule(static)
+            #pragma omp for schedule(runtime)
             for (int linear = 0; linear < total_lines; ++linear) {
                 std::array<int, DIM> idx{};
                 int tmp = linear;

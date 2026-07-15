@@ -3,9 +3,55 @@
 // Header-only implementation units for the quantitative validation runner.
 // Execution layer: generated configs, build commands, per-run metadata, and manifests.
 
+#include <cstdlib>
+
 #include "case_registry.hpp"
 
 namespace quant {
+
+std::string openmp_places_from_cpu_list(const std::string& cpu_list)
+{
+    std::vector<int> cpus;
+    for (const std::string& raw_part : split(cpu_list, ',')) {
+        const std::string part = trim(raw_part);
+        if (part.empty()) {
+            continue;
+        }
+
+        const std::size_t dash = part.find('-');
+        try {
+            if (dash == std::string::npos) {
+                cpus.push_back(std::stoi(part));
+            }
+            else {
+                const int first = std::stoi(part.substr(0, dash));
+                const int last = std::stoi(part.substr(dash + 1));
+                if (first <= last) {
+                    for (int cpu = first; cpu <= last; ++cpu) {
+                        cpus.push_back(cpu);
+                    }
+                }
+                else {
+                    for (int cpu = first; cpu >= last; --cpu) {
+                        cpus.push_back(cpu);
+                    }
+                }
+            }
+        }
+        catch (...) {
+            return "";
+        }
+    }
+
+    std::ostringstream places;
+    for (std::size_t i = 0; i < cpus.size(); ++i) {
+        if (i > 0) {
+            places << ",";
+        }
+        places << "{" << cpus[i] << "}";
+    }
+    return places.str();
+}
 
 std::string generated_config_text(const RunSpec& run, const fs::path& raw_dir)
 {
@@ -135,110 +181,74 @@ std::map<std::string, std::string> base_row(const RunSpec& run, bool success)
 
 bool is_mpi_method(const RunSpec& run)
 {
-    return run.case_def.method == "SM_MPI" ||
-           run.case_def.method == "DIM_MPI" ||
-           run.case_def.method == "SIM_MPI";
+    (void)run;
+    return false;
 }
 
-void merge_mpi_rank_outputs(
-    const fs::path& case_dir,
-    const std::string& output_prefix,
-    const fs::path& solution,
-    const std::vector<int>& resolution)
+std::map<std::string, std::string> read_key_value_report(const fs::path& path)
 {
-    std::map<std::string, std::vector<fs::path>> rank_groups;
-    if (!fs::exists(case_dir)) {
-        throw std::runtime_error("MPI output directory missing: " + case_dir.string());
+    std::map<std::string, std::string> values;
+    std::ifstream input(path);
+    if (!input) {
+        return values;
     }
 
-    const auto rank_index = [](const fs::path& path) {
-        const std::string name = path.filename().string();
-        const std::size_t start = std::string("rank_").size();
-        const std::size_t end = name.find('_', start);
-        if (end == std::string::npos) {
-            return std::numeric_limits<int>::max();
+    std::string line;
+    while (std::getline(input, line)) {
+        const std::size_t pos = line.find('=');
+        if (pos == std::string::npos) {
+            continue;
         }
-        return std::stoi(name.substr(start, end - start));
-    };
+        values[trim(line.substr(0, pos))] = trim(line.substr(pos + 1));
+    }
+    return values;
+}
 
-    for (const auto& entry : fs::directory_iterator(case_dir)) {
-        if (!entry.is_regular_file()) {
-            continue;
-        }
-        const std::string name = entry.path().filename().string();
-        if (name.rfind("rank_", 0) != 0 || entry.path().extension() != ".csv") {
-            continue;
-        }
-        const std::size_t prefix_start = name.find('_', std::string("rank_").size());
-        if (prefix_start == std::string::npos || name.size() <= prefix_start + 5) {
-            continue;
-        }
-        const std::string group_prefix = name.substr(prefix_start + 1, name.size() - prefix_start - 5);
-        if (group_prefix.rfind(output_prefix, 0) != 0) {
-            continue;
-        }
-        rank_groups[group_prefix].push_back(entry.path());
+void validate_openmp_runtime_report(const fs::path& runtime, int requested_threads)
+{
+    if (std::getenv("QUANT_ALLOW_OPENMP_THREAD_MISMATCH") != nullptr) {
+        return;
     }
 
-    if (rank_groups.empty()) {
-        throw std::runtime_error("No MPI rank CSV files found in " + case_dir.string());
+    const auto values = read_key_value_report(runtime);
+    const auto observed = values.find("openmp_observed_threads");
+    if (observed == values.end()) {
+        throw std::runtime_error("OpenMP runtime report missing observed thread count: " + runtime.string());
     }
 
-    for (auto& item : rank_groups) {
-        auto& rank_files = item.second;
-        std::sort(
-            rank_files.begin(),
-            rank_files.end(),
-            [&](const fs::path& lhs, const fs::path& rhs) {
-                return rank_index(lhs) < rank_index(rhs);
-            }
+    const int observed_threads = std::stoi(observed->second);
+    if (observed_threads < requested_threads) {
+        throw std::runtime_error(
+            "OpenMP observed fewer threads than requested for " + runtime.string() +
+            ": requested=" + std::to_string(requested_threads) +
+            " observed=" + std::to_string(observed_threads)
         );
+    }
 
-        const fs::path merged_path =
-            (item.first == output_prefix)
-                ? solution
-                : case_dir / (item.first + resolution_suffix(resolution) + ".csv");
-
-        fs::create_directories(merged_path.parent_path());
-        std::ofstream merged(merged_path);
-        if (!merged) {
-            throw std::runtime_error("Cannot write merged MPI solution: " + merged_path.string());
+    const auto requested_cpu_list = values.find("quant_cpu_list_env");
+    const auto thread_cpu_lists = values.find("openmp_thread_cpus_allowed_lists");
+    if (requested_cpu_list != values.end() && !requested_cpu_list->second.empty() &&
+        requested_threads > 1) {
+        if (thread_cpu_lists == values.end() || thread_cpu_lists->second.empty()) {
+            throw std::runtime_error(
+                "OpenMP runtime report missing per-thread CPU affinity lists: " + runtime.string()
+            );
         }
 
-        bool wrote_header = false;
-        for (const auto& rank_file : rank_files) {
-            std::ifstream input(rank_file);
-            if (!input) {
-                throw std::runtime_error("Cannot read MPI rank file: " + rank_file.string());
-            }
-
-            std::string line;
-            bool first_line = true;
-            while (std::getline(input, line)) {
-                if (first_line) {
-                    first_line = false;
-                    if (!wrote_header) {
-                        merged << line << "\n";
-                        wrote_header = true;
-                    }
-                    continue;
-                }
-                merged << line << "\n";
+        int distinct_thread_affinities = 0;
+        for (const auto& item : split(thread_cpu_lists->second, ';')) {
+            if (!trim(item).empty()) {
+                ++distinct_thread_affinities;
             }
         }
+        if (distinct_thread_affinities < requested_threads) {
+            throw std::runtime_error(
+                "OpenMP threads did not occupy enough distinct CPU affinity slots for " +
+                runtime.string() + ": requested=" + std::to_string(requested_threads) +
+                " distinct_thread_affinities=" + std::to_string(distinct_thread_affinities)
+            );
+        }
     }
-}
-
-void normalize_mpi_runtime_report(
-    const fs::path& case_dir,
-    const std::string& output_prefix,
-    const fs::path& runtime)
-{
-    const fs::path mpi_runtime = case_dir / (output_prefix + "_mpi_runtime.txt");
-    if (!fs::exists(mpi_runtime)) {
-        throw std::runtime_error("MPI runtime report missing: " + mpi_runtime.string());
-    }
-    fs::copy_file(mpi_runtime, runtime, fs::copy_options::overwrite_existing);
 }
 
 bool run_one(const RunSpec& run, const Args& args)
@@ -281,7 +291,7 @@ bool run_one(const RunSpec& run, const Args& args)
                  << "  \"warmup\": " << (run.warmup ? "true" : "false") << ",\n"
                  << "  \"timing_only\": " << (run.timing_only ? "true" : "false") << ",\n"
                  << "  \"benchmark_mode\": \"" << json_escape(run.benchmark_mode) << "\",\n"
-                 << "  \"omp_schedule\": \"dynamic\",\n"
+                 << "  \"omp_schedule\": \"guided,1\",\n"
                  << "  \"conservation_interval\": " << args.conservation_interval << ",\n"
                  << "  \"timeout_seconds\": " << args.timeout_seconds << ",\n"
                  << "  \"sensitivity\": \"" << run.sensitivity << "\",\n"
@@ -306,29 +316,28 @@ bool run_one(const RunSpec& run, const Args& args)
     }
 
     ensure_executable(run.case_def);
-    std::string command;
-    if (is_mpi_method(run)) {
-        command =
-            "env OMP_NUM_THREADS=" + std::to_string(run.omp_threads) +
-            (run.timing_only ? " QUANT_TIMING_ONLY=1" : "") +
-            " OMP_PROC_BIND=close OMP_PLACES=cores mpirun -np " +
-            std::to_string(run.mpi_ranks) + " " +
-            shell_quote(executable_for(run.case_def)) + " " +
-            shell_quote(generated_config.string()) +
-            " --output-dir " + shell_quote(case_dir.string()) +
-            " > " + shell_quote((log_dir / "stdout.txt").string()) +
-            " 2> " + shell_quote((log_dir / "stderr.txt").string());
-    }
-    else {
-        command =
-            "env OMP_NUM_THREADS=" + std::to_string(run.omp_threads) +
-            " OMP_SCHEDULE=dynamic SOLVER_CONSERVATION=1 SOLVER_CONSERVATION_INTERVAL=" +
-            std::to_string(args.conservation_interval) + " " +
-            shell_quote(executable_for(run.case_def)) + " " +
-            shell_quote(generated_config.string()) +
-            " > " + shell_quote((log_dir / "stdout.txt").string()) +
-            " 2> " + shell_quote((log_dir / "stderr.txt").string());
-    }
+    const char* cpu_list_env = std::getenv("QUANT_CPU_LIST");
+    const std::string taskset_prefix =
+        (cpu_list_env != nullptr && std::string(cpu_list_env).size() > 0)
+            ? "taskset -c " + shell_quote(cpu_list_env) + " "
+            : "";
+    const std::string openmp_places =
+        (cpu_list_env != nullptr) ? openmp_places_from_cpu_list(cpu_list_env) : "";
+    const std::string openmp_binding_env = openmp_places.empty()
+        ? " OMP_PROC_BIND=close OMP_PLACES=cores"
+        : " OMP_PROC_BIND=close OMP_PLACES=" + shell_quote(openmp_places);
+    std::string command =
+        taskset_prefix +
+        "env OMP_NUM_THREADS=" + std::to_string(run.omp_threads) +
+        " OMP_DYNAMIC=FALSE" +
+        openmp_binding_env +
+        " OMP_SCHEDULE=guided,1 SOLVER_CONSERVATION=1 SOLVER_CONSERVATION_INTERVAL=" +
+        std::to_string(args.conservation_interval) + " " +
+        (run.timing_only ? "QUANT_TIMING_ONLY=1 " : "") +
+        shell_quote(executable_for(run.case_def)) + " " +
+        shell_quote(generated_config.string()) +
+        " > " + shell_quote((log_dir / "stdout.txt").string()) +
+        " 2> " + shell_quote((log_dir / "stderr.txt").string());
     if (args.timeout_seconds > 0) {
         command = "timeout " + std::to_string(args.timeout_seconds) + "s " + command;
     }
@@ -339,14 +348,18 @@ bool run_one(const RunSpec& run, const Args& args)
     const int rc = std::system(command.c_str());
     const auto end = std::chrono::steady_clock::now();
     const double wall = std::chrono::duration<double>(end - start).count();
-    const bool success = (rc == 0);
-    if (success && is_mpi_method(run)) {
-        if (!run.timing_only) {
-            merge_mpi_rank_outputs(case_dir, run.output_prefix, solution, run.resolution);
-        }
-        normalize_mpi_runtime_report(case_dir, run.output_prefix, runtime);
-    }
+    bool success = (rc == 0);
     std::string status = success ? "completed" : "failed";
+    if (success) {
+        try {
+            validate_openmp_runtime_report(runtime, run.omp_threads);
+        }
+        catch (const std::exception& exc) {
+            success = false;
+            status = std::string("openmp_thread_mismatch: ") + exc.what();
+            std::cerr << "[openmp] " << exc.what() << "\n";
+        }
+    }
     if (args.timeout_seconds > 0 && rc != 0 && wall >= static_cast<double>(args.timeout_seconds) - 1.0) {
         status = "timeout";
     }

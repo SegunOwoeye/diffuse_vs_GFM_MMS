@@ -9,10 +9,6 @@
 #include <utility>
 #include <vector>
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 #include "src/euler/conservative.hpp"
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
@@ -302,7 +298,6 @@ inline void rgfm_extend_normal_speed(
     for (int iter = 0; iter < iterations; ++iter) {
         work = speed;
 
-        #pragma omp parallel for if(!omp_in_parallel() && Ntot > 512)
         for (int id = 0; id < Ntot; ++id) {
             if (fixed[id] != 0) {
                 continue;
@@ -409,7 +404,6 @@ inline std::vector<double> rgfm_material_distance(
     std::vector<double> distance(Ntot, std::numeric_limits<double>::max());
 
     for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
-        #pragma omp parallel for if(!omp_in_parallel() && Ntot > 512)
         for (int id = 0; id < Ntot; ++id) {
             const double signed_phi =
                 tracked_interface_contains_negative_material(
@@ -430,7 +424,6 @@ inline std::vector<double> rgfm_material_distance(
         fallback = std::min(fallback, ctx.dx[d]);
     }
 
-    #pragma omp parallel for if(!omp_in_parallel() && Ntot > 512)
     for (int id = 0; id < Ntot; ++id) {
         if (!std::isfinite(distance[id])) {
             distance[id] = (material_id[id] == material) ? -fallback : fallback;
@@ -455,7 +448,6 @@ inline std::vector<std::array<double, DIM>> rgfm_material_normals(
     std::vector<double> best_distance(Ntot, std::numeric_limits<double>::max());
 
     for (int k = 0; k < static_cast<int>(phi_list.size()); ++k) {
-        #pragma omp parallel for if(!omp_in_parallel() && Ntot > 512)
         for (int id = 0; id < Ntot; ++id) {
             const double signed_phi =
                 tracked_interface_contains_negative_material(
@@ -478,7 +470,6 @@ inline std::vector<std::array<double, DIM>> rgfm_material_normals(
         }
     }
 
-    #pragma omp parallel for if(!omp_in_parallel() && Ntot > 512)
     for (int id = 0; id < Ntot; ++id) {
         if (norm<DIM>(normal[id]) < 1e-14) {
             normal[id][0] = 1.0;
@@ -748,7 +739,6 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
             ctx
         );
 
-        #pragma omp parallel for if(!omp_in_parallel() && Ntot > 512)
         for (int id = 0; id < Ntot; ++id) {
             if (material_id[id] != mat) {
                 continue;
@@ -770,7 +760,6 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
 
         std::vector<std::array<double, DIM>> velocity(Ntot);
 
-        #pragma omp parallel for if(!omp_in_parallel() && Ntot > 512)
         for (int id = 0; id < Ntot; ++id) {
             const int mat = material_id[id];
             const ThermoState<DIM> T =
@@ -1101,7 +1090,6 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
             ctx.level_set_grid
         );
 
-        #pragma omp parallel for if(!omp_in_parallel() && Ntot > 512)
         for (int id = 0; id < Ntot; ++id) {
             Primitive<DIM> P{};
             P.rho = field.rho[id];
@@ -1133,4 +1121,3 @@ inline RGFMInterfaceData<DIM> build_rgfm_interface_data(
 
     return data;
 }
-

@@ -24,20 +24,20 @@ Run the dissertation-critical missing Report 2 jobs for the university machine.
 This targets the current missing evidence:
   1. He 2023 three-material 1D convergence
   2. He 2023 three-material 2D triple-point validation
-  3. MPI rank performance scaling
+  3. OpenMP thread performance scaling
   4. Optional 3D Gorsse TC9 water-air extension
 
 Usage:
   scripts/run_report2_university_suite.sh [options]
 
 Options:
-  --omp-threads N              OpenMP thread count per MPI rank.
-  --mpi-ranks N                MPI rank count for MPI-backed runs.
+  --omp-threads N              OpenMP thread count for each solver process.
+  --mpi-ranks N                Deprecated compatibility option; ignored by quant_suite.
   --result-root-base PATH      Root for report result directories.
   --conservation-interval N    Step interval for conservation CSV sampling.
   --timeout-seconds N          Timeout per solver run. Use 0 to disable.
   --no-overwrite               Do not clean per-run outputs before rerun.
-  --skip-scaling               Skip MPI rank scaling.
+  --skip-scaling               Skip OpenMP thread scaling.
   --include-gorsse-3d          Include optional 3D Gorsse TC9 water-air run.
   --skip-postprocess           Skip plotting, tracker update, and organizer.
   --organized-output-dir PATH  Destination for organized report outputs.
@@ -146,7 +146,7 @@ if [[ ! -x "$python_bin" ]]; then
     python_bin="python3"
 fi
 
-common_flags=("--omp-threads" "$omp_threads" "--mpi-ranks" "$mpi_ranks")
+common_flags=("--omp-threads" "$omp_threads")
 if [[ "$overwrite" == true ]]; then
     common_flags+=("--overwrite")
 fi
@@ -161,7 +161,7 @@ run_quant() {
 
 run_quant "He 2023 three-material 1D convergence" \
     --case he2023_three_material_1d \
-    --methods SIM_MPI,DIM_MPI \
+    --methods SIM,DIM \
     --resolutions 100,200,400,800,2000 \
     --result-root "$result_root_base/report_selected_he2023_three_material_1d" \
     --conservation-interval "$conservation_interval" \
@@ -169,7 +169,7 @@ run_quant "He 2023 three-material 1D convergence" \
 
 run_quant "He 2023 three-material triple-point 2D" \
     --case he2023_triple_point \
-    --methods SIM_MPI,DIM_MPI \
+    --methods SIM,DIM \
     --resolutions 1400x600 \
     --result-root "$result_root_base/report_selected_he2023_three_material_triple_point_2d" \
     --conservation-interval "$conservation_interval" \
@@ -177,21 +177,21 @@ run_quant "He 2023 three-material triple-point 2D" \
 
 if [[ "$skip_scaling" != true ]]; then
     echo
-    echo "[university] MPI rank scaling"
+    echo "[university] OpenMP thread scaling"
     scaling_flags=()
     if [[ "$overwrite" == true ]]; then
         scaling_flags+=("--overwrite")
     fi
     scripts/run_quant_suite.sh \
-        --scaling mpi_ranks \
+        --scaling openmp_threads \
         --case bubble \
-        --methods SIM_MPI,DIM_MPI \
+        --methods SIM,DIM \
         --resolutions 1300x178 \
         --omp-threads 1 \
         --benchmark-mode clean \
         --benchmark-warmups "$benchmark_warmups" \
         --benchmark-repeats "$benchmark_repeats" \
-        --result-root "$result_root_base/report_selected_mpi_scaling" \
+        --result-root "$result_root_base/report_selected_openmp_scaling" \
         --conservation-interval "$conservation_interval" \
         --timeout-seconds "$timeout_seconds" \
         "${scaling_flags[@]}"
@@ -200,8 +200,8 @@ fi
 if [[ "$include_gorsse_3d" == true ]]; then
     run_quant "3D Gorsse TC9 water-air bubble" \
         --case gorsse_tc9_3d \
-        --methods SIM_MPI,DIM_MPI \
-        --resolutions 240x200x200 \
+        --methods SIM,DIM \
+        --resolutions 120x100x100 \
         --result-root "$result_root_base/report_selected_gorsse_tc9_water_air_3d" \
         --conservation-interval "$conservation_interval" \
         --timeout-seconds "$timeout_seconds"

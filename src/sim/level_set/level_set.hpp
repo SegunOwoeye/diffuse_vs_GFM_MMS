@@ -8,10 +8,6 @@
 #include <utility>
 #include <vector>
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 #include "src/sim/level_set/level_set_core.hpp"
 #include "src/sim/level_set/level_set_derivatives.hpp"
 #include "src/sim/grid/grid_utils.hpp"
@@ -223,7 +219,6 @@ inline std::vector<double> redistance_preserving_zero_level_set(
     std::vector<char> fixed(Ntot, 0);
     std::vector<double> sign(Ntot, 1.0);
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         sign[id] = (phi0[id] < 0.0) ? -1.0 : 1.0;
     }
@@ -322,7 +317,6 @@ inline std::vector<double> redistance_preserving_zero_level_set(
 
     std::vector<double> phi(Ntot, 0.0);
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         if (!std::isfinite(distance[id])) {
             phi[id] = phi0[id];
@@ -395,7 +389,6 @@ inline void apply_neumann_bc(
 
     const int Ntot = static_cast<int>(total_cells(grid));
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         std::array<int, DIM> idx{};
         level_set_detail::decode_index<DIM>(id, grid, idx);
@@ -427,7 +420,6 @@ inline std::vector<double> level_set_flow_rhs(
     const int Ntot = static_cast<int>(total_cells(grid));
     std::vector<double> rhs(Ntot, 0.0);
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         std::array<int, DIM> idx{};
         level_set_detail::decode_index<DIM>(id, grid, idx);
@@ -468,7 +460,6 @@ inline std::vector<double> level_set_normal_speed_rhs(
     const int Ntot = static_cast<int>(total_cells(grid));
     std::vector<double> rhs(Ntot, 0.0);
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         std::array<int, DIM> idx{};
         level_set_detail::decode_index<DIM>(id, grid, idx);
@@ -547,7 +538,6 @@ inline std::vector<double> advect_phi(
 
     std::vector<double> phi1(Ntot, 0.0);
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         phi1[id] = phi[id] + dt * rhs0[id];
     }
@@ -559,7 +549,6 @@ inline std::vector<double> advect_phi(
 
     std::vector<double> phi2(Ntot, 0.0);
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         phi2[id] = 0.75 * phi[id] + 0.25 * (phi1[id] + dt * rhs1[id]);
     }
@@ -571,7 +560,6 @@ inline std::vector<double> advect_phi(
 
     std::vector<double> phi_new(Ntot, 0.0);
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         phi_new[id] = (1.0 / 3.0) * phi[id] +
             (2.0 / 3.0) * (phi2[id] + dt * rhs2[id]);
@@ -610,7 +598,6 @@ inline std::vector<double> advect_phi_normal_speed(
 
     std::vector<double> phi1(Ntot, 0.0);
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         phi1[id] = phi[id] + dt * rhs0[id];
     }
@@ -622,7 +609,6 @@ inline std::vector<double> advect_phi_normal_speed(
 
     std::vector<double> phi2(Ntot, 0.0);
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         phi2[id] = 0.75 * phi[id] + 0.25 * (phi1[id] + dt * rhs1[id]);
     }
@@ -634,7 +620,6 @@ inline std::vector<double> advect_phi_normal_speed(
 
     std::vector<double> phi_new(Ntot, 0.0);
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         phi_new[id] = (1.0 / 3.0) * phi[id] +
             (2.0 / 3.0) * (phi2[id] + dt * rhs2[id]);
@@ -669,7 +654,6 @@ inline std::vector<double> level_set_reinit_rhs(
     const double h = *std::min_element(grid.dx.begin(), grid.dx.end());
     std::vector<double> rhs(Ntot, 0.0);
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         std::array<int, DIM> idx{};
         level_set_detail::decode_index<DIM>(id, grid, idx);
@@ -749,7 +733,6 @@ inline std::vector<double> reinitialise_phi(
 
         std::vector<double> phi1(Ntot, 0.0);
 
-        #pragma omp parallel for
         for (int id = 0; id < Ntot; ++id) {
             phi1[id] = phi[id] + dtau * rhs0[id];
         }
@@ -761,7 +744,6 @@ inline std::vector<double> reinitialise_phi(
 
         std::vector<double> phi2(Ntot, 0.0);
 
-        #pragma omp parallel for
         for (int id = 0; id < Ntot; ++id) {
             phi2[id] = 0.75 * phi[id] + 0.25 * (phi1[id] + dtau * rhs1[id]);
         }
@@ -771,7 +753,6 @@ inline std::vector<double> reinitialise_phi(
         const std::vector<double> rhs2 =
             level_set_reinit_rhs<DIM>(phi2, phi0, grid, derivative_scheme);
 
-        #pragma omp parallel for
         for (int id = 0; id < Ntot; ++id) {
             phi[id] = (1.0 / 3.0) * phi[id] +
                 (2.0 / 3.0) * (phi2[id] + dtau * rhs2[id]);
@@ -802,7 +783,6 @@ inline std::vector<std::array<double, DIM>> compute_normals(
     std::vector<bool> computed(Ntot, false);
 
     // [14.1] Interior cells
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         std::array<int, DIM> idx{};
         level_set_detail::decode_index<DIM>(id, grid, idx);
@@ -836,7 +816,6 @@ inline std::vector<std::array<double, DIM>> compute_normals(
     }
 
     // [14.2] Boundary cells
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         if (computed[id]) {
             continue;
@@ -860,7 +839,5 @@ inline std::vector<std::array<double, DIM>> compute_normals(
 
     return normals;
 }
-
-
 
 

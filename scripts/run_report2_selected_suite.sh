@@ -10,6 +10,7 @@ mpi_ranks=1
 timeout_seconds=0
 conservation_interval=10
 result_root_base="results/quantitative"
+helium_bubble_3d_resolution="${HELIUM_BUBBLE_3D_RESOLUTION:-650x89x89}"
 skip_exact_refs=false
 skip_3d=false
 skip_scaling=false
@@ -35,12 +36,12 @@ Options:
   --no-overwrite             Do not pass --overwrite to quant_suite.
   --result-root-base PATH    Root for all selected result directories.
   --omp-threads N            OpenMP thread count for each solver process.
-  --mpi-ranks N              MPI rank count for MPI-backed solver runs.
+  --mpi-ranks N              Deprecated compatibility option; ignored by quant_suite.
   --timeout-seconds N        Timeout for each solver run. Use 0 to disable.
   --conservation-interval N  Conservation sampling interval.
   --skip-exact-refs          Skip Fedkiw exact-reference generation.
   --skip-3d                  Skip 3D explosion, 3D helium bubble, and 3D Gorsse TC9.
-  --skip-scaling             Skip MPI rank speedup study.
+  --skip-scaling             Skip OpenMP thread speedup study.
   --skip-sensitivity         Skip all interface sensitivity studies.
   --skip-reinit-sensitivity  Skip rGFM reinitialisation sensitivity.
   --skip-alpha-sensitivity   Skip DIM interface-thickness sensitivity.
@@ -183,12 +184,12 @@ if [[ ! -x "$python_bin" ]]; then
     python_bin="python3"
 fi
 
-common_flags=("--omp-threads" "$omp_threads" "--mpi-ranks" "$mpi_ranks")
+common_flags=("--omp-threads" "$omp_threads")
 if [[ "$overwrite" == true ]]; then
     common_flags+=("--overwrite")
 fi
 
-rank1_flags=("--omp-threads" "$omp_threads" "--mpi-ranks" "1")
+rank1_flags=("--omp-threads" "$omp_threads")
 if [[ "$overwrite" == true ]]; then
     rank1_flags+=("--overwrite")
 fi
@@ -272,67 +273,67 @@ fi
 
 run_quant_rank1 "Toro test 5 1D Euler check" \
     --case toro_1d,test5 \
-    --method SM_MPI \
+    --method common \
     --resolutions 100,200,400,800 \
     --result-root "$result_root_base/report_selected_toro_test5"
 
 run_quant "2D explosion Euler check" \
     --case explosion2d \
-    --method SM_MPI \
+    --method common \
     --resolutions 100x100,200x200,400x400 \
     --result-root "$result_root_base/report_selected_explosion_2d"
 
 if [[ "$skip_3d" != true ]]; then
     run_quant "3D explosion Euler check" \
         --case explosion3d \
-        --method SM_MPI \
+        --method common \
         --resolutions 50x50x50,100x100x100,200x200x200 \
         --result-root "$result_root_base/report_selected_explosion_3d"
 fi
 
 run_quant_rank1_with_conservation "FedkiwD2 1D SIM versus DIM" \
     --case fedkiw_1d,test5 \
-    --methods SIM_MPI,DIM_MPI \
+    --methods SIM,DIM \
     --resolutions 100,200,400,800 \
     --result-root "$result_root_base/report_selected_fedkiw_d2_1d"
 
 run_quant_rank1_with_conservation "He 2023 three-material 1D convergence" \
     --case he2023_three_material_1d \
-    --methods SIM_MPI,DIM_MPI \
+    --methods SIM,DIM \
     --resolutions 100,200,400,800,2000 \
     --result-root "$result_root_base/report_selected_he2023_three_material_1d"
 
 run_quant_with_conservation "2D contaminated helium shock-bubble" \
     --case bubble \
-    --methods SIM_MPI,DIM_MPI \
+    --methods SIM,DIM \
     --resolutions 325x45,650x89,1300x178 \
     --result-root "$result_root_base/report_selected_helium_bubble_2d"
 
 if [[ "$skip_3d" != true ]]; then
     run_quant_with_conservation "3D contaminated helium shock-bubble" \
         --case bubble3d \
-        --methods SIM_MPI,DIM_MPI \
-        --resolutions 325x45x45 \
+        --methods SIM,DIM \
+        --resolutions "$helium_bubble_3d_resolution" \
         --result-root "$result_root_base/report_selected_helium_bubble_3d"
 fi
 
 run_quant_with_timeout_and_conservation "2D Gorsse TC9 water-air bubble" \
     --case gorsse_tc9 \
-    --methods SIM_MPI,DIM_MPI \
+    --methods SIM,DIM \
     --resolutions 240x200,480x400 \
     --result-root "$result_root_base/report_selected_gorsse_tc9_water_air_2d"
 
 run_quant_with_timeout_and_conservation "He 2023 three-material triple-point 2D" \
     --case he2023_triple_point \
-    --methods SIM_MPI,DIM_MPI \
+    --methods SIM,DIM \
     --resolutions 1400x600 \
     --result-root "$result_root_base/report_selected_he2023_three_material_triple_point_2d"
 
 if [[ "$skip_3d" != true ]]; then
     run_quant_with_timeout_and_conservation "3D Gorsse TC9 water-air bubble" \
         --case gorsse_tc9_3d \
-        --methods SIM_MPI,DIM_MPI \
-        --resolutions 240x200x200 \
+        --methods SIM,DIM \
+        --resolutions 120x100x100 \
         --result-root "$result_root_base/report_selected_gorsse_tc9_water_air_3d"
 fi
 
@@ -350,21 +351,21 @@ fi
 
 if [[ "$skip_scaling" != true ]]; then
     echo
-    echo "[report2] MPI rank speedup study"
+    echo "[report2] OpenMP thread speedup study"
     scaling_flags=()
     if [[ "$overwrite" == true ]]; then
         scaling_flags+=("--overwrite")
     fi
     scaling_cmd=(scripts/run_quant_suite.sh
-        --scaling mpi_ranks \
+        --scaling openmp_threads \
         --case bubble \
-        --methods SIM_MPI,DIM_MPI \
+        --methods SIM,DIM \
         --resolutions 1300x178 \
-        --omp-threads 1 \
+        --omp-threads "$omp_threads" \
         --benchmark-mode clean \
         --benchmark-warmups "$benchmark_warmups" \
         --benchmark-repeats "$benchmark_repeats" \
-        --result-root "$result_root_base/report_selected_mpi_scaling"
+        --result-root "$result_root_base/report_selected_openmp_scaling"
         "${scaling_flags[@]}")
     if [[ "$dry_run" == true ]]; then
         print_command "${scaling_cmd[@]}"

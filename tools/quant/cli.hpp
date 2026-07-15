@@ -59,7 +59,10 @@ Args parse_args(int argc, char** argv)
         else if (key == "--sensitivity") args.sensitivity = next();
         else if (key == "--scaling") args.scaling = next();
         else if (key == "--omp-threads") args.omp_threads = std::stoi(next());
-        else if (key == "--mpi-ranks") args.mpi_ranks = std::stoi(next());
+        else if (key == "--mpi-ranks") {
+            (void)next();
+            args.mpi_ranks = 1;
+        }
         else if (key == "--timeout-seconds") args.timeout_seconds = std::stoi(next());
         else if (key == "--conservation-interval") args.conservation_interval = std::stoi(next());
         else if (key == "--benchmark-mode") args.benchmark_mode = next();
@@ -73,14 +76,13 @@ Args parse_args(int argc, char** argv)
                 << "  --collect-only (rebuild summaries from existing run output)\n"
                 << "  --all-core (Toro1, FedkiwD2 1D, oblique FedkiwD2, shock bubble)\n"
                 << "  --case/--cases toro|toro_1d|explosion2d|explosion3d|fedkiw|planar|oblique|shock_bubble|bubble_reinit|water_air_bubble|gorsse_tc9|gorsse_tc9_lowres|he2023_three_material|he2023_three_material_1d|he2023_triple_point|gorsse_tc9_3d|bubble_zero_velocity|bubble_zero_velocity_physical_flow|bubble_zero_velocity_input_mean_star|bubble_zero_velocity_zero_star|bubble_static|bubble3d [case]\n"
-                << "  --method/--methods DIM DIM_MPI SIM SIM_MPI common SM_MPI (comma lists accepted)\n"
+                << "  --method/--methods DIM SIM common (legacy *_MPI aliases map to these serial/OpenMP methods)\n"
                 << "  --resolutions 100 200 400, or 100,200,400, or 325x45,650x89\n"
                 << "  --sensitivity dim_epsilon|dim_epsilon_bubble|dim_alpha|sim_reinit|sim_reinit_bubble\n"
                 << "      dim_epsilon and sim_reinit include legacy reference extras; *_bubble modes run helium bubble only\n"
-                << "  --scaling openmp_threads (legacy bubble DIM/SIM at 1,2,4,8,16,32 threads)\n"
-                << "  --scaling mpi_ranks (default: 2D helium bubble SIM_MPI/DIM_MPI at 1,2,4,8,16,32 ranks)\n"
+                << "  --scaling openmp_threads (2D helium bubble DIM/SIM at 1,2,4,8,16,32 threads)\n"
                 << "  --omp-threads N\n"
-                << "  --mpi-ranks N (for MPI runs)\n"
+                << "  --mpi-ranks N (deprecated compatibility option; ignored)\n"
                 << "  --benchmark-mode NAME (default standard; use clean for controlled timing)\n"
                 << "  --benchmark-warmups N (default 0)\n"
                 << "  --benchmark-repeats N measured repeats (default 1)\n"

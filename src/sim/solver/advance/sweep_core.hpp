@@ -1,9 +1,5 @@
 #pragma once
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 #include <algorithm>
 #include <vector>
 #include <array>
@@ -23,6 +19,7 @@
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
 #include "src/euler/flux.hpp"
+#include "src/core/openmp_policy.hpp"
 #include "src/math/numerical_safety.hpp"
 
 template<int DIM, typename EOS>
@@ -473,7 +470,7 @@ inline void sweep_lines_flat(
 {
     const int num_lines = compute_num_lines<DIM>(dir, ctx.N);
 
-    #pragma omp parallel
+    #pragma omp parallel if(runtime::openmp_should_parallelize_lines(num_lines))
     {
         std::vector<Conserved<DIM>> U_line;
         std::vector<int> mat_line;
@@ -483,7 +480,7 @@ inline void sweep_lines_flat(
         mat_line.reserve(ctx.N[dir]);
         id_line.reserve(ctx.N[dir]);
 
-        #pragma omp for schedule(static)
+        #pragma omp for schedule(runtime)
         for (int line_id = 0; line_id < num_lines; ++line_id) {
 
             std::array<int, DIM> base_idx{};

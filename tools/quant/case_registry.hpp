@@ -34,18 +34,6 @@ std::vector<CaseDef> case_registry()
         "g++", "-std=c++17", "-O2", "-fopenmp", "-I.", "-DAPP_DIM=3",
         "src/app/sm_main.cpp", "-o", "sm_main_3d"
     };
-    const std::vector<std::string> sm_mpi1 = {
-        "mpic++", "-std=c++17", "-O3", "-march=native", "-fopenmp", "-I.", "-DAPP_DIM=1",
-        "src/app/sm_mpi_main.cpp", "-o", "sm_mpi_main_1d"
-    };
-    const std::vector<std::string> sm_mpi2 = {
-        "mpic++", "-std=c++17", "-O3", "-march=native", "-fopenmp", "-I.", "-DAPP_DIM=2",
-        "src/app/sm_mpi_main.cpp", "-o", "sm_mpi_main_2d"
-    };
-    const std::vector<std::string> sm_mpi3 = {
-        "mpic++", "-std=c++17", "-O3", "-march=native", "-fopenmp", "-I.", "-DAPP_DIM=3",
-        "src/app/sm_mpi_main.cpp", "-o", "sm_mpi_main_3d"
-    };
     const std::vector<std::string> mm1 = {
         "g++", "-std=c++17", "-O2", "-fopenmp", "-I.", "-DAPP_DIM=1",
         "src/app/multimaterial_main.cpp", "-o", "mm_main_1d"
@@ -58,42 +46,11 @@ std::vector<CaseDef> case_registry()
         "g++", "-std=c++17", "-O2", "-fopenmp", "-I.", "-DAPP_DIM=3",
         "src/app/multimaterial_main.cpp", "-o", "mm_main_3d"
     };
-    const std::vector<std::string> dim_mpi1 = {
-        "mpic++", "-std=c++17", "-O3", "-march=native", "-fopenmp", "-I.", "-DAPP_DIM=1",
-        "src/app/dim_mpi_main.cpp", "-o", "dim_mpi_main_1d"
-    };
-    const std::vector<std::string> dim_mpi2 = {
-        "mpic++", "-std=c++17", "-O3", "-march=native", "-fopenmp", "-I.", "-DAPP_DIM=2",
-        "src/app/dim_mpi_main.cpp", "-o", "dim_mpi_main_2d"
-    };
-    const std::vector<std::string> dim_mpi3 = {
-        "mpic++", "-std=c++17", "-O3", "-march=native", "-fopenmp", "-I.", "-DAPP_DIM=3",
-        "src/app/dim_mpi_main.cpp", "-o", "dim_mpi_main_3d"
-    };
-    const std::vector<std::string> sim_mpi1 = {
-        "mpic++", "-std=c++17", "-O3", "-march=native", "-fopenmp", "-I.", "-DAPP_DIM=1",
-        "src/app/rgfm_mpi_main.cpp", "-o", "rgfm_mpi_main_1d"
-    };
-    const std::vector<std::string> sim_mpi2 = {
-        "mpic++", "-std=c++17", "-O3", "-march=native", "-fopenmp", "-I.", "-DAPP_DIM=2",
-        "src/app/rgfm_mpi_main.cpp", "-o", "rgfm_mpi_main_2d"
-    };
-    const std::vector<std::string> sim_mpi3 = {
-        "mpic++", "-std=c++17", "-O3", "-march=native", "-fopenmp", "-I.", "-DAPP_DIM=3",
-        "src/app/rgfm_mpi_main.cpp", "-o", "rgfm_mpi_main_3d"
-    };
-
     std::vector<CaseDef> cases;
     for (int i = 1; i <= 5; ++i) {
         cases.push_back({
             "toro_1d", "test" + std::to_string(i), "toro" + std::to_string(i),
             "common", 1, "sm_1d", "sm_main_1d", sm1,
-            "configs/toro/test" + std::to_string(i) + ".txt",
-            {{100}, {200}, {400}, {800}}
-        });
-        cases.push_back({
-            "toro_1d", "test" + std::to_string(i), "toro" + std::to_string(i),
-            "SM_MPI", 1, "sm_mpi_1d", "sm_mpi_main_1d", sm_mpi1,
             "configs/toro/test" + std::to_string(i) + ".txt",
             {{100}, {200}, {400}, {800}}
         });
@@ -104,18 +61,8 @@ std::vector<CaseDef> case_registry()
         {{100, 100}, {200, 200}, {400, 400}}
     });
     cases.push_back({
-        "toro_explosion_2d", "explosion1", "explosion1", "SM_MPI", 2,
-        "sm_mpi_2d", "sm_mpi_main_2d", sm_mpi2, "configs/toro/explosion1.txt",
-        {{100, 100}, {200, 200}, {400, 400}}
-    });
-    cases.push_back({
         "toro_explosion_3d", "explosion2", "explosion2", "common", 3,
         "sm_3d", "sm_main_3d", sm3, "configs/toro/explosion2.txt",
-        {{50, 50, 50}, {100, 100, 100}, {200, 200, 200}}
-    });
-    cases.push_back({
-        "toro_explosion_3d", "explosion2", "explosion2", "SM_MPI", 3,
-        "sm_mpi_3d", "sm_mpi_main_3d", sm_mpi3, "configs/toro/explosion2.txt",
         {{50, 50, 50}, {100, 100, 100}, {200, 200, 200}}
     });
 
@@ -271,13 +218,13 @@ std::vector<CaseDef> case_registry()
         "gorsse_tc9_water_air_bubble_3d", "tc9", "gorsse_tc9_water_air_bubble_3d", "SIM", 3,
         "mm_3d", "mm_main_3d", mm3,
         "configs/GFM/bubble_collapse/gorsse_tc9_water_air_bubble_3d.txt",
-        {{240, 200, 200}}
+        {{120, 100, 100}}
     });
     cases.push_back({
         "gorsse_tc9_water_air_bubble_3d", "tc9", "gorsse_tc9_water_air_bubble_3d", "DIM", 3,
         "mm_3d", "mm_main_3d", mm3,
         "configs/DIM/bubble_collapse/gorsse_tc9_water_air_bubble_3d.txt",
-        {{240, 200, 200}}
+        {{120, 100, 100}}
     });
     cases.push_back({
         "shock_bubble_2d", "test6", "helium_bubble_2d", "DIM", 2,
@@ -325,58 +272,14 @@ std::vector<CaseDef> case_registry()
         "shock_bubble_3d", "test6", "helium_bubble_3d", "SIM", 3,
         "mm_3d", "mm_main_3d", mm3,
         "configs/GFM/MM_3D_validation/test6.txt",
-        {{325, 45, 45}}
+        {{650, 89, 89}}
     });
     cases.push_back({
         "shock_bubble_3d", "test6", "helium_bubble_3d", "DIM", 3,
         "mm_3d", "mm_main_3d", mm3,
         "configs/DIM/MM_3D_validation/test6.txt",
-        {{325, 45, 45}}
+        {{650, 89, 89}}
     });
-
-    const std::vector<CaseDef> serial_cases = cases;
-    for (const auto& def : serial_cases) {
-        if (def.method != "DIM" && def.method != "SIM") {
-            continue;
-        }
-
-        CaseDef mpi_def = def;
-        mpi_def.method = (def.method == "DIM") ? "DIM_MPI" : "SIM_MPI";
-        if (def.method == "DIM" && def.dimension == 1) {
-            mpi_def.executable_key = "dim_mpi_1d";
-            mpi_def.executable_path = "dim_mpi_main_1d";
-            mpi_def.compile_command = dim_mpi1;
-        }
-        else if (def.method == "DIM" && def.dimension == 2) {
-            mpi_def.executable_key = "dim_mpi_2d";
-            mpi_def.executable_path = "dim_mpi_main_2d";
-            mpi_def.compile_command = dim_mpi2;
-        }
-        else if (def.method == "DIM" && def.dimension == 3) {
-            mpi_def.executable_key = "dim_mpi_3d";
-            mpi_def.executable_path = "dim_mpi_main_3d";
-            mpi_def.compile_command = dim_mpi3;
-        }
-        else if (def.method == "SIM" && def.dimension == 1) {
-            mpi_def.executable_key = "sim_mpi_1d";
-            mpi_def.executable_path = "rgfm_mpi_main_1d";
-            mpi_def.compile_command = sim_mpi1;
-        }
-        else if (def.method == "SIM" && def.dimension == 2) {
-            mpi_def.executable_key = "sim_mpi_2d";
-            mpi_def.executable_path = "rgfm_mpi_main_2d";
-            mpi_def.compile_command = sim_mpi2;
-        }
-        else if (def.method == "SIM" && def.dimension == 3) {
-            mpi_def.executable_key = "sim_mpi_3d";
-            mpi_def.executable_path = "rgfm_mpi_main_3d";
-            mpi_def.compile_command = sim_mpi3;
-        }
-        else {
-            continue;
-        }
-        cases.push_back(mpi_def);
-    }
 
     return cases;
 }
@@ -528,10 +431,7 @@ std::vector<std::vector<int>> preset_resolutions(const Args& args, const CaseDef
 std::string method_prefix(const std::string& method)
 {
     if (method == "DIM") return "dim";
-    if (method == "DIM_MPI") return "dim_mpi";
     if (method == "SIM") return "gfm";
-    if (method == "SIM_MPI") return "gfm_mpi";
-    if (method == "SM_MPI") return "sm_mpi";
     return "common";
 }
 
@@ -565,20 +465,6 @@ std::string make_run_id(
     return out.str();
 }
 
-std::string make_mpi_run_id(
-    const CaseDef& def,
-    const std::vector<int>& resolution,
-    int mpi_ranks,
-    const std::string& parameter_name = "",
-    const std::string& parameter_value = ""
-)
-{
-    std::ostringstream out;
-    out << make_run_id(def, resolution, 1, parameter_name, parameter_value)
-        << "__mpi" << mpi_ranks;
-    return out.str();
-}
-
 void apply_storage_limited_3d_output_times(RunSpec& run)
 {
     if (run.case_def.group == "shock_bubble_3d") {
@@ -604,25 +490,21 @@ std::vector<RunSpec> build_normal_runs(const Args& args)
             run.case_def = def;
             run.resolution = resolution;
             run.omp_threads = args.omp_threads;
-            run.mpi_ranks = args.mpi_ranks;
+            run.mpi_ranks = 1;
             run.output_prefix =
                 "quant_" + method_prefix(def.method) + "_" + def.label + "_" + resolution_label(resolution);
             if (def.method == "common") {
                 run.output_prefix = "quant_" + def.label + "_" + resolution_label(resolution);
             }
             if (def.group == "he2023_three_material_1d" &&
-                (def.method == "DIM" || def.method == "DIM_MPI") &&
+                def.method == "DIM" &&
                 !resolution.empty()) {
                 std::ostringstream width;
                 width << (1.0 / static_cast<double>(resolution.front()));
                 run.overrides["interface_thickness"] = width.str();
             }
             apply_storage_limited_3d_output_times(run);
-            run.run_id = (def.method == "SM_MPI" ||
-                          def.method == "DIM_MPI" ||
-                          def.method == "SIM_MPI")
-                ? make_mpi_run_id(def, resolution, args.mpi_ranks)
-                : make_run_id(def, resolution, args.omp_threads);
+            run.run_id = make_run_id(def, resolution, args.omp_threads);
             runs.push_back(run);
         }
     }
@@ -672,17 +554,13 @@ std::vector<RunSpec> build_core_runs(const Args& args)
             run.case_def = def;
             run.resolution = resolution;
             run.omp_threads = args.omp_threads;
-            run.mpi_ranks = args.mpi_ranks;
+            run.mpi_ranks = 1;
             run.output_prefix =
                 "quant_" + method_prefix(def.method) + "_" + def.label + "_" + resolution_label(resolution);
             if (def.method == "common") {
                 run.output_prefix = "quant_" + def.label + "_" + resolution_label(resolution);
             }
-            run.run_id = (def.method == "SM_MPI" ||
-                          def.method == "DIM_MPI" ||
-                          def.method == "SIM_MPI")
-                ? make_mpi_run_id(def, resolution, args.mpi_ranks)
-                : make_run_id(def, resolution, args.omp_threads);
+            run.run_id = make_run_id(def, resolution, args.omp_threads);
             runs.push_back(run);
         }
     }
@@ -714,7 +592,7 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             run.case_def = def;
             run.resolution = resolution;
             run.omp_threads = args.omp_threads;
-            run.mpi_ranks = args.mpi_ranks;
+            run.mpi_ranks = 1;
             run.sensitivity = args.sensitivity;
             run.parameter_name = "epsilon_alpha_dx";
             run.parameter_value = std::to_string(dx_units) + "dx";
@@ -726,18 +604,18 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             }
             run.output_prefix =
                 "quant_" + method_prefix(def.method) + "_" + def.label + "_epsilon_alpha_" + std::to_string(dx_units) + "dx";
-            run.run_id = make_mpi_run_id(def, run.resolution, args.mpi_ranks, run.parameter_name, run.parameter_value);
+            run.run_id = make_run_id(def, run.resolution, args.omp_threads, run.parameter_name, run.parameter_value);
             runs.push_back(run);
         };
 
         if (!bubble_only) {
-            const auto fedkiw = find_case("fedkiw_1d", "test5", "DIM_MPI").value();
+            const auto fedkiw = find_case("fedkiw_1d", "test5", "DIM").value();
             for (int dx_units : {1, 2, 3, 4, 6}) {
                 add_dim_epsilon_run(fedkiw, {400}, dx_units, static_cast<double>(dx_units) / 400.0, false);
             }
         }
 
-        const auto bubble = find_case("shock_bubble_2d", "test6", "DIM_MPI").value();
+        const auto bubble = find_case("shock_bubble_2d", "test6", "DIM").value();
         for (int dx_units : {1, 2, 3, 4, 6}) {
             add_dim_epsilon_run(bubble, {1300, 178}, dx_units, 0.25 * static_cast<double>(dx_units), true);
         }
@@ -751,7 +629,7 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             run.case_def = def;
             run.resolution = resolution;
             run.omp_threads = args.omp_threads;
-            run.mpi_ranks = args.mpi_ranks;
+            run.mpi_ranks = 1;
             run.sensitivity = args.sensitivity;
             run.parameter_name = "tanh_alpha";
             run.parameter_value = alpha_label;
@@ -760,12 +638,12 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             run.overrides["interface_sharpness_alpha"] = value.str();
             run.output_prefix =
                 "quant_" + method_prefix(def.method) + "_" + def.label + "_tanh_alpha_" + alpha_label;
-            run.run_id = make_mpi_run_id(def, run.resolution, args.mpi_ranks, run.parameter_name, run.parameter_value);
+            run.run_id = make_run_id(def, run.resolution, args.omp_threads, run.parameter_name, run.parameter_value);
             runs.push_back(run);
         };
 
-        const auto fedkiw = find_case("fedkiw_1d", "test5", "DIM_MPI").value();
-        const auto bubble = find_case("shock_bubble_2d", "test6", "DIM_MPI").value();
+        const auto fedkiw = find_case("fedkiw_1d", "test5", "DIM").value();
+        const auto bubble = find_case("shock_bubble_2d", "test6", "DIM").value();
 
         for (const auto& item : std::vector<std::pair<std::string, double>>{
                  {"0p5", 0.5},
@@ -788,7 +666,7 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             run.case_def = def;
             run.resolution = resolution;
             run.omp_threads = args.omp_threads;
-            run.mpi_ranks = args.mpi_ranks;
+            run.mpi_ranks = 1;
             run.sensitivity = args.sensitivity;
             run.parameter_name = "reinit_interval";
             run.parameter_value = interval_label;
@@ -798,16 +676,16 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             }
             run.output_prefix =
                 "quant_" + method_prefix(def.method) + "_" + def.label + "_reinit_" + sanitize_value(interval_label);
-            run.run_id = make_mpi_run_id(def, run.resolution, args.mpi_ranks, run.parameter_name, run.parameter_value);
+            run.run_id = make_run_id(def, run.resolution, args.omp_threads, run.parameter_name, run.parameter_value);
             runs.push_back(run);
         };
 
-        const auto bubble = find_case("shock_bubble_2d", "test6", "SIM_MPI").value();
+        const auto bubble = find_case("shock_bubble_2d", "test6", "SIM").value();
         for (const auto& item : std::vector<std::pair<std::string, int>>{
                  {"1", 1}, {"2", 2}, {"5", 5}, {"10", 10}, {"20", 20}, {"never", 0}
             }) {
             if (!bubble_only) {
-                const auto oblique = find_case("fedkiw_2d_oblique", "test5", "SIM_MPI").value();
+                const auto oblique = find_case("fedkiw_2d_oblique", "test5", "SIM").value();
                 add_sim_reinit_run(oblique, {200, 200}, item.first, item.second, false);
             }
             add_sim_reinit_run(bubble, {1300, 178}, item.first, item.second, true);
@@ -819,78 +697,10 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
 std::vector<RunSpec> build_scaling_runs(const Args& args)
 {
     std::vector<RunSpec> runs;
-    if (args.scaling == "mpi_ranks") {
-        const auto add_mpi_scaling_target = [&](const CaseDef& def,
-                                                const std::vector<int>& default_resolution) {
-            const std::vector<std::vector<int>> resolutions =
-                args.resolutions.empty()
-                    ? std::vector<std::vector<int>>{default_resolution}
-                    : preset_resolutions(args, def);
+    const std::string scaling_mode =
+        (args.scaling == "mpi_ranks") ? "openmp_threads" : args.scaling;
 
-            for (const auto& resolution : resolutions) {
-                for (int ranks : {1, 2, 4, 8, 16, 32}) {
-                    RunSpec run;
-                    run.case_def = def;
-                    run.resolution = resolution;
-                    run.omp_threads = args.omp_threads;
-                    run.mpi_ranks = ranks;
-                    run.timing_only = true;
-                    run.scaling = args.scaling;
-                    run.parameter_name = "mpi_ranks";
-                    run.parameter_value = std::to_string(ranks);
-                    run.output_prefix =
-                        "quant_scaling_" + method_prefix(def.method) + "_" + def.label +
-                        "_" + resolution_label(run.resolution) + "_mpi" + std::to_string(ranks);
-                    run.run_id = make_mpi_run_id(def, run.resolution, ranks, run.parameter_name, run.parameter_value);
-                    runs.push_back(run);
-                }
-            }
-        };
-
-        const bool explicit_methods = !args.methods.empty();
-        const bool explicit_cases = !args.cases.empty();
-
-        if (explicit_cases) {
-            const auto groups = groups_for_case_alias(args.cases);
-            for (const auto& def : case_registry()) {
-                if (!case_allowed(def, args, groups) || !contains_method(args.methods, def.method)) {
-                    continue;
-                }
-                if (def.method != "SM_MPI" && def.method != "SIM_MPI" && def.method != "DIM_MPI") {
-                    continue;
-                }
-
-                std::vector<int> default_resolution;
-                if (def.group == "shock_bubble_2d") {
-                    default_resolution = {1300, 178};
-                }
-                else if (!def.default_resolutions.empty()) {
-                    default_resolution = def.default_resolutions.back();
-                }
-                if (!default_resolution.empty()) {
-                    add_mpi_scaling_target(def, default_resolution);
-                }
-            }
-            return runs;
-        }
-
-        const auto sim_bubble = find_case("shock_bubble_2d", "test6", "SIM_MPI").value();
-        const auto dim_bubble = find_case("shock_bubble_2d", "test6", "DIM_MPI").value();
-        if (!explicit_methods || contains_method(args.methods, "SIM_MPI")) {
-            add_mpi_scaling_target(sim_bubble, {1300, 178});
-        }
-        if (!explicit_methods || contains_method(args.methods, "DIM_MPI")) {
-            add_mpi_scaling_target(dim_bubble, {1300, 178});
-        }
-
-        if (explicit_methods && contains_method(args.methods, "SM_MPI")) {
-            const auto sm = find_case("toro_explosion_3d", "explosion2", "SM_MPI").value();
-            add_mpi_scaling_target(sm, {50, 50, 50});
-        }
-        return runs;
-    }
-
-    if (args.scaling != "openmp_threads") {
+    if (scaling_mode != "openmp_threads") {
         return runs;
     }
 
@@ -900,21 +710,27 @@ std::vector<RunSpec> build_scaling_runs(const Args& args)
     };
     for (const auto& target : targets) {
         const auto def = find_case(std::get<0>(target), std::get<1>(target), std::get<2>(target)).value();
-        for (int threads : {1, 2, 4, 8, 16, 32}) {
-            RunSpec run;
-            run.case_def = def;
-            run.resolution = std::get<3>(target);
-            run.omp_threads = threads;
-            run.mpi_ranks = args.mpi_ranks;
-            run.timing_only = true;
-            run.scaling = args.scaling;
-            run.parameter_name = "omp_threads";
-            run.parameter_value = std::to_string(threads);
-            run.output_prefix =
-                "quant_scaling_" + method_prefix(def.method) + "_" + def.label +
-                "_" + resolution_label(run.resolution) + "_omp" + std::to_string(threads);
-            run.run_id = make_run_id(def, run.resolution, threads, run.parameter_name, run.parameter_value);
-            runs.push_back(run);
+        const std::vector<std::vector<int>> resolutions =
+            args.resolutions.empty()
+                ? std::vector<std::vector<int>>{std::get<3>(target)}
+                : preset_resolutions(args, def);
+        for (const auto& resolution : resolutions) {
+            for (int threads : {1, 2, 4, 8, 16, 32}) {
+                RunSpec run;
+                run.case_def = def;
+                run.resolution = resolution;
+                run.omp_threads = threads;
+                run.mpi_ranks = 1;
+                run.timing_only = true;
+                run.scaling = scaling_mode;
+                run.parameter_name = "omp_threads";
+                run.parameter_value = std::to_string(threads);
+                run.output_prefix =
+                    "quant_scaling_" + method_prefix(def.method) + "_" + def.label +
+                    "_" + resolution_label(run.resolution) + "_omp" + std::to_string(threads);
+                run.run_id = make_run_id(def, run.resolution, threads, run.parameter_name, run.parameter_value);
+                runs.push_back(run);
+            }
         }
     }
     return runs;

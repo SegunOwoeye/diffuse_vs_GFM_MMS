@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "src/core/openmp_policy.hpp"
 #include "src/dim/primitives.hpp"
 
 namespace dim {
@@ -41,7 +42,7 @@ namespace dim {
 
         double dt = dt_max;
 
-        #pragma omp parallel for reduction(min:dt)
+        #pragma omp parallel for reduction(min:dt) schedule(static) if(runtime::openmp_should_parallelize_cells(U.size()))
         for (int i = 0; i < static_cast<int>(U.size()); ++i) {
             const Primitive<DIM> P = cons_to_prim<DIM>(U[i], params);
             const double c = MixtureEOS::generic_mixture_sound_speed(
@@ -89,7 +90,7 @@ namespace dim {
 
         double dt = dt_max;
 
-        #pragma omp parallel for reduction(min:dt)
+        #pragma omp parallel for reduction(min:dt) schedule(static) if(runtime::openmp_should_parallelize_cells(U.size()))
         for (int i = 0; i < static_cast<int>(U.size()); ++i) {
             const Primitive<DIM> P = cons_to_prim<DIM>(U[i], params);
             const double c = MixtureEOS::generic_mixture_sound_speed(

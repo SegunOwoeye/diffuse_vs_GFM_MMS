@@ -105,7 +105,7 @@ inline void write_csv(
         }
     }
 
-    // [2] Format rows in bounded parallel batches, then write in order.
+    // [2] Format rows in bounded batches, then write in order.
     const int block_size = 4096;
     const int batch_blocks = 32;
     const int num_blocks = (total_cells + block_size - 1) / block_size;
@@ -114,7 +114,6 @@ inline void write_csv(
         const int block_count = std::min(batch_blocks, num_blocks - block0);
         std::vector<std::string> blocks(block_count);
 
-        #pragma omp parallel for schedule(static)
         for (int local_block = 0; local_block < block_count; ++local_block) {
             const int block = block0 + local_block;
             const int begin = block * block_size;
@@ -168,4 +167,3 @@ inline void write_csv(
         }
     }
 }
-

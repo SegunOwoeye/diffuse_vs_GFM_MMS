@@ -43,7 +43,7 @@ SENSITIVITY_ROWS = [
 ]
 
 PERFORMANCE_ROWS = [
-    RunRow("Performance Runs", "2D helium bubble MPI rank scaling", "--scaling mpi_ranks --case bubble --methods SIM_MPI,DIM_MPI", "results/quantitative/report_selected_mpi_scaling", "performance summary and PNG output", "Main speedup evidence"),
+    RunRow("Performance Runs", "2D helium bubble OpenMP thread scaling", "--scaling openmp_threads --case bubble --methods SIM,DIM", "results/quantitative/report_selected_openmp_scaling", "performance summary and PNG output", "Main speedup evidence"),
     RunRow("Performance Runs", "Additional scaling for long one-core cases", "To be selected after first runtime pass", "", "runtime files and performance summaries", "Add only for cases with one-core runtime above about 60 seconds", "Optional", "Optional"),
 ]
 
@@ -143,16 +143,16 @@ def render() -> str:
         "",
         "# [0] Parallel Execution",
         "",
-        "The one-stop runner currently defaults to one MPI rank and one OpenMP thread per rank:",
+        "The one-stop runner now uses the serial/OpenMP solver path. MPI report paths are deprecated:",
         "",
         "```bash",
         "scripts/run_report2_selected_suite.sh",
         "```",
         "",
-        "On the university machine, use MPI ranks for the production solver path:",
+        "On the university machine, use OpenMP threads for the production solver path:",
         "",
         "```bash",
-        "scripts/run_report2_selected_suite.sh --mpi-ranks 32 --omp-threads 1",
+        "scripts/run_report2_selected_suite.sh --omp-threads 32",
         "```",
         "",
         "For a faster partial run:",

@@ -7,6 +7,7 @@
 #include <string>
 
 #include "src/core/phase_timings.hpp"
+#include "src/core/openmp_runtime.hpp"
 #include "src/io/config.hpp"
 
 namespace app_io {
@@ -69,7 +70,8 @@ namespace app_io {
         int steps,
         double final_time,
         double wall_seconds,
-        const SolverPhaseTimings* phase_timings = nullptr
+        const SolverPhaseTimings* phase_timings = nullptr,
+        const runtime::OpenMPRuntimeInfo* openmp_runtime = nullptr
     )
     {
         const std::filesystem::path filename =
@@ -108,6 +110,30 @@ namespace app_io {
         file << "wall_time_seconds = " << wall_seconds << "\n";
         file << "cost_per_cell_update_seconds = "
              << cost_per_cell_update << "\n";
+        if (openmp_runtime != nullptr) {
+            file << "openmp_compiled = "
+                 << (openmp_runtime->compiled ? "true" : "false") << "\n";
+            file << "openmp_num_threads_env = "
+                 << openmp_runtime->num_threads_env << "\n";
+            file << "openmp_max_threads = "
+                 << openmp_runtime->max_threads << "\n";
+            file << "openmp_observed_threads = "
+                 << openmp_runtime->observed_threads << "\n";
+            file << "openmp_dynamic_enabled = "
+                 << openmp_runtime->dynamic_enabled << "\n";
+            file << "openmp_proc_bind_env = "
+                 << openmp_runtime->proc_bind_env << "\n";
+            file << "openmp_places_env = "
+                 << openmp_runtime->places_env << "\n";
+            file << "openmp_schedule_env = "
+                 << openmp_runtime->schedule_env << "\n";
+            file << "quant_cpu_list_env = "
+                 << openmp_runtime->quant_cpu_list_env << "\n";
+            file << "cpus_allowed_list = "
+                 << openmp_runtime->cpus_allowed_list << "\n";
+            file << "openmp_thread_cpus_allowed_lists = "
+                 << openmp_runtime->thread_cpus_allowed_lists << "\n";
+        }
         if (phase_timings != nullptr) {
             file << "phase_cfl_seconds = " << phase_timings->cfl_seconds << "\n";
             file << "phase_sweep_seconds = " << phase_timings->sweep_seconds << "\n";
@@ -122,7 +148,4 @@ namespace app_io {
     }
 
 }
-
-
-
 

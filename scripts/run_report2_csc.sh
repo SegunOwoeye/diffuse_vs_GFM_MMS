@@ -3,8 +3,8 @@
 #SBATCH --partition=lsc
 #SBATCH --clusters=CSC
 #SBATCH --nodes=1
-#SBATCH --ntasks=32
-#SBATCH --cpus-per-task=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=32
 #SBATCH --time=24:00:00
 #SBATCH --account=oo338
 #SBATCH --output=report2_csc-%j.out
@@ -13,7 +13,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-omp_threads=1
+omp_threads=32
 mpi_ranks=32
 result_root_base="results/quantitative"
 conservation_interval=10
@@ -35,22 +35,22 @@ print_help() {
 Run the Report 2 suite with CSC defaults.
 
 Defaults:
-  - 32 MPI ranks
-  - MPI scaling included unless skipped
+  - 32 OpenMP threads
+  - OpenMP scaling included unless skipped
   - account name recorded as oo338
 
 Usage:
   scripts/run_report2_csc.sh [options]
 
 Options:
-  --omp-threads N              OpenMP thread count per MPI rank.
-  --mpi-ranks N                MPI rank count for MPI-backed runs.
+  --omp-threads N              OpenMP thread count for each solver process.
+  --mpi-ranks N                Deprecated compatibility option; ignored by quant_suite.
   --result-root-base PATH      Root for report result directories.
   --conservation-interval N    Step interval for conservation CSV sampling.
   --timeout-seconds N          Timeout per solver run. Use 0 to disable.
   --no-overwrite               Do not clean per-run outputs before rerun.
-  --include-scaling            Include the MPI rank scaling study.
-  --skip-scaling               Explicitly skip MPI rank scaling.
+  --include-scaling            Include the OpenMP thread scaling study.
+  --skip-scaling               Explicitly skip OpenMP thread scaling.
   --skip-3d                    Skip the 3D report cases.
   --include-gorsse-3d          Legacy option retained for compatibility.
   --skip-postprocess           Skip plotting, tracker update, and organizer.
@@ -184,7 +184,6 @@ done
 
 args=(
     --omp-threads "$omp_threads"
-    --mpi-ranks "$mpi_ranks"
     --result-root-base "$result_root_base"
     --conservation-interval "$conservation_interval"
     --timeout-seconds "$timeout_seconds"
@@ -224,5 +223,5 @@ if [[ "$bootstrap_python" == true ]]; then
     .venv/bin/python -m pip install numpy pandas matplotlib openpyxl
 fi
 
-echo "[csc] account=${account_name} mpi_ranks=${mpi_ranks} omp_threads_per_rank=${omp_threads}"
+echo "[csc] account=${account_name} omp_threads=${omp_threads}"
 exec scripts/run_report2_selected_suite.sh "${args[@]}"
