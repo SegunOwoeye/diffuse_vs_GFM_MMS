@@ -1304,7 +1304,7 @@ def main() -> None:
         global_dir,
         schlieren_scale=helium_schlieren_scale,
     )
-    plot_performance(base / "report_selected_mpi_scaling", global_dir)
+    plot_performance(base / "report_selected_openmp_scaling", global_dir)
 
 
 if __name__ == "__main__":

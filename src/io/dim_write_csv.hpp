@@ -59,7 +59,7 @@ namespace dim {
 
         file << "\n";
 
-        // [1.3] Format rows in bounded parallel batches, then write in order.
+        // [1.3] Format rows in bounded batches, then write in order.
         const int total_cells = static_cast<int>(U.size());
         const int block_size = 4096;
         const int batch_blocks = 32;
@@ -69,7 +69,6 @@ namespace dim {
             const int block_count = std::min(batch_blocks, num_blocks - block0);
             std::vector<std::string> blocks(block_count);
 
-            #pragma omp parallel for schedule(static)
             for (int local_block = 0; local_block < block_count; ++local_block) {
                 const int block = block0 + local_block;
                 const int begin = block * block_size;
@@ -126,4 +125,3 @@ namespace dim {
     }
 
 }
-

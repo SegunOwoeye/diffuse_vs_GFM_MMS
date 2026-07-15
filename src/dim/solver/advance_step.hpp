@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "src/core/phase_timings.hpp"
+#include "src/core/openmp_policy.hpp"
 #include "src/dim/solver/cfl.hpp"
 #include "src/dim/solver/advance/boundary.hpp"
 #include "src/dim/solver/advance/geometry.hpp"
@@ -78,7 +79,7 @@ namespace dim {
                                         const std::vector<State<DIM>>& U_dir,
                                         const std::vector<State<DIM>>& U_base)
             {
-                #pragma omp parallel for if(static_cast<int>(U_base.size()) > 512)
+                #pragma omp parallel for if(runtime::openmp_should_parallelize_cells(U_base.size()))
                 for (int id = 0; id < static_cast<int>(U_base.size()); ++id) {
                     for (int k = 0; k < static_cast<int>(U_base[id].partial_mass.size()); ++k) {
                         U_accum[id].partial_mass[k] +=

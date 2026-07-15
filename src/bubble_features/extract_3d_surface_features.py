@@ -100,23 +100,6 @@ def marching_cubes_surface(
     return coords, faces
 
 
-def axial_feature_points(coords: np.ndarray) -> dict[str, tuple[float, float, float]]:
-    """Find clean front/back axial markers for the rendered surface."""
-
-    radius = np.hypot(coords[:, 1], coords[:, 2])
-    near_axis_tol = max(1.25, float(np.quantile(radius, 0.015)))
-    near_axis = coords[radius <= near_axis_tol]
-    if len(near_axis) < 10:
-        near_axis = coords
-
-    upstream_x0 = float(np.max(near_axis[:, 0]))
-    downstream_x0 = float(np.min(near_axis[:, 0]))
-    return {
-        "upstream interface": (upstream_x0, 0.0, 0.0),
-        "downstream interface": (downstream_x0, 0.0, 0.0),
-    }
-
-
 def set_equal_axes(ax, coords: np.ndarray, pad: float = 4.0) -> None:
     """Use equal 3D scaling around the interface, not the whole simulation box."""
 
@@ -156,14 +139,6 @@ def save_static_surface(
         shade=True,
     )
 
-    x_min = float(coords[:, 0].min())
-    x_max = float(coords[:, 0].max())
-    ax.plot([x_min, x_max], [0.0, 0.0], [0.0, 0.0], linewidth=1.1, alpha=0.75)
-
-    for label, point in axial_feature_points(coords).items():
-        x0, x1, x2 = point
-        ax.scatter([x0], [x1], [x2], s=100, edgecolors="black", linewidths=0.8, label=label)
-
     ax.set_title(title, pad=16)
     ax.set_xlabel("x0, shock direction [mm]", labelpad=8)
     ax.set_ylabel("x1 [mm]", labelpad=8)
@@ -171,7 +146,6 @@ def save_static_surface(
     set_equal_axes(ax, coords)
     ax.view_init(elev=view[0], azim=view[1])
     ax.grid(False)
-    ax.legend(loc="upper right", fontsize=8)
     fig.tight_layout()
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
@@ -198,26 +172,6 @@ def save_interactive_surface(coords: np.ndarray, faces: np.ndarray, output_path:
         name="interface surface",
         flatshading=False,
         showscale=False,
-    ))
-
-    for label, point in axial_feature_points(coords).items():
-        x0, x1, x2 = point
-        fig.add_trace(go.Scatter3d(
-            x=[x0],
-            y=[x1],
-            z=[x2],
-            mode="markers+text",
-            text=[label],
-            textposition="top center",
-            name=label,
-        ))
-
-    fig.add_trace(go.Scatter3d(
-        x=[float(coords[:, 0].min()), float(coords[:, 0].max())],
-        y=[0.0, 0.0],
-        z=[0.0, 0.0],
-        mode="lines",
-        name="symmetry axis",
     ))
 
     fig.update_layout(

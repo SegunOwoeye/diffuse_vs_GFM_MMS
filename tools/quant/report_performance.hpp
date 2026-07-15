@@ -62,62 +62,26 @@ inline PerformanceReportTables build_performance_reports(
     const std::string dim_throughput = median_text(
         stats.throughput_by_method.count("DIM") ? stats.throughput_by_method.at("DIM") : std::vector<double>{}
     );
-    const std::string sm_mpi_throughput = median_text(
-        stats.throughput_by_method.count("SM_MPI") ? stats.throughput_by_method.at("SM_MPI") : std::vector<double>{}
-    );
-    const std::string sim_mpi_throughput = median_text(
-        stats.throughput_by_method.count("SIM_MPI") ? stats.throughput_by_method.at("SIM_MPI") : std::vector<double>{}
-    );
-    const std::string dim_mpi_throughput = median_text(
-        stats.throughput_by_method.count("DIM_MPI") ? stats.throughput_by_method.at("DIM_MPI") : std::vector<double>{}
-    );
     std::string speedup;
     if (!sim_throughput.empty() && !dim_throughput.empty() && std::stod(dim_throughput) > 0.0) {
         speedup = double_text(std::stod(sim_throughput) / std::stod(dim_throughput));
-    }
-    std::string sm_mpi_over_common_speedup;
-    if (!sm_mpi_throughput.empty() && !common_throughput.empty() && std::stod(common_throughput) > 0.0) {
-        sm_mpi_over_common_speedup = double_text(std::stod(sm_mpi_throughput) / std::stod(common_throughput));
-    }
-    std::string sim_mpi_over_sim_speedup;
-    if (!sim_mpi_throughput.empty() && !sim_throughput.empty() && std::stod(sim_throughput) > 0.0) {
-        sim_mpi_over_sim_speedup = double_text(std::stod(sim_mpi_throughput) / std::stod(sim_throughput));
-    }
-    std::string dim_mpi_over_dim_speedup;
-    if (!dim_mpi_throughput.empty() && !dim_throughput.empty() && std::stod(dim_throughput) > 0.0) {
-        dim_mpi_over_dim_speedup = double_text(std::stod(dim_mpi_throughput) / std::stod(dim_throughput));
     }
 
     performance_report_rows.push_back({
         {"case", stats.case_label},
         {"resolution", stats.resolution},
         {"common_cell_updates_per_second_median", common_throughput},
-        {"SM_MPI_cell_updates_per_second_median", sm_mpi_throughput},
         {"SIM_cell_updates_per_second_median", sim_throughput},
-        {"SIM_MPI_cell_updates_per_second_median", sim_mpi_throughput},
         {"DIM_cell_updates_per_second_median", dim_throughput},
-        {"DIM_MPI_cell_updates_per_second_median", dim_mpi_throughput},
         {"SIM_over_DIM_speedup", speedup},
-        {"SM_MPI_over_common_speedup", sm_mpi_over_common_speedup},
-        {"SIM_MPI_over_SIM_speedup", sim_mpi_over_sim_speedup},
-        {"DIM_MPI_over_DIM_speedup", dim_mpi_over_dim_speedup},
         {"common_wall_time_seconds_median", median_text(
             stats.wall_by_method.count("common") ? stats.wall_by_method.at("common") : std::vector<double>{}
-        )},
-        {"SM_MPI_wall_time_seconds_median", median_text(
-            stats.wall_by_method.count("SM_MPI") ? stats.wall_by_method.at("SM_MPI") : std::vector<double>{}
         )},
         {"SIM_wall_time_seconds_median", median_text(
             stats.wall_by_method.count("SIM") ? stats.wall_by_method.at("SIM") : std::vector<double>{}
         )},
-        {"SIM_MPI_wall_time_seconds_median", median_text(
-            stats.wall_by_method.count("SIM_MPI") ? stats.wall_by_method.at("SIM_MPI") : std::vector<double>{}
-        )},
         {"DIM_wall_time_seconds_median", median_text(
             stats.wall_by_method.count("DIM") ? stats.wall_by_method.at("DIM") : std::vector<double>{}
-        )},
-        {"DIM_MPI_wall_time_seconds_median", median_text(
-            stats.wall_by_method.count("DIM_MPI") ? stats.wall_by_method.at("DIM_MPI") : std::vector<double>{}
         )},
         {"SIM_cost_per_cell_update_seconds_median", median_text(
             stats.cost_per_cell_by_method.count("SIM") ? stats.cost_per_cell_by_method.at("SIM") : std::vector<double>{}
@@ -128,20 +92,11 @@ inline PerformanceReportTables build_performance_reports(
         {"common_repeat_count", std::to_string(
             stats.repeat_count_by_method.count("common") ? stats.repeat_count_by_method.at("common") : 0
         )},
-        {"SM_MPI_repeat_count", std::to_string(
-            stats.repeat_count_by_method.count("SM_MPI") ? stats.repeat_count_by_method.at("SM_MPI") : 0
-        )},
         {"SIM_repeat_count", std::to_string(
             stats.repeat_count_by_method.count("SIM") ? stats.repeat_count_by_method.at("SIM") : 0
         )},
-        {"SIM_MPI_repeat_count", std::to_string(
-            stats.repeat_count_by_method.count("SIM_MPI") ? stats.repeat_count_by_method.at("SIM_MPI") : 0
-        )},
         {"DIM_repeat_count", std::to_string(
             stats.repeat_count_by_method.count("DIM") ? stats.repeat_count_by_method.at("DIM") : 0
-        )},
-        {"DIM_MPI_repeat_count", std::to_string(
-            stats.repeat_count_by_method.count("DIM_MPI") ? stats.repeat_count_by_method.at("DIM_MPI") : 0
         )},
     });
     }
@@ -169,7 +124,7 @@ inline PerformanceReportTables build_performance_reports(
     {"compiler_flags", "-std=c++17 -O2 -fopenmp -I."},
     {"build_type", "Release"},
     {"omp_threads", std::to_string(runs.empty() ? 0 : runs.front().omp_threads)},
-    {"mpi_ranks", std::to_string(runs.empty() ? 0 : runs.front().mpi_ranks)},
+    {"processes", "1"},
     {"benchmark_mode", runs.empty() ? std::string{} : runs.front().benchmark_mode},
     {"benchmark_repeats_non_warmup", std::to_string(planned_non_warmups)},
     {"benchmark_warmups", std::to_string(planned_warmups)},

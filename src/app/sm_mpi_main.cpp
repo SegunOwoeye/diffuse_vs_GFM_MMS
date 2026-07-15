@@ -1,3 +1,7 @@
+#ifndef ENABLE_LEGACY_MPI_APPS
+#error "Legacy MPI app entry points are disabled. Use the serial/OpenMP report workflow instead, or define ENABLE_LEGACY_MPI_APPS explicitly for historical MPI experiments."
+#endif
+
 #include <mpi.h>
 
 #include <algorithm>

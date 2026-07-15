@@ -1,9 +1,5 @@
 #pragma once
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 #include <vector>
 #include <array>
 #include <limits>
@@ -36,7 +32,6 @@ inline std::vector<double> build_projected_normal_speed_field(
 
     std::vector<double> Vn(Ntot, 0.0);
 
-    #pragma omp parallel for
     for (int i = 0; i < Ntot; ++i) {
         Vn[i] = dot<DIM>(vel[i], normals[i]);
     }
@@ -342,7 +337,6 @@ inline std::vector<std::vector<double>> build_interface_normal_speed_fields(
     }
 
     // [5.3] Overwrite interface-adjacent cells with averaged interface speed
-    #pragma omp parallel for collapse(2)
     for (int k = 0; k < nphi; ++k) {
         for (int id = 0; id < Ntot; ++id) {
             if (Vn_count[k][id] > 0) {

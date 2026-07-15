@@ -173,7 +173,6 @@ namespace dim {
         const int total = static_cast<int>(U.size());
         const auto stride = compute_strides<DIM>(N);
 
-        #pragma omp parallel for
         for (int linear = 0; linear < total; ++linear) {
             const auto idx = unflatten_index<DIM>(linear, N);
             std::array<int, DIM> src_idx = idx;

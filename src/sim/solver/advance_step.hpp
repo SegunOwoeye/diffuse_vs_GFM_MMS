@@ -8,10 +8,6 @@
 #include <limits>
 #include <stdexcept>
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-
 #include "src/euler/state.hpp"
 #include "src/core/phase_timings.hpp"
 #include "src/euler/eos.hpp"
@@ -58,7 +54,6 @@ inline std::vector<std::array<double, DIM>> build_velocity_field(
 
     std::vector<std::array<double, DIM>> vel(Ntot);
 
-    #pragma omp parallel for
     for (int i = 0; i < Ntot; ++i) {
 
         const int mat = material_id.empty() ? 0 : material_id[i];
@@ -91,7 +86,6 @@ inline std::vector<std::array<double, DIM>> build_level_set_transport_velocity(
 
     std::vector<std::array<double, DIM>> vel_ls(Ntot);
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         for (int d = 0; d < DIM; ++d) {
             vel_ls[id][d] = normal_speed[id] * normals[id][d];
@@ -177,7 +171,6 @@ inline void rebuild_tracked_level_sets_from_material_map_1d(
                 );
             }
 
-            #pragma omp parallel for
             for (int i = 0; i < Nx; ++i) {
                 const double x = (static_cast<double>(i) + 0.5) * ctx.dx[0];
                 double best_dist = std::abs(x - boundaries[0]);
@@ -366,7 +359,6 @@ inline void project_planar_level_set(
         }
     }
 
-    #pragma omp parallel for
     for (int id = 0; id < Ntot; ++id) {
         const auto idx = unflatten_index<DIM>(id, ctx.level_set_grid);
         phi[id] = sum[idx[axis]];
@@ -443,7 +435,6 @@ inline void zero_roundoff_planar_transverse_momentum(
             continue;
         }
 
-        #pragma omp parallel for if(static_cast<int>(U.size()) > 512)
         for (int id = 0; id < static_cast<int>(U.size()); ++id) {
             U[id].mom[d] = 0.0;
         }
@@ -481,7 +472,6 @@ inline void enforce_level_set_sign_from_material_map(
             );
         }
 
-        #pragma omp parallel for if(Ntot > 512)
         for (int id = 0; id < Ntot; ++id) {
             const double magnitude = std::max(std::abs(phi_list[k][id]), sign_floor);
             phi_list[k][id] = tracked_interface_contains_negative_material(
@@ -576,7 +566,6 @@ inline StepResult<DIM> advance_one_step(
         ctx.phi_list.size()
     );
 
-    #pragma omp parallel for
     for (int k = 0; k < static_cast<int>(ctx.phi_list.size()); ++k) {
         normals_current[k] =
             compute_solver_normals<DIM>(
@@ -756,7 +745,6 @@ inline StepResult<DIM> advance_one_step(
                 );
         }
 
-        #pragma omp parallel for
         for (int k = 0; k < static_cast<int>(phi_list_work.size()); ++k) {
             if (use_vector_level_set_transport) {
                 phi_list_work[k] = advect_phi<DIM>(
@@ -790,7 +778,6 @@ inline StepResult<DIM> advance_one_step(
     if (ctx.reinit_enabled &&
         ((ctx.completed_steps + 1) % ctx.reinit_frequency == 0))
     {
-        #pragma omp parallel for
         for (int k = 0; k < static_cast<int>(phi_list_work.size()); ++k) {
 
             phi_list_work[k] =

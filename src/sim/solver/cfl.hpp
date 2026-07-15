@@ -11,6 +11,7 @@
 #include "src/euler/thermo_compute.hpp"
 #include "src/euler/eos.hpp"
 #include "src/euler/eos_params.hpp"
+#include "src/core/openmp_policy.hpp"
 
 
 // [0] Compute Stable CFL Timestep for a Single EOS Family
@@ -43,7 +44,7 @@ inline double compute_dt_cfl(
 
     double dt = dt_max;
 
-    #pragma omp parallel for reduction(min:dt)
+    #pragma omp parallel for reduction(min:dt) schedule(static) if(runtime::openmp_should_parallelize_cells(U.size()))
     for (std::size_t i = 0; i < U.size(); ++i) {
         const auto& Ui = U[i];
         const ThermoState<DIM> T = compute_thermo<DIM, EOS>(Ui, params);
@@ -100,7 +101,7 @@ inline double compute_dt_cfl_materials(
 
     double dt = dt_max;
 
-    #pragma omp parallel for reduction(min:dt)
+    #pragma omp parallel for reduction(min:dt) schedule(static) if(runtime::openmp_should_parallelize_cells(U.size()))
     for (std::size_t i = 0; i < U.size(); ++i) {
         const int mat = material_id[i];
 
@@ -157,7 +158,7 @@ inline double compute_dt_cfl_materials_unsplit(
 
     double dt = dt_max;
 
-    #pragma omp parallel for reduction(min:dt)
+    #pragma omp parallel for reduction(min:dt) schedule(static) if(runtime::openmp_should_parallelize_cells(U.size()))
     for (std::size_t i = 0; i < U.size(); ++i) {
         const int mat = material_id[i];
 

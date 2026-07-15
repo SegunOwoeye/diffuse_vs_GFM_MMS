@@ -41,3 +41,8 @@ mm_main_3d
 /tools/diagnostics
 multimaterial_main_2d
 multimaterial_main_1d
+/results_old
+rgfm_mpi_main_3d
+sm_mpi_main_3d
+/results14072026
+dim_mpi_main_3d

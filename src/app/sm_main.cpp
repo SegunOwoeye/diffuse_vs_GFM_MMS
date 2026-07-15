@@ -95,6 +95,8 @@ int main(int argc, char** argv)
             }
             std::cout << "\n";
 
+            const auto openmp_runtime = runtime::observe_openmp_runtime();
+
             
             // [3.1] Initialise
             std::vector<Conserved<DIM_>> U;
@@ -265,7 +267,8 @@ int main(int argc, char** argv)
                 step,
                 time,
                 wall_seconds,
-                &phase_timings
+                &phase_timings,
+                &openmp_runtime
             );
 
             

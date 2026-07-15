@@ -40,6 +40,7 @@ inline void run_dim_case(
     double time = 0.0;
     int step = 0;
     std::size_t next_output_index = 0;
+    const auto openmp_runtime = runtime::observe_openmp_runtime();
     const auto wall_start = std::chrono::steady_clock::now();
     SolverPhaseTimings phase_timings{};
     const bool track_conservation = app_io::conservation_tracking_enabled();
@@ -169,6 +170,7 @@ inline void run_dim_case(
         step,
         time,
         wall_seconds,
-        &phase_timings
+        &phase_timings,
+        &openmp_runtime
     );
 }
