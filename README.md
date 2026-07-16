@@ -91,6 +91,35 @@ The spatial dimension is selected at compile time using `APP_DIM`.
 
 ## Quick Start
 
+The two supported production entry points are:
+
+```bash
+# Local machine or an interactive SSH shell
+scripts/run_report2_local.sh --suite base --methods SIM,DIM
+
+# University CSC machine, submitted automatically with Slurm
+scripts/run_report2_csc.sh --suite base --methods SIM,DIM --omp-threads 32
+```
+
+Available production suites are `base`, `three-material`, `3d`, `performance`,
+`sensitivity`, and `all`. Both runners accept the same suite and method options.
+List the fixed production cases and resolutions with:
+
+```bash
+scripts/run_report2_local.sh --list
+```
+
+The performance suite supports SIM-only, DIM-only, or combined scaling. Solver
+output for this suite is limited to runtime reports, with manifests and logs kept
+for reproducibility:
+
+```bash
+scripts/run_report2_local.sh \
+    --suite performance \
+    --methods SIM \
+    --scaling-threads 1,2,4,8
+```
+
 Run the single-material validation suite:
 
 ```bash

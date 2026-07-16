@@ -23,13 +23,51 @@ inline bool uses_bubble_feature_diagnostics(const RunSpec& run)
 
 inline bool uses_gorsse_tc9_diagnostics(const RunSpec& run)
 {
-    return run.case_def.group == "gorsse_tc9_water_air_bubble_2d" ||
-           run.case_def.group == "gorsse_tc9_water_air_bubble_2d_lowres";
+    return run.case_def.group == "gorsse_tc9_water_air_bubble_2d";
 }
 
 inline fs::path run_case_dir(const fs::path& result_root, const RunSpec& run)
 {
     return result_root / "raw" / run.run_id / run.output_prefix;
+}
+
+inline std::optional<double> output_time_from_filename(
+    const std::string& name,
+    const std::string& output_prefix,
+    const std::string& resolution_suffix_with_extension
+)
+{
+    const std::string marker = output_prefix + "_t";
+    if (name.find(marker) != 0 ||
+        name.size() <= marker.size() + resolution_suffix_with_extension.size()) {
+        return std::nullopt;
+    }
+
+    std::string encoded = name.substr(
+        marker.size(),
+        name.size() - marker.size() - resolution_suffix_with_extension.size()
+    );
+    const std::size_t exponent = encoded.find('e');
+    if (exponent == std::string::npos) {
+        return std::nullopt;
+    }
+
+    const std::size_t decimal = encoded.find('p');
+    if (decimal == std::string::npos || decimal > exponent) {
+        return std::nullopt;
+    }
+    encoded[decimal] = '.';
+    if (exponent + 1 < encoded.size()) {
+        if (encoded[exponent + 1] == 'p') encoded[exponent + 1] = '+';
+        else if (encoded[exponent + 1] == 'm') encoded[exponent + 1] = '-';
+    }
+
+    try {
+        return std::stod(encoded);
+    }
+    catch (...) {
+        return std::nullopt;
+    }
 }
 
 inline fs::path run_solution_path(const fs::path& result_root, const RunSpec& run)
@@ -40,7 +78,7 @@ inline fs::path run_solution_path(const fs::path& result_root, const RunSpec& ru
         return direct;
     }
 
-    std::vector<fs::path> candidates;
+    std::vector<std::pair<double, fs::path>> candidates;
     const std::string suffix = resolution_suffix(run.resolution) + ".csv";
     if (fs::exists(case_dir)) {
         for (const auto& entry : fs::directory_iterator(case_dir)) {
@@ -58,13 +96,23 @@ inline fs::path run_solution_path(const fs::path& result_root, const RunSpec& ru
                 name.find("exact") != std::string::npos) {
                 continue;
             }
-            candidates.push_back(path);
+            const auto output_time = output_time_from_filename(
+                name,
+                run.output_prefix,
+                suffix
+            );
+            if (output_time.has_value()) {
+                candidates.push_back({output_time.value(), path});
+            }
         }
     }
 
     if (!candidates.empty()) {
-        std::sort(candidates.begin(), candidates.end());
-        return candidates.back();
+        return std::max_element(
+            candidates.begin(),
+            candidates.end(),
+            [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; }
+        )->second;
     }
 
     return direct;

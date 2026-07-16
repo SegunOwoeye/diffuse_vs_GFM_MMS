@@ -1,227 +1,117 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=report2_csc
+#SBATCH --job-name=report2_production
 #SBATCH --partition=lsc
 #SBATCH --clusters=CSC
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
-#SBATCH --time=24:00:00
+#SBATCH --mem=128GB
+#SBATCH --time=48:00:00
 #SBATCH --account=oo338
-#SBATCH --output=report2_csc-%j.out
+#SBATCH --output=report2_production-%j.out
 set -euo pipefail
 
+# [0] Repository
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$repo_root"
+cd "${SLURM_SUBMIT_DIR:-$repo_root}"
 
-omp_threads=32
-mpi_ranks=32
-result_root_base="results/quantitative"
-conservation_interval=10
-timeout_seconds=0
-overwrite=true
-skip_scaling=false
-include_gorsse_3d=false
-skip_3d=false
-skip_postprocess=false
-clean_results=false
-organized_output_dir="results/report2_organized"
-benchmark_repeats=1
-benchmark_warmups=0
-account_name="oo338"
-bootstrap_python=true
-
-print_help() {
-    cat <<'EOF'
-Run the Report 2 suite with CSC defaults.
-
-Defaults:
-  - 32 OpenMP threads
-  - OpenMP scaling included unless skipped
-  - account name recorded as oo338
-
-Usage:
-  scripts/run_report2_csc.sh [options]
-
-Options:
-  --omp-threads N              OpenMP thread count for each solver process.
-  --mpi-ranks N                Deprecated compatibility option; ignored by quant_suite.
-  --result-root-base PATH      Root for report result directories.
-  --conservation-interval N    Step interval for conservation CSV sampling.
-  --timeout-seconds N          Timeout per solver run. Use 0 to disable.
-  --no-overwrite               Do not clean per-run outputs before rerun.
-  --include-scaling            Include the OpenMP thread scaling study.
-  --skip-scaling               Explicitly skip OpenMP thread scaling.
-  --skip-3d                    Skip the 3D report cases.
-  --include-gorsse-3d          Legacy option retained for compatibility.
-  --skip-postprocess           Skip plotting, tracker update, and organizer.
-  --clean-results              Remove selected quantitative result roots before running.
-  --organized-output-dir PATH  Destination for organized report outputs.
-  --benchmark-repeats N        Measured repeats for scaling.
-  --benchmark-warmups N        Warmup repeats for scaling.
-  --account-name NAME          Record the cluster account/user name for notes.
-  --no-bootstrap-python        Do not create/update the local Python venv.
-  --help, -h                   Show this help.
-EOF
-}
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --omp-threads)
-            if [[ $# -lt 2 ]]; then
-            echo "run_report2_csc.sh: --omp-threads requires a value" >&2
-                exit 2
-            fi
-            omp_threads="$2"
-            shift 2
-            ;;
-        --mpi-ranks)
-            if [[ $# -lt 2 ]]; then
-                echo "run_report2_csc.sh: --mpi-ranks requires a value" >&2
-                exit 2
-            fi
-            mpi_ranks="$2"
-            shift 2
-            ;;
-        --result-root-base)
-            if [[ $# -lt 2 ]]; then
-                echo "run_report2_csc.sh: --result-root-base requires a path" >&2
-                exit 2
-            fi
-            result_root_base="$2"
-            shift 2
-            ;;
-        --conservation-interval)
-            if [[ $# -lt 2 ]]; then
-                echo "run_report2_csc.sh: --conservation-interval requires a value" >&2
-                exit 2
-            fi
-            conservation_interval="$2"
-            shift 2
-            ;;
-        --timeout-seconds)
-            if [[ $# -lt 2 ]]; then
-                echo "run_report2_csc.sh: --timeout-seconds requires a value" >&2
-                exit 2
-            fi
-            timeout_seconds="$2"
-            shift 2
-            ;;
-        --no-overwrite)
-            overwrite=false
-            shift
-            ;;
-        --include-scaling)
-            skip_scaling=false
-            shift
-            ;;
-        --skip-scaling)
-            skip_scaling=true
-            shift
-            ;;
-        --include-gorsse-3d)
-            include_gorsse_3d=true
-            shift
-            ;;
-        --skip-3d)
-            skip_3d=true
-            shift
-            ;;
-        --skip-postprocess)
-            skip_postprocess=true
-            shift
-            ;;
-        --clean-results)
-            clean_results=true
-            shift
-            ;;
-        --organized-output-dir)
-            if [[ $# -lt 2 ]]; then
-                echo "run_report2_csc.sh: --organized-output-dir requires a path" >&2
-                exit 2
-            fi
-            organized_output_dir="$2"
-            shift 2
-            ;;
-        --benchmark-repeats)
-            if [[ $# -lt 2 ]]; then
-                echo "run_report2_csc.sh: --benchmark-repeats requires a value" >&2
-                exit 2
-            fi
-            benchmark_repeats="$2"
-            shift 2
-            ;;
-        --benchmark-warmups)
-            if [[ $# -lt 2 ]]; then
-                echo "run_report2_csc.sh: --benchmark-warmups requires a value" >&2
-                exit 2
-            fi
-            benchmark_warmups="$2"
-            shift 2
-            ;;
-        --account-name)
-            if [[ $# -lt 2 ]]; then
-                echo "run_report2_csc.sh: --account-name requires a value" >&2
-                exit 2
-            fi
-            account_name="$2"
-            shift 2
-            ;;
-        --no-bootstrap-python)
-            bootstrap_python=false
-            shift
-            ;;
+# [1] Help And Submission
+show_help=false
+list_only=false
+for argument in "$@"; do
+    case "$argument" in
         --help|-h)
-            print_help
-            exit 0
+            show_help=true
             ;;
-        *)
-            echo "run_report2_csc.sh: unknown argument '$1'" >&2
-            print_help >&2
-            exit 2
+        --list)
+            list_only=true
             ;;
     esac
 done
 
-args=(
-    --omp-threads "$omp_threads"
-    --result-root-base "$result_root_base"
-    --conservation-interval "$conservation_interval"
-    --timeout-seconds "$timeout_seconds"
-    --organized-output-dir "$organized_output_dir"
-    --benchmark-repeats "$benchmark_repeats"
-    --benchmark-warmups "$benchmark_warmups"
-)
+if [[ "$show_help" == true ]]; then
+    cat <<'EOF'
+Run the production studies on the university CSC machine.
 
-if [[ "$overwrite" == false ]]; then
-    args+=("--no-overwrite")
+When called from a login shell this script submits itself with sbatch. Inside an
+existing Slurm allocation it executes immediately. It accepts the same suite and
+method options as scripts/run_report2_local.sh.
+
+Examples:
+  scripts/run_report2_csc.sh --suite base --methods SIM
+  scripts/run_report2_csc.sh --suite three-material,3d --methods SIM,DIM
+  scripts/run_report2_csc.sh --suite performance --methods SIM --scaling-threads 1,2,4,8,16,32
+
+Shared options:
+EOF
+    scripts/run_report2_local.sh --help
+    exit 0
 fi
 
-if [[ "$skip_scaling" == true ]]; then
-    args+=("--skip-scaling")
+if [[ "$list_only" == true && -z "${SLURM_JOB_ID:-}" ]]; then
+    exec scripts/run_report2_local.sh "$@"
 fi
 
-if [[ "$skip_3d" == true ]]; then
-    args+=("--skip-3d")
+if [[ -z "${SLURM_JOB_ID:-}" ]]; then
+    if ! command -v sbatch >/dev/null 2>&1; then
+        echo "run_report2_csc.sh: sbatch is unavailable; run this script on CSC" >&2
+        exit 2
+    fi
+    exec sbatch "$0" "$@"
 fi
 
-if [[ "$skip_postprocess" == true ]]; then
-    args+=("--skip-plots" "--skip-organize")
+# [2] Resource Validation
+requested_omp_threads=32
+scaling_threads="1,2,4,8,16,32"
+args=("$@")
+for ((index = 0; index < ${#args[@]}; ++index)); do
+    case "${args[$index]}" in
+        --omp-threads)
+            if ((index + 1 >= ${#args[@]})); then
+                echo "run_report2_csc.sh: --omp-threads requires a value" >&2
+                exit 2
+            fi
+            requested_omp_threads="${args[$((index + 1))]}"
+            ;;
+        --scaling-threads)
+            if ((index + 1 >= ${#args[@]})); then
+                echo "run_report2_csc.sh: --scaling-threads requires a value" >&2
+                exit 2
+            fi
+            scaling_threads="${args[$((index + 1))]}"
+            ;;
+    esac
+done
+
+allocated_cpus="${SLURM_CPUS_PER_TASK:-1}"
+if [[ ! "$requested_omp_threads" =~ ^[0-9]+$ || "$requested_omp_threads" -lt 1 ]]; then
+    echo "run_report2_csc.sh: --omp-threads must be a positive integer" >&2
+    exit 2
+fi
+if ((requested_omp_threads > allocated_cpus)); then
+    echo "run_report2_csc.sh: requested $requested_omp_threads OpenMP threads but Slurm allocated $allocated_cpus" >&2
+    exit 2
 fi
 
-if [[ "$clean_results" == true ]]; then
-    args+=("--clean-results")
+max_scaling_threads=0
+IFS=',' read -r -a scaling_values <<< "$scaling_threads"
+for value in "${scaling_values[@]}"; do
+    if [[ ! "$value" =~ ^[0-9]+$ || "$value" -lt 1 ]]; then
+        echo "run_report2_csc.sh: invalid scaling thread count '$value'" >&2
+        exit 2
+    fi
+    ((value > max_scaling_threads)) && max_scaling_threads="$value"
+done
+if ((max_scaling_threads > allocated_cpus)); then
+    echo "run_report2_csc.sh: scaling requests $max_scaling_threads threads but Slurm allocated $allocated_cpus" >&2
+    exit 2
 fi
 
-if [[ "$include_gorsse_3d" == true ]]; then
-    echo "[csc] --include-gorsse-3d is retained for compatibility; the full selected suite includes 3D Gorsse unless --skip-3d is used"
-fi
+# [3] OpenMP Environment
+export OMP_NUM_THREADS="$requested_omp_threads"
+export OMP_DYNAMIC=FALSE
+export OMP_PROC_BIND="${OMP_PROC_BIND:-close}"
+export OMP_PLACES="${OMP_PLACES:-cores}"
 
-if [[ "$bootstrap_python" == true ]]; then
-    echo "[csc] preparing Python environment"
-    python3 -m venv .venv
-    .venv/bin/python -m pip install --upgrade pip
-    .venv/bin/python -m pip install numpy pandas matplotlib openpyxl
-fi
-
-echo "[csc] account=${account_name} omp_threads=${omp_threads}"
-exec scripts/run_report2_selected_suite.sh "${args[@]}"
+echo "[csc] job=${SLURM_JOB_ID} cpus_per_task=${allocated_cpus} omp_threads=${requested_omp_threads}"
+exec scripts/run_report2_local.sh "$@"

@@ -38,6 +38,7 @@ Args parse_args(int argc, char** argv)
         if (key == "--preset") args.preset = next();
         else if (key == "--dry-run") args.dry_run = true;
         else if (key == "--overwrite") args.overwrite = true;
+        else if (key == "--resume") args.resume = true;
         else if (key == "--collect-only") args.collect_only = true;
         else if (key == "--all-core") args.all_core = true;
         else if (key == "--result-root") args.result_root = next();
@@ -59,9 +60,18 @@ Args parse_args(int argc, char** argv)
         else if (key == "--sensitivity") args.sensitivity = next();
         else if (key == "--scaling") args.scaling = next();
         else if (key == "--omp-threads") args.omp_threads = std::stoi(next());
-        else if (key == "--mpi-ranks") {
-            (void)next();
-            args.mpi_ranks = 1;
+        else if (key == "--scaling-threads") {
+            args.scaling_threads.clear();
+            for (const auto& value : split_cli_list(next())) {
+                const int threads = std::stoi(value);
+                if (threads <= 0) {
+                    throw std::runtime_error("scaling thread counts must be positive");
+                }
+                args.scaling_threads.push_back(threads);
+            }
+            if (args.scaling_threads.empty()) {
+                throw std::runtime_error("--scaling-threads requires at least one value");
+            }
         }
         else if (key == "--timeout-seconds") args.timeout_seconds = std::stoi(next());
         else if (key == "--conservation-interval") args.conservation_interval = std::stoi(next());
@@ -73,16 +83,17 @@ Args parse_args(int argc, char** argv)
                 << "Usage: tools/quant_suite [options]\n"
                 << "  --preset quick|full\n"
                 << "  --dry-run\n"
+                << "  --resume (skip runs with successful metadata)\n"
                 << "  --collect-only (rebuild summaries from existing run output)\n"
                 << "  --all-core (Toro1, FedkiwD2 1D, oblique FedkiwD2, shock bubble)\n"
-                << "  --case/--cases toro|toro_1d|explosion2d|explosion3d|fedkiw|planar|oblique|shock_bubble|bubble_reinit|water_air_bubble|gorsse_tc9|gorsse_tc9_lowres|he2023_three_material|he2023_three_material_1d|he2023_triple_point|gorsse_tc9_3d|bubble_zero_velocity|bubble_zero_velocity_physical_flow|bubble_zero_velocity_input_mean_star|bubble_zero_velocity_zero_star|bubble_static|bubble3d [case]\n"
-                << "  --method/--methods DIM SIM common (legacy *_MPI aliases map to these serial/OpenMP methods)\n"
+                << "  --case/--cases toro|toro_1d|explosion2d|explosion3d|fedkiw|planar|oblique|shock_bubble|bubble_reinit|water_air_bubble|gorsse_tc9|he2023_three_material|he2023_three_material_1d|he2023_triple_point|gorsse_tc9_3d|bubble_zero_velocity|bubble_zero_velocity_physical_flow|bubble_zero_velocity_input_mean_star|bubble_zero_velocity_zero_star|bubble_static|bubble3d [case]\n"
+                << "  --method/--methods DIM SIM common\n"
                 << "  --resolutions 100 200 400, or 100,200,400, or 325x45,650x89\n"
-                << "  --sensitivity dim_epsilon|dim_epsilon_bubble|dim_alpha|sim_reinit|sim_reinit_bubble\n"
+                << "  --sensitivity dim_epsilon|dim_epsilon_bubble|dim_alpha|dim_alpha_bubble|sim_reinit|sim_reinit_bubble\n"
                 << "      dim_epsilon and sim_reinit include legacy reference extras; *_bubble modes run helium bubble only\n"
                 << "  --scaling openmp_threads (2D helium bubble DIM/SIM at 1,2,4,8,16,32 threads)\n"
+                << "  --scaling-threads 1,2,4,8,16,32\n"
                 << "  --omp-threads N\n"
-                << "  --mpi-ranks N (deprecated compatibility option; ignored)\n"
                 << "  --benchmark-mode NAME (default standard; use clean for controlled timing)\n"
                 << "  --benchmark-warmups N (default 0)\n"
                 << "  --benchmark-repeats N measured repeats (default 1)\n"
