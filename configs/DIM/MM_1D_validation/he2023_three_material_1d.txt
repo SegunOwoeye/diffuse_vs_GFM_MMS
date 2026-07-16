@@ -1,0 +1,38 @@
+# [0] Problem
+dimension = 1
+
+# [1] Domain
+domain_min = [0.0]
+domain_max = [1.0]
+N = [2000]
+
+# [2] Time
+tfinal = 0.2
+output_times = [0.0, 0.05, 0.1, 0.15, 0.2]
+cfl = 0.2
+
+# [3] Interface Method
+interface_method = DIM
+time_update = split
+use_level_set = false
+interface_thickness = 0.0005
+dim_lambda_model = allaire
+
+# [4] Boundary Conditions
+bc_lo = [reflective]
+bc_hi = [reflective]
+
+# [5] Materials
+material = 0, ideal_gas, gamma=1.6
+material = 1, ideal_gas, gamma=1.5
+material = 2, ideal_gas, gamma=1.4
+
+# [6] Initial Condition
+initial_condition = regions
+region = [0.0], [0.25], rho=1.0, vel=[0.0], p=1.0, material=0
+region = [0.25], [0.65], rho=0.125, vel=[0.0], p=0.1, material=1
+region = [0.65], [1.0], rho=1.0, vel=[0.0], p=0.1, material=2
+
+# [7] Output
+output_prefix = dim_he2023_three_material_1d
+output_dir = data/csv/dim/MM_1D_validation

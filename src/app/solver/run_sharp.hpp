@@ -2,6 +2,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -367,7 +368,8 @@ inline void run_sharp_interface_case(
     const double wall_seconds =
         std::chrono::duration<double>(wall_end - wall_start).count();
 
-    if (cfg.output_times.empty()) {
+    const bool timing_only = std::getenv("QUANT_TIMING_ONLY") != nullptr;
+    if (cfg.output_times.empty() && !timing_only) {
         const auto output_start = std::chrono::steady_clock::now();
         write_numerical_output<DIM, EOS>(
             cfg,
@@ -394,7 +396,9 @@ inline void run_sharp_interface_case(
 
     #if APP_DIM == 1
     if constexpr (DIM == 1) {
-        write_exact_output_1d<EOS>(cfg);
+        if (!timing_only) {
+            write_exact_output_1d<EOS>(cfg);
+        }
     }
     #endif
 }

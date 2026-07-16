@@ -167,39 +167,27 @@ std::vector<CaseDef> case_registry()
         {{240, 200}, {480, 400}}
     });
     cases.push_back({
-        "gorsse_tc9_water_air_bubble_2d_lowres", "tc9_lowres", "gorsse_tc9_water_air_bubble_2d_lowres", "SIM", 2,
-        "mm_2d", "mm_main_2d", mm2,
-        "configs/diagnostics/gorsse_tc9_water_air_bubble_2d_gfm_lowres.txt",
-        {{120, 100}}
-    });
-    cases.push_back({
-        "gorsse_tc9_water_air_bubble_2d_lowres", "tc9_lowres", "gorsse_tc9_water_air_bubble_2d_lowres", "DIM", 2,
-        "mm_2d", "mm_main_2d", mm2,
-        "configs/diagnostics/gorsse_tc9_water_air_bubble_2d_dim_lowres.txt",
-        {{120, 100}}
-    });
-    cases.push_back({
         "he2023_three_material_1d", "three_material_1d", "he2023_three_material_1d", "SIM", 1,
         "mm_1d", "mm_main_1d", mm1,
-        "configs/diagnostics/he2023_three_material_1d_gfm_lowres.txt",
+        "configs/GFM/MM_1D_validation/he2023_three_material_1d.txt",
         {{100}, {200}, {400}, {800}, {2000}}
     });
     cases.push_back({
         "he2023_three_material_1d", "three_material_1d", "he2023_three_material_1d", "DIM", 1,
         "mm_1d", "mm_main_1d", mm1,
-        "configs/diagnostics/he2023_three_material_1d_dim_lowres.txt",
+        "configs/DIM/MM_1D_validation/he2023_three_material_1d.txt",
         {{100}, {200}, {400}, {800}, {2000}}
     });
     cases.push_back({
         "he2023_three_material_triple_point_2d", "triple_point", "he2023_three_material_triple_point_2d", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/diagnostics/he2023_three_material_triple_point_2d_gfm_lowres_mcrs.txt",
+        "configs/GFM/MM_2D_validation/he2023_three_material_triple_point_2d.txt",
         {{1400, 600}}
     });
     cases.push_back({
         "he2023_three_material_triple_point_2d", "triple_point", "he2023_three_material_triple_point_2d", "DIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/diagnostics/he2023_three_material_triple_point_2d_dim_lowres.txt",
+        "configs/DIM/MM_2D_validation/he2023_three_material_triple_point_2d.txt",
         {{1400, 600}}
     });
     cases.push_back({
@@ -272,13 +260,13 @@ std::vector<CaseDef> case_registry()
         "shock_bubble_3d", "test6", "helium_bubble_3d", "SIM", 3,
         "mm_3d", "mm_main_3d", mm3,
         "configs/GFM/MM_3D_validation/test6.txt",
-        {{650, 89, 89}}
+        {{325, 45, 45}}
     });
     cases.push_back({
         "shock_bubble_3d", "test6", "helium_bubble_3d", "DIM", 3,
         "mm_3d", "mm_main_3d", mm3,
         "configs/DIM/MM_3D_validation/test6.txt",
-        {{650, 89, 89}}
+        {{325, 45, 45}}
     });
 
     return cases;
@@ -313,7 +301,6 @@ std::set<std::string> groups_for_case_alias(const std::vector<std::string>& alia
         else if (alias == "bubble_reinit" || alias == "shock_bubble_reinit" || alias == "rgfm_bubble_reinit") groups.insert("shock_bubble_2d_reinit");
         else if (alias == "water_air_bubble" || alias == "water_air_bubble_2d" || alias == "practical_case2") groups.insert("water_air_bubble_2d");
         else if (alias == "gorsse_tc9" || alias == "tc9_water_air_bubble" || alias == "water_air_bubble_gorsse") groups.insert("gorsse_tc9_water_air_bubble_2d");
-        else if (alias == "gorsse_tc9_lowres" || alias == "tc9_water_air_bubble_lowres" || alias == "water_air_bubble_gorsse_lowres") groups.insert("gorsse_tc9_water_air_bubble_2d_lowres");
         else if (alias == "he2023_three_material" || alias == "hu2023_three_material" || alias == "three_material" || alias == "three_material_he2023") {
             groups.insert("he2023_three_material_1d");
             groups.insert("he2023_three_material_triple_point_2d");
@@ -343,7 +330,6 @@ bool is_specific_case_filter(const std::string& value)
         "bubble_reinit", "shock_bubble_reinit", "rgfm_bubble_reinit",
         "water_air_bubble", "water_air_bubble_2d", "practical_case2",
         "gorsse_tc9", "tc9_water_air_bubble", "water_air_bubble_gorsse",
-        "gorsse_tc9_lowres", "tc9_water_air_bubble_lowres", "water_air_bubble_gorsse_lowres",
         "he2023_three_material", "hu2023_three_material", "three_material",
         "three_material_he2023", "he2023_three_material_1d", "hu2023_three_material_1d",
         "three_material_1d", "he2023_triple_point", "hu2023_triple_point",
@@ -465,16 +451,6 @@ std::string make_run_id(
     return out.str();
 }
 
-void apply_storage_limited_3d_output_times(RunSpec& run)
-{
-    if (run.case_def.group == "shock_bubble_3d") {
-        run.overrides["output_times"] = "[35.275, 84.660, 141.1]";
-    }
-    else if (run.case_def.group == "gorsse_tc9_water_air_bubble_3d") {
-        run.overrides["output_times"] = "[1.06e-4, 3.01e-4, 5.0e-4]";
-    }
-}
-
 std::vector<RunSpec> build_normal_runs(const Args& args)
 {
     std::vector<RunSpec> runs;
@@ -490,7 +466,6 @@ std::vector<RunSpec> build_normal_runs(const Args& args)
             run.case_def = def;
             run.resolution = resolution;
             run.omp_threads = args.omp_threads;
-            run.mpi_ranks = 1;
             run.output_prefix =
                 "quant_" + method_prefix(def.method) + "_" + def.label + "_" + resolution_label(resolution);
             if (def.method == "common") {
@@ -503,7 +478,6 @@ std::vector<RunSpec> build_normal_runs(const Args& args)
                 width << (1.0 / static_cast<double>(resolution.front()));
                 run.overrides["interface_thickness"] = width.str();
             }
-            apply_storage_limited_3d_output_times(run);
             run.run_id = make_run_id(def, resolution, args.omp_threads);
             runs.push_back(run);
         }
@@ -554,7 +528,6 @@ std::vector<RunSpec> build_core_runs(const Args& args)
             run.case_def = def;
             run.resolution = resolution;
             run.omp_threads = args.omp_threads;
-            run.mpi_ranks = 1;
             run.output_prefix =
                 "quant_" + method_prefix(def.method) + "_" + def.label + "_" + resolution_label(resolution);
             if (def.method == "common") {
@@ -592,7 +565,6 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             run.case_def = def;
             run.resolution = resolution;
             run.omp_threads = args.omp_threads;
-            run.mpi_ranks = 1;
             run.sensitivity = args.sensitivity;
             run.parameter_name = "epsilon_alpha_dx";
             run.parameter_value = std::to_string(dx_units) + "dx";
@@ -620,22 +592,26 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             add_dim_epsilon_run(bubble, {1300, 178}, dx_units, 0.25 * static_cast<double>(dx_units), true);
         }
     }
-    else if (args.sensitivity == "dim_alpha") {
+    else if (args.sensitivity == "dim_alpha" || args.sensitivity == "dim_alpha_bubble") {
+        const bool bubble_only = args.sensitivity == "dim_alpha_bubble";
         const auto add_dim_alpha_run = [&](const CaseDef& def,
                                            const std::vector<int>& resolution,
                                            const std::string& alpha_label,
-                                           double alpha) {
+                                           double alpha,
+                                           bool final_output_only) {
             RunSpec run;
             run.case_def = def;
             run.resolution = resolution;
             run.omp_threads = args.omp_threads;
-            run.mpi_ranks = 1;
             run.sensitivity = args.sensitivity;
             run.parameter_name = "tanh_alpha";
             run.parameter_value = alpha_label;
             std::ostringstream value;
             value << alpha;
             run.overrides["interface_sharpness_alpha"] = value.str();
+            if (final_output_only) {
+                run.overrides["output_times"] = helium_bubble_final_output_times;
+            }
             run.output_prefix =
                 "quant_" + method_prefix(def.method) + "_" + def.label + "_tanh_alpha_" + alpha_label;
             run.run_id = make_run_id(def, run.resolution, args.omp_threads, run.parameter_name, run.parameter_value);
@@ -651,8 +627,10 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
                  {"2", 2.0},
                  {"4", 4.0},
                  {"8", 8.0}}) {
-            add_dim_alpha_run(fedkiw, {400}, item.first, item.second);
-            add_dim_alpha_run(bubble, {1300, 178}, item.first, item.second);
+            if (!bubble_only) {
+                add_dim_alpha_run(fedkiw, {400}, item.first, item.second, false);
+            }
+            add_dim_alpha_run(bubble, {1300, 178}, item.first, item.second, true);
         }
     }
     else if (args.sensitivity == "sim_reinit" || args.sensitivity == "sim_reinit_bubble") {
@@ -666,7 +644,6 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             run.case_def = def;
             run.resolution = resolution;
             run.omp_threads = args.omp_threads;
-            run.mpi_ranks = 1;
             run.sensitivity = args.sensitivity;
             run.parameter_name = "reinit_interval";
             run.parameter_value = interval_label;
@@ -697,30 +674,31 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
 std::vector<RunSpec> build_scaling_runs(const Args& args)
 {
     std::vector<RunSpec> runs;
-    const std::string scaling_mode =
-        (args.scaling == "mpi_ranks") ? "openmp_threads" : args.scaling;
+    const std::string scaling_mode = args.scaling;
 
     if (scaling_mode != "openmp_threads") {
         return runs;
     }
 
     const std::vector<std::tuple<std::string, std::string, std::string, std::vector<int>>> targets = {
-        {"shock_bubble_2d", "test6", "DIM", {1300, 178}},
         {"shock_bubble_2d", "test6", "SIM", {1300, 178}},
+        {"shock_bubble_2d", "test6", "DIM", {1300, 178}},
     };
     for (const auto& target : targets) {
         const auto def = find_case(std::get<0>(target), std::get<1>(target), std::get<2>(target)).value();
+        if (!contains_method(args.methods, def.method)) {
+            continue;
+        }
         const std::vector<std::vector<int>> resolutions =
             args.resolutions.empty()
                 ? std::vector<std::vector<int>>{std::get<3>(target)}
                 : preset_resolutions(args, def);
         for (const auto& resolution : resolutions) {
-            for (int threads : {1, 2, 4, 8, 16, 32}) {
+            for (int threads : args.scaling_threads) {
                 RunSpec run;
                 run.case_def = def;
                 run.resolution = resolution;
                 run.omp_threads = threads;
-                run.mpi_ranks = 1;
                 run.timing_only = true;
                 run.scaling = scaling_mode;
                 run.parameter_name = "omp_threads";

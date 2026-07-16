@@ -188,16 +188,13 @@ std::string json_escape(const std::string& text)
 std::string method_normalized(const std::string& method)
 {
     const std::string text = lower(method);
-    if (text == "gfm" || text == "rgfm" || text == "sim" ||
-        text == "gfm_mpi" || text == "rgfm_mpi" || text == "sim_mpi") {
+    if (text == "gfm" || text == "rgfm" || text == "sim") {
         return "SIM";
     }
-    if (text == "allaire" || text == "dim" ||
-        text == "dim_mpi" || text == "allaire_mpi") {
+    if (text == "allaire" || text == "dim") {
         return "DIM";
     }
-    if (text == "sm" || text == "common" ||
-        text == "sm_mpi" || text == "mpi" || text == "common_mpi") {
+    if (text == "sm" || text == "common") {
         return "common";
     }
     return method;

@@ -145,7 +145,6 @@ void write_manifest(const fs::path& path, const std::vector<RunSpec>& runs)
              << "\", \"method\": \"" << run.case_def.method
              << "\", \"resolution\": \"" << resolution_label(run.resolution)
              << "\", \"omp_threads\": " << run.omp_threads
-             << ", \"mpi_ranks\": " << run.mpi_ranks
              << ", \"repeat_id\": " << run.repeat_id
              << ", \"warmup\": " << (run.warmup ? "true" : "false")
              << ", \"timing_only\": " << (run.timing_only ? "true" : "false")
@@ -166,7 +165,6 @@ std::map<std::string, std::string> base_row(const RunSpec& run, bool success)
         {"resolution", resolution_label(run.resolution)},
         {"N", resolution_label(run.resolution)},
         {"omp_threads", std::to_string(run.omp_threads)},
-        {"mpi_ranks", std::to_string(run.mpi_ranks)},
         {"repeat_id", std::to_string(run.repeat_id)},
         {"warmup", run.warmup ? "true" : "false"},
         {"timing_only", run.timing_only ? "true" : "false"},
@@ -177,12 +175,6 @@ std::map<std::string, std::string> base_row(const RunSpec& run, bool success)
         {"parameter_name", run.parameter_name},
         {"parameter_value", run.parameter_value},
     };
-}
-
-bool is_mpi_method(const RunSpec& run)
-{
-    (void)run;
-    return false;
 }
 
 std::map<std::string, std::string> read_key_value_report(const fs::path& path)
@@ -259,6 +251,14 @@ bool run_one(const RunSpec& run, const Args& args)
     const fs::path run_dir = result_root / "runs" / run.run_id;
     const fs::path raw_dir = result_root / "raw" / run.run_id;
     const fs::path log_dir = result_root / "logs" / run.run_id;
+    const fs::path metadata_path = run_dir / "metadata.json";
+    if (!overwrite && args.resume && fs::exists(metadata_path)) {
+        const std::string metadata = read_file(metadata_path);
+        if (metadata.find("\"success\": true") != std::string::npos) {
+            std::cout << "[skip] " << run.run_id << " status=already_completed\n";
+            return true;
+        }
+    }
     if (overwrite) {
         fs::remove_all(run_dir);
         fs::remove_all(raw_dir);
@@ -286,7 +286,6 @@ bool run_one(const RunSpec& run, const Args& args)
                  << "  \"method\": \"" << run.case_def.method << "\",\n"
                  << "  \"resolution\": \"" << resolution_label(run.resolution) << "\",\n"
                  << "  \"omp_threads\": " << run.omp_threads << ",\n"
-                 << "  \"mpi_ranks\": " << run.mpi_ranks << ",\n"
                  << "  \"repeat_id\": " << run.repeat_id << ",\n"
                  << "  \"warmup\": " << (run.warmup ? "true" : "false") << ",\n"
                  << "  \"timing_only\": " << (run.timing_only ? "true" : "false") << ",\n"
@@ -307,7 +306,7 @@ bool run_one(const RunSpec& run, const Args& args)
                  << "  \"runtime_report\": \"" << json_escape(runtime.string()) << "\",\n"
                  << "  \"conservation_report\": \"" << json_escape(conservation.string()) << "\"\n"
                  << "}\n";
-        write_file(run_dir / "metadata.json", metadata.str());
+        write_file(metadata_path, metadata.str());
     };
 
     if (dry_run) {
@@ -331,8 +330,11 @@ bool run_one(const RunSpec& run, const Args& args)
         "env OMP_NUM_THREADS=" + std::to_string(run.omp_threads) +
         " OMP_DYNAMIC=FALSE" +
         openmp_binding_env +
-        " OMP_SCHEDULE=guided,1 SOLVER_CONSERVATION=1 SOLVER_CONSERVATION_INTERVAL=" +
-        std::to_string(args.conservation_interval) + " " +
+        " OMP_SCHEDULE=guided,1 " +
+        (run.timing_only
+            ? std::string("SOLVER_CONSERVATION=0 ")
+            : "SOLVER_CONSERVATION=1 SOLVER_CONSERVATION_INTERVAL=" +
+              std::to_string(args.conservation_interval) + " ") +
         (run.timing_only ? "QUANT_TIMING_ONLY=1 " : "") +
         shell_quote(executable_for(run.case_def)) + " " +
         shell_quote(generated_config.string()) +

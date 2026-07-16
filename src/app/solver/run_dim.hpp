@@ -2,6 +2,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstdlib>
 #include <optional>
 #include <stdexcept>
 #include <vector>
@@ -156,7 +157,8 @@ inline void run_dim_case(
     const double wall_seconds =
         std::chrono::duration<double>(wall_end - wall_start).count();
 
-    if (cfg.output_times.empty()) {
+    const bool timing_only = std::getenv("QUANT_TIMING_ONLY") != nullptr;
+    if (cfg.output_times.empty() && !timing_only) {
         const auto output_start = std::chrono::steady_clock::now();
         dim_app::write_numerical_output<DIM>(cfg, N, U, active_material_params);
         const auto output_end = std::chrono::steady_clock::now();
