@@ -37,8 +37,8 @@ CORE_ROWS = [
 ]
 
 SENSITIVITY_ROWS = [
-    RunRow("Sensitivity Runs", "rGFM reinitialisation sensitivity", "--suite sensitivity --methods SIM", "results/quantitative/report_selected_sim_reinit_sensitivity", "sensitivity summary and PNG panel", "Helium bubble level-set maintenance"),
-    RunRow("Sensitivity Runs", "DIM tanh-alpha sensitivity", "--suite sensitivity --methods DIM", "results/quantitative/report_selected_dim_alpha_sensitivity", "sensitivity summary and PNG panel", "Helium bubble interface-sharpness sensitivity"),
+    RunRow("Sensitivity Runs", "rGFM WENO2 reinitialisation interval sensitivity", "--suite sensitivity --methods SIM", "results/quantitative/report_selected_sim_weno2_reinit_interval_sensitivity", "sensitivity summary and PNG panel", "Helium bubble WENO2 and SSP-RK2 reinitialisation interval"),
+    RunRow("Sensitivity Runs", "DIM interface-thickness sensitivity", "--suite sensitivity --methods DIM", "results/quantitative/report_selected_dim_interface_thickness_sensitivity", "sensitivity summary and PNG panel", "Helium bubble interface-thickness sensitivity at fixed tanh alpha"),
 ]
 
 PERFORMANCE_ROWS = [

@@ -23,10 +23,10 @@ bc_hi = [nonreflective, nonreflective]
 interface_method = GFM
 use_level_set = true
 reinit_interval = 10
-reinit_iterations = 2
-level_set_reinit_method = redistance
+reinit_iterations = 10
+level_set_reinit_method = sussman
 level_set_advection = normal_speed
-level_set_spatial_derivative = tvd
+level_set_spatial_derivative = weno2
 
 # [4] Materials
 # Paper Table 11 uses B = 3309.0 for water. The solver's stiffened-gas

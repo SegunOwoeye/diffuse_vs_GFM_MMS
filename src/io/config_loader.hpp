@@ -329,10 +329,9 @@ inline void validate_config(const Config<DIM>& cfg)
         throw std::runtime_error("level_set_advection must be normal_speed, rgfm_normal_speed, flow, or physical_flow");
     }
 
-    if (cfg.level_set_spatial_derivative != "tvd" &&
-        cfg.level_set_spatial_derivative != "second_order" &&
+    if (cfg.level_set_spatial_derivative != "weno2" &&
         cfg.level_set_spatial_derivative != "first_order") {
-        throw std::runtime_error("level_set_spatial_derivative must be tvd, second_order, or first_order");
+        throw std::runtime_error("level_set_spatial_derivative must be weno2 or first_order");
     }
 
     if (cfg.level_set_component_policy != "largest_overlap" &&

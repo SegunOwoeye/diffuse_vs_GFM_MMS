@@ -2,7 +2,9 @@
 dimension = 2
 
 # [1] Domain
-# Static pressure-equilibrium helium bubble diagnostic, top half-domain.
+# Diagnostic for direct rGFM star-speed feedback. The MCRS pressure and
+# density solve is preserved, but the applied interface normal velocity is
+# clamped to zero.
 domain_min = [0.0, 0.0]
 domain_max = [325, 44.5]
 
@@ -20,8 +22,11 @@ bc_hi = [transmissive, reflective]
 interface_method = GFM
 use_level_set = true
 reinit_interval = 0
-level_set_advection = normal_speed
-level_set_spatial_derivative = tvd
+level_set_advection = physical_flow
+level_set_spatial_derivative = weno2
+rgfm_star_velocity_mode = zero
+rgfm_diagnostics = true
+rgfm_diagnostics_interval = 10
 
 # [4] Materials
 material = 0, ideal_gas, gamma=1.4
@@ -30,8 +35,8 @@ material = 1, ideal_gas, gamma=1.648
 # [5] Initial Condition
 initial_condition = shock_bubble
 
-# The shock-bubble geometry is reused, but the shock state is removed.
-# Equal pressure and zero velocity make this a stationary contact diagnostic.
+# This preserves the baseline density and pressure jump while removing all
+# prescribed x and y velocity components.
 shock_axis = 0
 shock_position = 225
 
@@ -40,9 +45,9 @@ vel_left = [0.0, 0.0]
 p_left = 1
 material_left = 0
 
-rho_right = 1.0
+rho_right = 1.3764
 vel_right = [0.0, 0.0]
-p_right = 1
+p_right = 1.5698
 material_right = 0
 
 bubble_center = [175, 0.0]
@@ -53,6 +58,5 @@ p_bubble = 1
 material_bubble = 1
 
 # [6] Output
-output_prefix = gfm_helium_bubble_2d_static_normal_speed_tvd
+output_prefix = gfm_helium_bubble_2d_zero_velocity_zero_star_weno2
 output_dir = data/csv/gfm/bubble_levelset_advection_comparison
-

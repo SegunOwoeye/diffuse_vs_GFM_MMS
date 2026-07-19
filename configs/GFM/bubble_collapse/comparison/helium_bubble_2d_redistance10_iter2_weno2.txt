@@ -21,7 +21,7 @@ reinit_interval = 10
 reinit_iterations = 2
 level_set_reinit_method = redistance
 level_set_advection = normal_speed
-level_set_spatial_derivative = tvd
+level_set_spatial_derivative = weno2
 
 # [4] Materials
 material = 0, ideal_gas, gamma=1.4

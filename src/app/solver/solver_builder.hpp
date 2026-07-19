@@ -40,8 +40,8 @@ inline LevelSetDerivativeScheme level_set_derivative_scheme_from_config(
     const std::string& name
 )
 {
-    if (name == "tvd" || name == "second_order") {
-        return LevelSetDerivativeScheme::Tvd;
+    if (name == "weno2") {
+        return LevelSetDerivativeScheme::Weno2;
     }
 
     if (name == "first_order") {

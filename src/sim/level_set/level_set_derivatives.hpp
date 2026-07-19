@@ -7,9 +7,6 @@
 
 #include "src/sim/level_set/level_set_core.hpp"
 #include "src/math/numerical_safety.hpp"
-#include "src/core/fv/limiters.hpp"
-
-
 namespace level_set_detail {
 
 // [1] Check that phi size matches grid
@@ -88,30 +85,40 @@ inline double dplus_first_order_flat(
 }
 
 
-// [6] Minmod slope for TVD level-set reconstruction
-inline double tvd_minmod_slope_flat(
+// [6] WENO2 nonlinear slope
+inline double weno2_slope_flat(
     const std::vector<double>& phi,
     int id,
     int stride
 )
 {
-    return core::fv::minmod(
-        phi[id] - phi[id - stride],
-        phi[id + stride] - phi[id]
-    );
+    const double delta_minus = phi[id] - phi[id - stride];
+    const double delta_plus = phi[id + stride] - phi[id];
+    const double epsilon = 1.0e-12;
+    const double beta_minus = delta_minus * delta_minus;
+    const double beta_plus = delta_plus * delta_plus;
+    const double alpha_minus =
+        0.5 / ((epsilon + beta_minus) * (epsilon + beta_minus));
+    const double alpha_plus =
+        0.5 / ((epsilon + beta_plus) * (epsilon + beta_plus));
+    const double weight_sum = alpha_minus + alpha_plus;
+
+    return
+        (alpha_minus * delta_minus + alpha_plus * delta_plus) /
+        weight_sum;
 }
 
 
-// [7] Second-order TVD upwind derivative for positive transport speed
-inline double dminus_tvd_flat(
+// [7] Second-order WENO upwind derivative for positive transport speed
+inline double dminus_weno2_flat(
     const std::vector<double>& phi,
     int id,
     int stride,
     double dx
 )
 {
-    const double slope_i = tvd_minmod_slope_flat(phi, id, stride);
-    const double slope_im1 = tvd_minmod_slope_flat(phi, id - stride, stride);
+    const double slope_i = weno2_slope_flat(phi, id, stride);
+    const double slope_im1 = weno2_slope_flat(phi, id - stride, stride);
     const double right_face_left_state = phi[id] + 0.5 * slope_i;
     const double left_face_left_state = phi[id - stride] + 0.5 * slope_im1;
 
@@ -119,28 +126,29 @@ inline double dminus_tvd_flat(
 }
 
 
-// [8] Second-order TVD upwind derivative for negative transport speed
-inline double dplus_tvd_flat(
+// [8] Second-order WENO upwind derivative for negative transport speed
+inline double dplus_weno2_flat(
     const std::vector<double>& phi,
     int id,
     int stride,
     double dx
 )
 {
-    const double slope_i = tvd_minmod_slope_flat(phi, id, stride);
-    const double slope_ip1 = tvd_minmod_slope_flat(phi, id + stride, stride);
+    const double slope_i = weno2_slope_flat(phi, id, stride);
+    const double slope_ip1 = weno2_slope_flat(phi, id + stride, stride);
     const double right_face_right_state = phi[id + stride] - 0.5 * slope_ip1;
     const double left_face_right_state = phi[id] - 0.5 * slope_i;
 
     return (right_face_right_state - left_face_right_state) / dx;
 }
 
-// Public Flat API 
+
+// Public Flat API
 
 /*
     [9] Public one-sided minus derivative (flat)
 
-    Uses minmod-limited MUSCL face reconstruction in the interior and falls
+    Uses the selected second-order reconstruction in the interior and falls
     back to first-order one-sided differences near boundaries.
 */
 template<int DIM>
@@ -150,15 +158,15 @@ inline double dminus_flat(
     int id,
     int coord,
     int dir,
-    LevelSetDerivativeScheme scheme = LevelSetDerivativeScheme::Tvd
+    LevelSetDerivativeScheme scheme = LevelSetDerivativeScheme::Weno2
 )
 {
     const int stride = grid.stride[dir];
     const double dx = grid.dx[dir];
 
-    if (scheme == LevelSetDerivativeScheme::Tvd &&
+    if (scheme == LevelSetDerivativeScheme::Weno2 &&
         coord >= 2 && coord <= grid.N[dir] - 2) {
-        return dminus_tvd_flat(phi, id, stride, dx);
+        return dminus_weno2_flat(phi, id, stride, dx);
     }
 
     return dminus_first_order_flat(phi, id, stride, dx);
@@ -173,15 +181,15 @@ inline double dplus_flat(
     int id,
     int coord,
     int dir,
-    LevelSetDerivativeScheme scheme = LevelSetDerivativeScheme::Tvd
+    LevelSetDerivativeScheme scheme = LevelSetDerivativeScheme::Weno2
 )
 {
     const int stride = grid.stride[dir];
     const double dx = grid.dx[dir];
 
-    if (scheme == LevelSetDerivativeScheme::Tvd &&
+    if (scheme == LevelSetDerivativeScheme::Weno2 &&
         coord >= 1 && coord <= grid.N[dir] - 3) {
-        return dplus_tvd_flat(phi, id, stride, dx);
+        return dplus_weno2_flat(phi, id, stride, dx);
     }
 
     return dplus_first_order_flat(phi, id, stride, dx);

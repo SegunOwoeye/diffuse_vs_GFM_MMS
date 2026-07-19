@@ -34,7 +34,7 @@ interface_method = GFM
 use_level_set = true
 reinit_interval = 0
 level_set_advection = normal_speed
-level_set_spatial_derivative = tvd
+level_set_spatial_derivative = weno2
 
 # ========================
 # Materials
@@ -75,5 +75,5 @@ material_bubble = 1
 # ========================
 # Output
 # ========================
-output_prefix = gfm_helium_bubble_2d_normal_speed_tvd
+output_prefix = gfm_helium_bubble_2d_normal_speed_weno2
 output_dir = data/csv/gfm/bubble_levelset_advection_comparison

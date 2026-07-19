@@ -6,7 +6,7 @@
 
 enum class LevelSetDerivativeScheme {
     FirstOrder,
-    Tvd
+    Weno2
 };
 
 

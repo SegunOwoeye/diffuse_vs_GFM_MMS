@@ -23,21 +23,55 @@ std::optional<fs::path> exact_reference_path(const RunSpec& run, const fs::path&
     }
     if (run.case_def.group == "fedkiw_1d") {
         const std::map<std::string, std::string> names = {
-            {"test1", "test1_exact.csv"},
-            {"test2", "test2_exact.csv"},
-            {"test3", "test3_exact.csv"},
-            {"test4", "test4_exact.csv"},
-            {"test5", "test5_exact.csv"},
+            {"test1", "test1_exact_raw.csv"},
+            {"test2", "test2_exact_raw.csv"},
+            {"test3", "test3_exact_raw.csv"},
+            {"test4", "test4_exact_raw.csv"},
+            {"test5", "test5_exact_raw.csv"},
         };
         const auto it = names.find(run.case_def.name);
         if (it != names.end()) {
             const fs::path generated = fs::path("data") / "exact" / "generated_multimaterial" / it->second;
             if (fs::exists(generated)) return generated;
-            const fs::path digitized = fs::path("data") / "exact" / "fedkiw" / it->second;
+            const std::string fallback_name =
+                it->second.substr(0, it->second.size() - std::string("_raw.csv").size()) +
+                ".csv";
+            const fs::path digitized =
+                fs::path("data") / "exact" / "fedkiw" / fallback_name;
             if (fs::exists(digitized)) return digitized;
         }
     }
     return std::nullopt;
+}
+
+std::map<std::string, std::pair<std::vector<double>, std::vector<double>>>
+exact_reference_fields(const fs::path& reference)
+{
+    const auto columns = read_csv_columns(reference);
+    const std::string x_key =
+        columns.count("x0") ? "x0" : (columns.count("x") ? "x" : "");
+    if (!x_key.empty()) {
+        const std::map<std::string, std::string> field_columns = {
+            {"rho", "rho"},
+            {"u0", columns.count("u0") ? "u0" : "u"},
+            {"p", "p"},
+            {"e", "e"},
+        };
+        std::map<std::string, std::pair<std::vector<double>, std::vector<double>>> fields;
+        for (const auto& item : field_columns) {
+            if (columns.count(item.second)) {
+                fields[item.first] = {
+                    columns.at(x_key),
+                    columns.at(item.second)
+                };
+            }
+        }
+        if (!fields.empty()) {
+            return fields;
+        }
+    }
+
+    return digitized_reference(reference);
 }
 
 std::vector<std::map<std::string, std::string>> error_rows_for(const RunSpec& run, const fs::path& solution, const fs::path& case_dir)
@@ -50,16 +84,7 @@ std::vector<std::map<std::string, std::string>> error_rows_for(const RunSpec& ru
     const auto solution_cols = read_csv_columns(solution);
     if (!solution_cols.count("x0")) return rows;
 
-    std::map<std::string, std::pair<std::vector<double>, std::vector<double>>> refs;
-    if (reference->parent_path() == case_dir) {
-        const auto ref_cols = read_csv_columns(reference.value());
-        for (const auto& key : {"rho", "u0", "p", "e"}) {
-            if (ref_cols.count("x0") && ref_cols.count(key)) refs[key] = {ref_cols.at("x0"), ref_cols.at(key)};
-        }
-    }
-    else {
-        refs = digitized_reference(reference.value());
-    }
+    const auto refs = exact_reference_fields(reference.value());
 
     // Report labels are intentionally human-readable, while the lookup keys remain the solver CSV column names.
     const std::map<std::string, std::string> variables = {
@@ -81,7 +106,11 @@ std::vector<std::map<std::string, std::string>> error_rows_for(const RunSpec& ru
         const auto& xs = solution_cols.at("x0");
         const auto& values = solution_cols.at(column);
         for (std::size_t i = 0; i < xs.size() && i < values.size(); ++i) {
-            const double ref_value = interp(refs[column].first, refs[column].second, xs[i]);
+            const double ref_value = interp(
+                refs.at(column).first,
+                refs.at(column).second,
+                xs[i]
+            );
             if (!std::isfinite(values[i]) || !std::isfinite(ref_value)) continue;
             const double diff = values[i] - ref_value;
             l1 += std::abs(diff);
@@ -124,20 +153,11 @@ double max_abs_reference_or_solution(
     double scale = floor;
     const auto reference = exact_reference_path(run, case_dir);
     if (reference.has_value()) {
-        std::map<std::string, std::pair<std::vector<double>, std::vector<double>>> refs;
-        if (reference->parent_path() == case_dir) {
-            const auto ref_cols = read_csv_columns(reference.value());
-            if (ref_cols.count(column)) {
-                for (double value : ref_cols.at(column)) {
-                    if (std::isfinite(value)) scale = std::max(scale, std::abs(value));
-                }
-            }
-        }
-        else {
-            refs = digitized_reference(reference.value());
-            if (refs.count(column)) {
-                for (double value : refs.at(column).second) {
-                    if (std::isfinite(value)) scale = std::max(scale, std::abs(value));
+        const auto refs = exact_reference_fields(reference.value());
+        if (refs.count(column)) {
+            for (double value : refs.at(column).second) {
+                if (std::isfinite(value)) {
+                    scale = std::max(scale, std::abs(value));
                 }
             }
         }

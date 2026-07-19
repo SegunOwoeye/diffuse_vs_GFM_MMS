@@ -115,31 +115,31 @@ std::vector<CaseDef> case_registry()
     cases.push_back({
         "shock_bubble_2d_reinit", "test6_reinit5", "helium_bubble_2d_reinit5", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_reinit5_tvd.txt",
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_reinit5_weno2.txt",
         {{1300, 178}}
     });
     cases.push_back({
         "shock_bubble_2d_reinit", "test6_reinit10", "helium_bubble_2d_reinit10", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_reinit10_tvd.txt",
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_reinit10_weno2.txt",
         {{1300, 178}}
     });
     cases.push_back({
         "shock_bubble_2d_reinit", "test6_reinit10_iter1", "helium_bubble_2d_reinit10_iter1", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_reinit10_iter1_tvd.txt",
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_reinit10_iter1_weno2.txt",
         {{1300, 178}}
     });
     cases.push_back({
         "shock_bubble_2d_reinit", "test6_reinit10_iter2", "helium_bubble_2d_reinit10_iter2", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_reinit10_iter2_tvd.txt",
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_reinit10_iter2_weno2.txt",
         {{1300, 178}}
     });
     cases.push_back({
         "shock_bubble_2d_reinit", "test6_redistance10_iter2", "helium_bubble_2d_redistance10_iter2", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_redistance10_iter2_tvd.txt",
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_redistance10_iter2_weno2.txt",
         {{1300, 178}}
     });
     cases.push_back({
@@ -223,37 +223,37 @@ std::vector<CaseDef> case_registry()
     cases.push_back({
         "shock_bubble_2d_zero_velocity", "test6_zero_velocity", "helium_bubble_2d_zero_velocity", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_zero_velocity_tvd.txt",
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_zero_velocity_weno2.txt",
         {{325, 45}, {650, 89}, {1300, 178}}
     });
     cases.push_back({
         "shock_bubble_2d_zero_velocity_physical_flow", "test6_zero_velocity_physical_flow", "helium_bubble_2d_zero_velocity_physical_flow", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_zero_velocity_physical_flow_tvd.txt",
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_zero_velocity_physical_flow_weno2.txt",
         {{325, 45}, {650, 89}, {1300, 178}}
     });
     cases.push_back({
         "shock_bubble_2d_zero_velocity_input_mean_star", "test6_zero_velocity_input_mean_star", "helium_bubble_2d_zero_velocity_input_mean_star", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_zero_velocity_input_mean_star_tvd.txt",
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_zero_velocity_input_mean_star_weno2.txt",
         {{325, 45}, {650, 89}, {1300, 178}}
     });
     cases.push_back({
         "shock_bubble_2d_zero_velocity_zero_star", "test6_zero_velocity_zero_star", "helium_bubble_2d_zero_velocity_zero_star", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_zero_velocity_zero_star_tvd.txt",
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_zero_velocity_zero_star_weno2.txt",
         {{325, 45}, {650, 89}, {1300, 178}}
     });
     cases.push_back({
         "shock_bubble_2d_static_equilibrium", "static_normal_speed", "helium_bubble_2d_static_normal_speed", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_static_normal_speed_tvd.txt",
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_static_normal_speed_weno2.txt",
         {{325, 45}, {650, 89}, {1300, 178}}
     });
     cases.push_back({
         "shock_bubble_2d_static_equilibrium", "static_flow", "helium_bubble_2d_static_flow", "SIM", 2,
         "mm_2d", "mm_main_2d", mm2,
-        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_static_flow_tvd.txt",
+        "configs/GFM/bubble_collapse/comparison/helium_bubble_2d_static_flow_weno2.txt",
         {{325, 45}, {650, 89}, {1300, 178}}
     });
     cases.push_back({
@@ -471,12 +471,23 @@ std::vector<RunSpec> build_normal_runs(const Args& args)
             if (def.method == "common") {
                 run.output_prefix = "quant_" + def.label + "_" + resolution_label(resolution);
             }
+            if (def.method == "SIM") {
+                run.overrides["level_set_spatial_derivative"] = "weno2";
+                run.overrides["level_set_reinit_method"] = "sussman";
+                run.overrides["reinit_iterations"] = "10";
+            }
             if (def.group == "he2023_three_material_1d" &&
                 def.method == "DIM" &&
                 !resolution.empty()) {
                 std::ostringstream width;
                 width << (1.0 / static_cast<double>(resolution.front()));
                 run.overrides["interface_thickness"] = width.str();
+            }
+            if (def.group == "shock_bubble_3d") {
+                run.overrides["output_times"] = "[70.550, 141.1]";
+            }
+            else if (def.group == "gorsse_tc9_water_air_bubble_3d") {
+                run.overrides["output_times"] = "[3.01e-4, 5.0e-4]";
             }
             run.run_id = make_run_id(def, resolution, args.omp_threads);
             runs.push_back(run);
@@ -554,28 +565,35 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
 {
     std::vector<RunSpec> runs;
     const std::string helium_bubble_final_output_times = "[141.1]";
-    if (args.sensitivity == "dim_epsilon" || args.sensitivity == "dim_epsilon_bubble") {
-        const bool bubble_only = args.sensitivity == "dim_epsilon_bubble";
-        const auto add_dim_epsilon_run = [&](const CaseDef& def,
-                                             const std::vector<int>& resolution,
-                                             int dx_units,
-                                             double physical_width,
-                                             bool final_output_only) {
+    if (args.sensitivity == "dim_interface_thickness" ||
+        args.sensitivity == "dim_interface_thickness_bubble" ||
+        args.sensitivity == "dim_epsilon" ||
+        args.sensitivity == "dim_epsilon_bubble") {
+        const bool bubble_only =
+            args.sensitivity == "dim_interface_thickness_bubble" ||
+            args.sensitivity == "dim_epsilon_bubble";
+        const auto add_dim_interface_thickness_run = [&](const CaseDef& def,
+                                                         const std::vector<int>& resolution,
+                                                         int dx_units,
+                                                         double physical_width,
+                                                         bool final_output_only) {
             RunSpec run;
             run.case_def = def;
             run.resolution = resolution;
             run.omp_threads = args.omp_threads;
             run.sensitivity = args.sensitivity;
-            run.parameter_name = "epsilon_alpha_dx";
+            run.parameter_name = "interface_thickness_dx";
             run.parameter_value = std::to_string(dx_units) + "dx";
             std::ostringstream width;
             width << physical_width;
             run.overrides["interface_thickness"] = width.str();
+            run.overrides["interface_sharpness_alpha"] = "2";
             if (final_output_only) {
                 run.overrides["output_times"] = helium_bubble_final_output_times;
             }
             run.output_prefix =
-                "quant_" + method_prefix(def.method) + "_" + def.label + "_epsilon_alpha_" + std::to_string(dx_units) + "dx";
+                "quant_" + method_prefix(def.method) + "_" + def.label +
+                "_interface_thickness_" + std::to_string(dx_units) + "dx";
             run.run_id = make_run_id(def, run.resolution, args.omp_threads, run.parameter_name, run.parameter_value);
             runs.push_back(run);
         };
@@ -583,13 +601,25 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
         if (!bubble_only) {
             const auto fedkiw = find_case("fedkiw_1d", "test5", "DIM").value();
             for (int dx_units : {1, 2, 3, 4, 6}) {
-                add_dim_epsilon_run(fedkiw, {400}, dx_units, static_cast<double>(dx_units) / 400.0, false);
+                add_dim_interface_thickness_run(
+                    fedkiw,
+                    {400},
+                    dx_units,
+                    static_cast<double>(dx_units) / 400.0,
+                    false
+                );
             }
         }
 
         const auto bubble = find_case("shock_bubble_2d", "test6", "DIM").value();
         for (int dx_units : {1, 2, 3, 4, 6}) {
-            add_dim_epsilon_run(bubble, {1300, 178}, dx_units, 0.25 * static_cast<double>(dx_units), true);
+            add_dim_interface_thickness_run(
+                bubble,
+                {1300, 178},
+                dx_units,
+                0.25 * static_cast<double>(dx_units),
+                true
+            );
         }
     }
     else if (args.sensitivity == "dim_alpha" || args.sensitivity == "dim_alpha_bubble") {
@@ -633,11 +663,25 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             add_dim_alpha_run(bubble, {1300, 178}, item.first, item.second, true);
         }
     }
-    else if (args.sensitivity == "sim_reinit" || args.sensitivity == "sim_reinit_bubble") {
-        const bool bubble_only = args.sensitivity == "sim_reinit_bubble";
+    else if (args.sensitivity == "sim_weno2_reinit_interval" ||
+             args.sensitivity == "sim_weno2_reinit_interval_bubble" ||
+             args.sensitivity == "sim_redistance_interval" ||
+             args.sensitivity == "sim_redistance_interval_bubble" ||
+             args.sensitivity == "sim_reinit" ||
+             args.sensitivity == "sim_reinit_bubble") {
+        const bool weno2 =
+            args.sensitivity == "sim_weno2_reinit_interval" ||
+            args.sensitivity == "sim_weno2_reinit_interval_bubble";
+        const bool redistance =
+            args.sensitivity == "sim_redistance_interval" ||
+            args.sensitivity == "sim_redistance_interval_bubble";
+        const bool bubble_only =
+            args.sensitivity == "sim_weno2_reinit_interval_bubble" ||
+            args.sensitivity == "sim_redistance_interval_bubble" ||
+            args.sensitivity == "sim_reinit_bubble";
         const auto add_sim_reinit_run = [&](const CaseDef& def,
-                                            const std::vector<int>& resolution,
-                                            const std::string& interval_label,
+                                             const std::vector<int>& resolution,
+                                             const std::string& interval_label,
                                             int interval,
                                             bool final_output_only) {
             RunSpec run;
@@ -645,27 +689,65 @@ std::vector<RunSpec> build_sensitivity_runs(const Args& args)
             run.resolution = resolution;
             run.omp_threads = args.omp_threads;
             run.sensitivity = args.sensitivity;
-            run.parameter_name = "reinit_interval";
+            run.parameter_name = weno2
+                ? "weno2_reinit_interval"
+                : (redistance ? "redistance_interval" : "reinit_interval");
             run.parameter_value = interval_label;
             run.overrides["reinit_interval"] = std::to_string(interval);
+            if (weno2) {
+                run.overrides["level_set_reinit_method"] = "sussman";
+                run.overrides["level_set_spatial_derivative"] = "weno2";
+                run.overrides["reinit_iterations"] = "10";
+            }
+            else if (redistance) {
+                run.overrides["level_set_reinit_method"] = "redistance";
+                run.overrides["reinit_iterations"] = "2";
+            }
             if (final_output_only) {
                 run.overrides["output_times"] = helium_bubble_final_output_times;
             }
             run.output_prefix =
-                "quant_" + method_prefix(def.method) + "_" + def.label + "_reinit_" + sanitize_value(interval_label);
+                "quant_" + method_prefix(def.method) + "_" + def.label +
+                (weno2 ? "_weno2_reinit_" :
+                    (redistance ? "_redistance_" : "_reinit_")) +
+                sanitize_value(interval_label);
             run.run_id = make_run_id(def, run.resolution, args.omp_threads, run.parameter_name, run.parameter_value);
             runs.push_back(run);
         };
 
         const auto bubble = find_case("shock_bubble_2d", "test6", "SIM").value();
+        const std::vector<std::vector<int>> bubble_resolutions =
+            args.resolutions.empty()
+                ? std::vector<std::vector<int>>{{1300, 178}}
+                : preset_resolutions(args, bubble);
         for (const auto& item : std::vector<std::pair<std::string, int>>{
-                 {"1", 1}, {"2", 2}, {"5", 5}, {"10", 10}, {"20", 20}, {"never", 0}
+                 {"5", 5}, {"10", 10}, {"20", 20}, {"50", 50}, {"100", 100}, {"never", 0}
             }) {
             if (!bubble_only) {
                 const auto oblique = find_case("fedkiw_2d_oblique", "test5", "SIM").value();
-                add_sim_reinit_run(oblique, {200, 200}, item.first, item.second, false);
+                const std::vector<std::vector<int>> oblique_resolutions =
+                    args.resolutions.empty()
+                        ? std::vector<std::vector<int>>{{200, 200}}
+                        : preset_resolutions(args, oblique);
+                for (const auto& resolution : oblique_resolutions) {
+                    add_sim_reinit_run(
+                        oblique,
+                        resolution,
+                        item.first,
+                        item.second,
+                        false
+                    );
+                }
             }
-            add_sim_reinit_run(bubble, {1300, 178}, item.first, item.second, true);
+            for (const auto& resolution : bubble_resolutions) {
+                add_sim_reinit_run(
+                    bubble,
+                    resolution,
+                    item.first,
+                    item.second,
+                    true
+                );
+            }
         }
     }
     return runs;

@@ -291,11 +291,23 @@ def plot_1d_profiles(files: list[SolutionFile], title: str, outdir: Path) -> Non
         return
 
     methods = sorted({item.method for item in items})
-    target_resolution = "800" if "He 2023" in title else None
+    uses_numerical_reference = title == "He 2023 three-material 1D"
+    target_resolution = "800" if uses_numerical_reference else None
 
     highest_by_method: list[SolutionFile] = []
+    reference_by_method: dict[str, SolutionFile] = {}
     for method in methods:
         method_items = [item for item in items if item.method == method]
+        if uses_numerical_reference:
+            reference_items = [
+                item for item in method_items
+                if item.resolution == "2000"
+            ]
+            if reference_items:
+                reference_by_method[method] = max(
+                    reference_items,
+                    key=lambda item: item.time_value or 0.0,
+                )
         if target_resolution is not None:
             target_items = [item for item in method_items if item.resolution == target_resolution]
             if target_items:
@@ -303,15 +315,23 @@ def plot_1d_profiles(files: list[SolutionFile], title: str, outdir: Path) -> Non
                 continue
         highest_by_method.append(max(method_items, key=lambda item: resolution_size(item.resolution)))
 
-    exact = read_exact_reference(title)
-    if exact is None:
+    exact = None if uses_numerical_reference else read_exact_reference(title)
+    if exact is None and not uses_numerical_reference:
         exact = read_local_exact_reference(highest_by_method)
     fig, axes = plt.subplots(2, 2, figsize=(9.0, 6.2), squeeze=False)
+    method_colors: dict[str, str] = {}
     for item in highest_by_method:
         df = read_csv(item.path).sort_values("x0")
         label = solution_label(item)
-        for ax, (field, ylabel) in zip(axes.ravel(), PROFILE_FIELDS):
-            ax.plot(df["x0"], field_values(df, field), label=label, linewidth=1.1)
+        for index, (ax, (field, ylabel)) in enumerate(zip(axes.ravel(), PROFILE_FIELDS)):
+            line, = ax.plot(
+                df["x0"],
+                field_values(df, field),
+                label=label,
+                linewidth=1.1,
+            )
+            if index == 0:
+                method_colors[item.method] = line.get_color()
             ax.set_xlabel("x")
             ax.set_ylabel(ylabel)
             ax.grid(True, alpha=0.25)
@@ -320,26 +340,67 @@ def plot_1d_profiles(files: list[SolutionFile], title: str, outdir: Path) -> Non
         for ax, (field, _ylabel) in zip(axes.ravel(), PROFILE_FIELDS):
             if field in exact.columns:
                 ax.plot(exact["x0"], exact[field], color="black", label="Exact", linewidth=1.0)
+    elif reference_by_method:
+        for method, reference_item in sorted(reference_by_method.items()):
+            reference = read_csv(reference_item.path).sort_values("x0")
+            label = (
+                f"{METHOD_LABELS.get(method, method)} "
+                f"N={reference_item.resolution} numerical reference"
+            )
+            for ax, (field, _ylabel) in zip(axes.ravel(), PROFILE_FIELDS):
+                ax.plot(
+                    reference["x0"],
+                    field_values(reference, field),
+                    color=method_colors.get(method),
+                    label=label,
+                    linewidth=1.0,
+                    linestyle=":",
+                )
 
     for ax in axes.ravel():
         ax.legend(frameon=False, fontsize=8)
-    if exact is None:
-        filename = f"{safe_name(title)}_1d_method_overlay.png"
-    else:
+    if exact is not None:
         filename = f"{safe_name(title)}_1d_exact_overlay.png"
+    elif reference_by_method:
+        filename = f"{safe_name(title)}_1d_reference_overlay.png"
+    else:
+        filename = f"{safe_name(title)}_1d_method_overlay.png"
     save_figure(fig, outdir / filename)
 
     if title not in {"Toro test 5", "FedkiwD2 1D"}:
         fig, ax = plt.subplots(figsize=(8.2, 3.6))
+        schlieren_colors: dict[str, str] = {}
         for item in highest_by_method:
             df = read_csv(item.path).sort_values("x0")
             x = df["x0"].to_numpy(dtype=float)
             rho = field_values(df, "rho")
-            ax.plot(x, schlieren_1d(x, rho), label=solution_label(item), linewidth=1.1)
+            line, = ax.plot(
+                x,
+                schlieren_1d(x, rho),
+                label=solution_label(item),
+                linewidth=1.1,
+            )
+            schlieren_colors[item.method] = line.get_color()
         if exact is not None and "rho" in exact.columns:
             x = exact["x0"].to_numpy(dtype=float)
             rho = exact["rho"].to_numpy(dtype=float)
             ax.plot(x, schlieren_1d(x, rho), color="black", label="Exact", linewidth=1.0)
+        elif reference_by_method:
+            for method, reference_item in sorted(reference_by_method.items()):
+                reference = read_csv(reference_item.path).sort_values("x0")
+                x = reference["x0"].to_numpy(dtype=float)
+                rho = field_values(reference, "rho")
+                ax.plot(
+                    x,
+                    schlieren_1d(x, rho),
+                    color=schlieren_colors.get(method),
+                    label=(
+                        f"{METHOD_LABELS.get(method, method)} "
+                        f"N={reference_item.resolution} numerical reference"
+                    ),
+                    linewidth=1.0,
+                    linestyle=":",
+                )
         ax.set_xlabel("x")
         ax.set_ylabel(r"$|\nabla \rho|$")
         ax.grid(True, alpha=0.25)
@@ -1072,16 +1133,30 @@ def plot_3d_interactive(files: list[SolutionFile], title: str, outdir: Path) -> 
 
 def sensitivity_label_order_and_slug(run_id: str) -> tuple[float, str, str]:
     text = run_id.lower()
+    if "weno2_reinit_interval_never" in text:
+        return 0.0, "never", "weno2_reinit_never"
+    if "redistance_interval_never" in text:
+        return 0.0, "never", "redistance_never"
     if "reinit_interval_never" in text:
         return 0.0, "never", "reinit_never"
+    weno2_reinit = re.search(r"weno2_reinit_interval_(\d+)", text)
+    if weno2_reinit:
+        value = int(weno2_reinit.group(1))
+        order = {5: 1, 10: 2, 20: 3, 50: 4, 100: 5}.get(value, value)
+        return float(order), f"{value}", f"weno2_reinit_{value}"
+    redistance = re.search(r"redistance_interval_(\d+)", text)
+    if redistance:
+        value = int(redistance.group(1))
+        order = {5: 1, 10: 2, 20: 3, 50: 4, 100: 5}.get(value, value)
+        return float(order), f"{value}", f"redistance_{value}"
     reinit = re.search(r"reinit_interval_(\d+)", text)
     if reinit:
         value = int(reinit.group(1))
         order = {1: 1, 2: 2, 5: 3, 10: 4, 20: 5}.get(value, value)
         return float(order), f"{value}", f"reinit_{value}"
-    alpha = re.search(r"epsilon_alpha_dx_(\d+)dx", text)
-    if alpha:
-        value = int(alpha.group(1))
+    thickness = re.search(r"(?:interface_thickness|epsilon_alpha)_dx_(\d+)dx", text)
+    if thickness:
+        value = int(thickness.group(1))
         return float(value), f"{value} dx", f"epsilon_{value}dx"
     tanh_alpha = re.search(r"tanh_alpha_([0-9]+p?[0-9]*)", text)
     if tanh_alpha:
@@ -1182,8 +1257,8 @@ def collect_shared_helium_schlieren_scale(base: Path) -> float | None:
     scale_items: list[SolutionFile] = []
     for root in (
         base / "report_selected_helium_bubble_2d",
-        base / "report_selected_sim_reinit_sensitivity",
-        base / "report_selected_dim_alpha_sensitivity",
+        base / "report_selected_sim_weno2_reinit_interval_sensitivity",
+        base / "report_selected_dim_interface_thickness_sensitivity",
     ):
         files = collect_solution_files(root)
         if root.name.endswith("_sensitivity"):
@@ -1293,14 +1368,14 @@ def main() -> None:
     plot_root(base / "report_selected_he2023_three_material_triple_point_2d", "He 2023 three-material triple-point 2D", "2d_he2023", global_dir)
     plot_root(base / "report_selected_gorsse_tc9_water_air_3d", "Gorsse TC9 water-air 3D", "3d", global_dir)
     plot_sensitivity(
-        base / "report_selected_sim_reinit_sensitivity",
-        "rGFM reinitialisation",
+        base / "report_selected_sim_weno2_reinit_interval_sensitivity",
+        "rGFM WENO2 reinitialisation interval",
         global_dir,
         schlieren_scale=helium_schlieren_scale,
     )
     plot_sensitivity(
-        base / "report_selected_dim_alpha_sensitivity",
-        "DIM tanh alpha",
+        base / "report_selected_dim_interface_thickness_sensitivity",
+        "DIM interface thickness",
         global_dir,
         schlieren_scale=helium_schlieren_scale,
     )
