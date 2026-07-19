@@ -2,9 +2,7 @@
 dimension = 2
 
 # [1] Domain
-# Diagnostic for direct rGFM star-speed feedback. The MCRS pressure and
-# density solve is preserved, but the applied interface normal velocity is
-# clamped to zero.
+# Zero-initial-velocity shock-bubble diagnostic using physical-flow level-set advection.
 domain_min = [0.0, 0.0]
 domain_max = [325, 44.5]
 
@@ -23,8 +21,7 @@ interface_method = GFM
 use_level_set = true
 reinit_interval = 0
 level_set_advection = physical_flow
-level_set_spatial_derivative = tvd
-rgfm_star_velocity_mode = zero
+level_set_spatial_derivative = weno2
 rgfm_diagnostics = true
 rgfm_diagnostics_interval = 10
 
@@ -58,5 +55,5 @@ p_bubble = 1
 material_bubble = 1
 
 # [6] Output
-output_prefix = gfm_helium_bubble_2d_zero_velocity_zero_star_tvd
+output_prefix = gfm_helium_bubble_2d_zero_velocity_physical_flow_weno2
 output_dir = data/csv/gfm/bubble_levelset_advection_comparison

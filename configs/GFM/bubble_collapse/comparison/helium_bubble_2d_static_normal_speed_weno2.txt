@@ -20,8 +20,8 @@ bc_hi = [transmissive, reflective]
 interface_method = GFM
 use_level_set = true
 reinit_interval = 0
-level_set_advection = flow
-level_set_spatial_derivative = tvd
+level_set_advection = normal_speed
+level_set_spatial_derivative = weno2
 
 # [4] Materials
 material = 0, ideal_gas, gamma=1.4
@@ -53,6 +53,5 @@ p_bubble = 1
 material_bubble = 1
 
 # [6] Output
-output_prefix = gfm_helium_bubble_2d_static_flow_tvd
+output_prefix = gfm_helium_bubble_2d_static_normal_speed_weno2
 output_dir = data/csv/gfm/bubble_levelset_advection_comparison
-

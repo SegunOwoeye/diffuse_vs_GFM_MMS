@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=report2_production
-#SBATCH --partition=lsc
-#SBATCH --clusters=CSC
+#SBATCH --partition=csc-mphil
+#SBATCH --clusters=csc
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
-#SBATCH --mem=128GB
-#SBATCH --time=48:00:00
+#SBATCH --mem=64G
+#SBATCH --time=6:00:00
 #SBATCH --account=oo338
-#SBATCH --output=report2_production-%j.out
+#SBATCH --output=logs/report2_production-%j.out
+#SBATCH --error=logs/report2_production_%j.err
+#SBATCH --mail-type=ALL
+
 set -euo pipefail
 
 # [0] Repository

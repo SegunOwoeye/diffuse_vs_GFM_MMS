@@ -35,7 +35,7 @@ interface_method = GFM
 use_level_set = true
 reinit_interval = 0
 level_set_advection = normal_speed
-level_set_spatial_derivative = tvd
+level_set_spatial_derivative = weno2
 level_set_component_policy = all_overlapping
 
 # ========================

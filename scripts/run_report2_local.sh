@@ -37,7 +37,7 @@ Suites:
   three-material   He three-material test in 1D and 2D.
   3d               Helium bubble 325x45x45 and Gorsse TC9 120x100x100.
   performance      Helium bubble 2D OpenMP scaling with runtime-only solver output.
-  sensitivity      SIM reinitialisation and DIM tanh-alpha sensitivity.
+  sensitivity      SIM WENO2 reinitialisation-interval and DIM interface-thickness sensitivity.
   all              All production suites.
 
 Options:
@@ -84,8 +84,8 @@ three-material:
 performance:
   SIM/DIM helium shock-bubble 2D           1300x178, selected OpenMP threads
 sensitivity:
-  SIM     helium bubble reinitialisation   intervals 1, 2, 5, 10, 20, never
-  DIM     helium bubble tanh alpha         0.5, 1, 2, 4, 8
+  SIM     WENO2 reinitialisation interval  5, 10, 20, 50, 100, never
+  DIM     interface thickness at alpha=2   1dx, 2dx, 3dx, 4dx, 6dx
 EOF
 }
 
@@ -414,14 +414,14 @@ fi
 # [9] Sensitivity Suite
 if [[ -n "${selected_suites[sensitivity]:-}" ]]; then
     if method_selected SIM; then
-        run_quant "SIM reinitialisation sensitivity" \
-            --sensitivity sim_reinit_bubble \
-            --result-root "$result_root_base/report_selected_sim_reinit_sensitivity"
+        run_quant "SIM WENO2 reinitialisation interval sensitivity" \
+            --sensitivity sim_weno2_reinit_interval_bubble \
+            --result-root "$result_root_base/report_selected_sim_weno2_reinit_interval_sensitivity"
     fi
     if method_selected DIM; then
-        run_quant "DIM tanh-alpha sensitivity" \
-            --sensitivity dim_alpha_bubble \
-            --result-root "$result_root_base/report_selected_dim_alpha_sensitivity"
+        run_quant "DIM interface-thickness sensitivity at fixed tanh alpha" \
+            --sensitivity dim_interface_thickness_bubble \
+            --result-root "$result_root_base/report_selected_dim_interface_thickness_sensitivity"
     fi
 fi
 

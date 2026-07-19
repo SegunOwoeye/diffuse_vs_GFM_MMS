@@ -1,14 +1,21 @@
-# [0] Problem
+# ========================
+# Problem
+# ========================
 dimension = 2
 
-# [1] Domain
+# ========================
+# Domain
+# ========================
 # Haas-Sturtevant helium bubble case, top half of the physical domain.
 # Paper-style nondimensional flow states with coordinates in mm.
 domain_min = [0.0, 0.0]
 domain_max = [325, 44.5]
+
 N = [1300, 178]
 
-# [2] Time
+# ========================
+# Time
+# ========================
 # Fedkiw Fig. 30 is t = 427 microseconds after shock-bubble encounter.
 # With mm coordinates and nondimensional velocities, that corresponds to
 # code time about 141.2 from this initial shock position.
@@ -20,18 +27,24 @@ cfl = 0.8
 bc_lo = [transmissive, reflective]
 bc_hi = [transmissive, reflective]
 
-# [3] Interface method
+# ========================
+# Interface method
+# ========================
 interface_method = GFM
 use_level_set = true
-reinit_interval = 10
-level_set_advection = normal_speed
-level_set_spatial_derivative = tvd
+reinit_interval = 0
+level_set_advection = flow
+level_set_spatial_derivative = weno2
 
-# [4] Materials
+# ========================
+# Materials
+# ========================
 material = 0, ideal_gas, gamma=1.4
 material = 1, ideal_gas, gamma=1.67
 
-# [5] Initial condition
+# ========================
+# Initial condition
+# ========================
 initial_condition = shock_bubble
 
 # Post-shocked air is prescribed for x > 225 mm.
@@ -59,6 +72,8 @@ vel_bubble = [0.0, 0.0]
 p_bubble = 1
 material_bubble = 1
 
-# [6] Output
-output_prefix = gfm_helium_bubble_2d_reinit10
-output_dir = data/csv/gfm/MM_2D_validation
+# ========================
+# Output
+# ========================
+output_prefix = gfm_helium_bubble_2d_flow_weno2
+output_dir = data/csv/gfm/bubble_levelset_advection_comparison

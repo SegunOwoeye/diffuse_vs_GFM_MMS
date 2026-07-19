@@ -178,23 +178,24 @@ Purpose:
 
 Command:
     scripts/run_quant_suite.sh \
-      --sensitivity dim_epsilon \
-      --result-root results/quantitative/dim_epsilon_sensitivity \
+      --sensitivity dim_interface_thickness \
+      --result-root results/quantitative/dim_interface_thickness_sensitivity \
       --overwrite \
       --omp-threads 6
 
 
-10. SIM/rGFM reinitialisation sensitivity
------------------------------------------
+10. SIM/rGFM WENO2 reinitialisation-interval sensitivity
+---------------------------------------------
 Purpose:
-    Test how level-set reinitialisation interval affects rGFM/SIM interface
-    stability, corrugation, and feature tracking. This is especially relevant
-    for the shock-bubble case.
+    Test how the WENO2 reinitialisation interval affects rGFM/SIM interface
+    stability, corrugation, and feature tracking. WENO2 spatial derivatives,
+    SSP-RK2 pseudo-time integration, and ten pseudo-time iterations are fixed.
+    The intervals are 5, 10, 20, 50, 100, and never.
 
 Command:
     scripts/run_quant_suite.sh \
-      --sensitivity sim_reinit \
-      --result-root results/quantitative/sim_reinit_sensitivity \
+      --sensitivity sim_weno2_reinit_interval_bubble \
+      --result-root results/quantitative/sim_weno2_reinit_interval_sensitivity \
       --overwrite \
       --omp-threads 6
 

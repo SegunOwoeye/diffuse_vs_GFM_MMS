@@ -112,7 +112,7 @@ struct Config {
     int reinit_iterations = 10;
     std::string level_set_reinit_method = "sussman";
     std::string level_set_advection = "normal_speed";
-    std::string level_set_spatial_derivative = "tvd";
+    std::string level_set_spatial_derivative = "weno2";
     std::string level_set_component_policy = "largest_overlap";
     bool rgfm_diagnostics = false;
     int rgfm_diagnostics_interval = 1;

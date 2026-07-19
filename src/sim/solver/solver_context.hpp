@@ -48,7 +48,7 @@ struct SolverContext {
     std::string level_set_reinit_method = "sussman";
     std::string level_set_advection = "normal_speed";
     std::string level_set_component_policy = "largest_overlap";
-    LevelSetDerivativeScheme level_set_derivative_scheme = LevelSetDerivativeScheme::Tvd;
+    LevelSetDerivativeScheme level_set_derivative_scheme = LevelSetDerivativeScheme::Weno2;
     std::string rgfm_star_velocity_mode = "input_mean";
     std::string time_update = "split";
 
